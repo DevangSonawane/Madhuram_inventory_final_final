@@ -72,16 +72,16 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reports & Analytics</h1>
           <p className="text-muted-foreground">
             Comprehensive insights into inventory performance.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <Calendar className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Select period" />
             </SelectTrigger>
@@ -187,9 +187,9 @@ export default function Reports() {
                   <YAxis prefix="₹" />
                   <Tooltip formatter={(value) => `₹${value}`} />
                   <Legend />
-                  <Bar dataKey="rawMaterial" fill="#0f172a" name="Raw Materials" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="wip" fill="#64748b" name="Work in Progress" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="finishedGoods" fill="#e2e8f0" name="Finished Goods" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="rawMaterial" fill="hsl(var(--primary))" name="Raw Materials" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="wip" fill="hsl(var(--primary) / 0.6)" name="Work in Progress" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="finishedGoods" fill="hsl(var(--primary) / 0.3)" name="Finished Goods" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -210,8 +210,8 @@ export default function Reports() {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Line type="monotone" dataKey="inbound" stroke="#16a34a" strokeWidth={2} name="Inbound (Received)" />
-                  <Line type="monotone" dataKey="outbound" stroke="#dc2626" strokeWidth={2} name="Outbound (Issued)" />
+                  <Line type="monotone" dataKey="inbound" stroke="hsl(var(--primary))" strokeWidth={2} name="Inbound (Received)" />
+                  <Line type="monotone" dataKey="outbound" stroke="hsl(var(--destructive))" strokeWidth={2} name="Outbound (Issued)" />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>

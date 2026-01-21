@@ -51,16 +51,17 @@ export default function Login() {
     <div className="container relative h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0">
       <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
         <div className="absolute inset-0 bg-zinc-900" />
-        <div className="relative z-20 flex items-center text-lg font-medium">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary to-blue-900 opacity-90" />
+        <div className="relative z-20 flex items-center text-lg font-bold">
           <Package2 className="mr-2 h-6 w-6" />
           Madhuram Inventory
         </div>
         <div className="relative z-20 mt-auto">
           <blockquote className="space-y-2">
-            <p className="text-lg">
+            <p className="text-lg font-medium leading-relaxed">
               &ldquo;Streamline your inventory, optimize your workflow, and take control of your business assets with precision and ease.&rdquo;
             </p>
-            <footer className="text-sm">Madhuram Management Team</footer>
+            <footer className="text-sm opacity-80">Madhuram Management Team</footer>
           </blockquote>
         </div>
       </div>

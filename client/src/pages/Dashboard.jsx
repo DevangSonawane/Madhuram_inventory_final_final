@@ -1,8 +1,9 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, ShoppingCart, TrendingUp, AlertTriangle, ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { Package, ShoppingCart, TrendingUp, AlertTriangle, ArrowUpRight, ArrowDownRight, Plus, FileText, Users, Activity } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { motion } from 'framer-motion';
 import { containerVariants, itemVariants } from '@/components/PageTransition';
 
@@ -20,100 +21,128 @@ const activity = [
     user: "John Doe",
     action: "Created a purchase order",
     time: "2 mins ago",
-    status: "success"
+    status: "success",
+    initials: "JD"
   },
   {
     user: "Jane Smith",
     action: "Approved material request",
     time: "1 hour ago",
-    status: "success"
+    status: "success",
+    initials: "JS"
   },
   {
     user: "System",
     action: "Low stock alert: Cement",
     time: "2 hours ago",
-    status: "warning"
+    status: "warning",
+    initials: "SY"
   },
   {
     user: "Mike Johnson",
     action: "Received shipment PO-123",
     time: "4 hours ago",
-    status: "info"
+    status: "info",
+    initials: "MJ"
   }
 ];
 
 export default function Dashboard() {
   return (
     <motion.div 
-      className="space-y-6"
+      className="space-y-8"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
     >
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <div className="flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground">Last updated: Today, 10:00 AM</span>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Dashboard</h1>
+            <p className="text-muted-foreground text-lg">Overview of your inventory and operations.</p>
+        </div>
+        <div className="flex items-center space-x-3">
+            <Button variant="outline" size="sm" className="h-10 px-4 border-muted-foreground/20 hover:border-primary hover:text-primary transition-colors">
+                <FileText className="mr-2 h-4 w-4" />
+                Export
+            </Button>
+            <Button size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95">
+                <Plus className="mr-2 h-4 w-4" />
+                New Request
+            </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <motion.div variants={itemVariants}>
-          <Card>
+          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Inventory Value</CardTitle>
-              <span className="text-muted-foreground">₹</span>
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Value</CardTitle>
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
+                 <span className="text-primary font-bold text-lg">₹</span>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹45,231.89</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <ArrowUpRight className="h-4 w-4 text-green-500 mr-1" />
-                <span className="text-green-500 font-medium">+20.1%</span> from last month
+              <div className="text-3xl font-bold tracking-tight text-foreground">₹45,231.89</div>
+              <p className="text-xs text-muted-foreground flex items-center mt-2 font-medium">
+                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md flex items-center mr-2 dark:bg-emerald-900/30 dark:text-emerald-400">
+                    <ArrowUpRight className="h-3 w-3 mr-1" />
+                    20.1%
+                </span>
+                from last month
               </p>
             </CardContent>
           </Card>
         </motion.div>
         
         <motion.div variants={itemVariants}>
-          <Card>
+          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Orders</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Active Orders</CardTitle>
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center shadow-inner">
+                  <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">+2350</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <ArrowDownRight className="h-4 w-4 text-red-500 mr-1" />
-                <span className="text-red-500 font-medium">-4%</span> from last month
+              <div className="text-3xl font-bold tracking-tight text-foreground">+2350</div>
+              <p className="text-xs text-muted-foreground flex items-center mt-2 font-medium">
+                <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md flex items-center mr-2 dark:bg-red-900/30 dark:text-red-400">
+                    <ArrowDownRight className="h-3 w-3 mr-1" />
+                    4%
+                </span>
+                from last month
               </p>
             </CardContent>
           </Card>
         </motion.div>
         
         <motion.div variants={itemVariants}>
-          <Card>
+          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Low Stock</CardTitle>
+              <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center shadow-inner">
+                  <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Requires attention
+              <div className="text-3xl font-bold tracking-tight text-foreground">12</div>
+              <p className="text-xs text-muted-foreground mt-2 font-medium">
+                Requires immediate attention
               </p>
             </CardContent>
           </Card>
         </motion.div>
         
         <motion.div variants={itemVariants}>
-          <Card>
+          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Materials</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Materials</CardTitle>
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
+                  <Package className="h-5 w-5 text-primary" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">573</div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <div className="text-3xl font-bold tracking-tight text-foreground">573</div>
+              <p className="text-xs text-muted-foreground mt-2 font-medium">
                 Across 4 warehouses
               </p>
             </CardContent>
@@ -121,9 +150,9 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7">
         <motion.div className="col-span-4" variants={itemVariants}>
-          <Card className="h-full">
+          <Card className="h-full shadow-lg border-none ring-1 ring-black/5">
             <CardHeader>
               <CardTitle>Overview</CardTitle>
               <CardDescription>Monthly consumption trends.</CardDescription>
@@ -146,10 +175,21 @@ export default function Dashboard() {
                     tickFormatter={(value) => `₹${value}`}
                   />
                   <Tooltip 
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                      cursor={{fill: 'transparent'}}
+                      contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))',
+                          borderRadius: '12px', 
+                          border: '1px solid hsl(var(--border))', 
+                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' 
+                      }}
+                      itemStyle={{ color: 'hsl(var(--foreground))' }}
+                      cursor={{fill: 'hsl(var(--muted))', opacity: 0.4}}
                   />
-                  <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar 
+                    dataKey="total" 
+                    fill="hsl(var(--primary))" 
+                    radius={[6, 6, 0, 0]} 
+                    className="hover:opacity-80 transition-opacity"
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -157,25 +197,32 @@ export default function Dashboard() {
         </motion.div>
         
         <motion.div className="col-span-3" variants={itemVariants}>
-          <Card className="h-full">
+          <Card className="h-full shadow-lg border-none ring-1 ring-black/5">
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Activity className="h-5 w-5 text-primary" />
+                  </div>
+                  Recent Activity
+              </CardTitle>
               <CardDescription>
                 Latest actions across the system.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-8">
+              <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-muted before:to-transparent">
                 {activity.map((item, index) => (
-                  <div className="flex items-center" key={index}>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium leading-none">{item.action}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.user} • {item.time}
-                      </p>
+                  <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active" key={index}>
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-50 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 dark:bg-slate-800 dark:border-slate-900">
+                       <div className="text-xs font-bold text-muted-foreground">{item.initials}</div>
                     </div>
-                    <div className="ml-auto font-medium">
-                      {item.status === 'warning' && <Badge variant="destructive">Alert</Badge>}
+                    
+                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-border/50 bg-card shadow-sm transition-all hover:shadow-md">
+                        <div className="flex items-center justify-between space-x-2 mb-1">
+                            <div className="font-bold text-sm text-foreground">{item.user}</div>
+                            <time className="font-mono text-xs text-muted-foreground">{item.time}</time>
+                        </div>
+                        <div className="text-sm text-muted-foreground">{item.action}</div>
                     </div>
                   </div>
                 ))}

@@ -144,7 +144,7 @@ export default function AuditLogs() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Audit Logs</h1>
           <p className="text-muted-foreground">
@@ -189,36 +189,38 @@ export default function AuditLogs() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1 w-full md:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search logs..."
             className="pl-8"
           />
         </div>
-        <Select defaultValue="all_actions">
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by Action" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_actions">All Actions</SelectItem>
-            <SelectItem value="create">Create</SelectItem>
-            <SelectItem value="update">Update</SelectItem>
-            <SelectItem value="delete">Delete</SelectItem>
-            <SelectItem value="login">Login</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select defaultValue="all_users">
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by User" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all_users">All Users</SelectItem>
-            <SelectItem value="admin">Admin User</SelectItem>
-            <SelectItem value="john">John Doe</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Select defaultValue="all_actions">
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by Action" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all_actions">All Actions</SelectItem>
+              <SelectItem value="create">Create</SelectItem>
+              <SelectItem value="update">Update</SelectItem>
+              <SelectItem value="delete">Delete</SelectItem>
+              <SelectItem value="login">Login</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select defaultValue="all_users">
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by User" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all_users">All Users</SelectItem>
+              <SelectItem value="admin">Admin User</SelectItem>
+              <SelectItem value="john">John Doe</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>

@@ -217,9 +217,9 @@ export default function Consumption() {
               <YAxis prefix="₹" />
               <Tooltip formatter={(value) => `₹${value}`} />
               <Legend />
-              <Bar dataKey="production" fill="#0f172a" name="Production" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="maintenance" fill="#64748b" name="Maintenance" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="projects" fill="#e2e8f0" name="Projects" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="production" fill="hsl(var(--primary))" name="Production" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="maintenance" fill="hsl(var(--primary) / 0.6)" name="Maintenance" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="projects" fill="hsl(var(--primary) / 0.3)" name="Projects" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>

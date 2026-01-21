@@ -15,74 +15,87 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
 
   return (
     <div className={cn(
-      "pb-12 h-screen border-r bg-background transition-all duration-300 relative", 
-      collapsed ? "w-16" : "w-64",
+      "pb-12 h-screen border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-300 relative flex flex-col shadow-xl z-50", 
+      collapsed ? "w-20" : "w-72",
       className
     )}>
       {toggleSidebar && (
-        <div className="absolute -right-3 top-6 z-50">
+        <div className="absolute -right-3 top-8 z-50">
           <Button 
             variant="outline" 
             size="icon" 
-            className="h-6 w-6 rounded-full shadow-md"
+            className="h-7 w-7 rounded-full shadow-md bg-background border-border hover:bg-accent text-foreground p-0 flex items-center justify-center"
             onClick={toggleSidebar}
           >
-            {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
         </div>
       )}
 
-      <div className="space-y-4 py-4 h-full flex flex-col">
-        <div className={cn("px-3 py-2 flex-shrink-0 transition-all duration-300", collapsed ? "px-2" : "px-3")}>
-          <div className={cn("flex items-center mb-4", collapsed ? "justify-center" : "px-4")}>
-             <Package2 className="h-6 w-6 text-primary" />
-            {!collapsed && (
-              <h2 className="text-lg font-semibold tracking-tight ml-2">
-                Madhuram Inventory
-              </h2>
-            )}
-          </div>
+      <div className={cn("flex items-center h-20 px-6", collapsed ? "justify-center px-2" : "")}>
+        <div className="flex items-center gap-3 font-bold text-2xl text-sidebar-primary tracking-tight">
+           <div className="bg-sidebar-primary text-sidebar-primary-foreground p-1.5 rounded-lg shadow-lg shadow-sidebar-primary/20">
+             <Package2 className="h-6 w-6" />
+           </div>
+           {!collapsed && <span className="text-sidebar-foreground font-bold text-xl tracking-tight">Madhuram</span>}
         </div>
-        
-        <ScrollArea className="flex-1 px-3">
-          <div className="space-y-6">
-            {MENU_CATEGORIES.map((category, index) => (
-              <div key={index} className="space-y-1">
-                {!collapsed && (
-                  <h3 className="px-2 text-xs font-semibold text-muted-foreground tracking-wider uppercase mb-2">
-                    {category.category}
-                  </h3>
-                )}
-                {category.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) =>
-                      cn(
-                        "flex items-center rounded-md py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors",
-                        collapsed ? "justify-center px-2" : "px-3",
-                        isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground"
-                      )
-                    }
-                    title={collapsed ? item.title : undefined}
-                  >
-                    <item.icon className={cn("h-4 w-4", collapsed ? "mr-0" : "mr-2")} />
-                    {!collapsed && <span>{item.title}</span>}
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-        
-        {!collapsed && (
-          <div className="px-3 py-2 flex-shrink-0 mt-auto">
-              <div className="px-4 text-xs text-muted-foreground">
-                  v1.0.0
-              </div>
-          </div>
-        )}
       </div>
+      
+      <ScrollArea className="flex-1 py-4 px-3">
+        <div className="space-y-6">
+          {MENU_CATEGORIES.map((category, index) => (
+            <div key={index} className="space-y-1">
+              {!collapsed && (
+                <h3 className="px-4 text-[10px] font-bold text-sidebar-foreground/40 uppercase tracking-widest mb-2 font-mono">
+                  {category.category}
+                </h3>
+              )}
+              {category.items.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 group relative overflow-hidden",
+                      collapsed ? "justify-center px-2" : "",
+                      isActive 
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-sidebar-primary/25" 
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )
+                  }
+                  title={collapsed ? item.title : undefined}
+                >
+                  <item.icon className={cn("h-5 w-5 flex-shrink-0 transition-transform duration-200", collapsed ? "mr-0" : "mr-3", "group-hover:scale-110")} />
+                  {!collapsed && <span>{item.title}</span>}
+                  {/* Active Indicator Glow */}
+                  {!collapsed && (
+                     <div className={cn(
+                        "absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-sidebar-primary rounded-l-full transition-opacity duration-300",
+                        "opacity-0 group-hover:opacity-100"
+                     )} />
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+      
+      {!collapsed && (
+        <div className="p-4 mt-auto">
+            <div className="bg-sidebar-accent/50 rounded-xl p-4 border border-sidebar-border/50 backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-sidebar-primary to-purple-500 flex items-center justify-center text-white font-bold text-xs shadow-inner">
+                        V1
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-medium text-sidebar-foreground">Inventory System</span>
+                        <span className="text-xs text-sidebar-foreground/50">v1.0.0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 }

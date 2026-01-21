@@ -4,65 +4,94 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Base Color: #4988C4 -> 209 51% 53% */
+    
+    /* Background: Warm Off-White #F9F8F6 */
+    --background: 40 14% 97%; 
+    
+    /* Foreground: Deep blue-grey for text */
+    --foreground: 209 60% 15%;
 
+    /* Card: White surfaces */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 209 60% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 209 60% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary: #4988C4 */
+    --primary: 209 51% 53%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary: Lighter blue for secondary actions */
+    --secondary: 209 50% 92%;
+    --secondary-foreground: 209 60% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted: Subtle background */
+    --muted: 209 30% 94%;
+    --muted-foreground: 209 20% 50%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent: Hover states */
+    --accent: 209 50% 90%;
+    --accent-foreground: 209 60% 15%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Border: Subtle blue-grey */
+    --border: 209 30% 88%;
+    --input: 209 30% 88%;
+    --ring: 209 51% 53%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* Sidebar Specific Variables - Light Theme Variant to match background #F9F8F6 */
+    --sidebar-background: 40 14% 97%; 
+    --sidebar-foreground: 209 60% 15%;
+    --sidebar-primary: 209 51% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 209 30% 90%;
+    --sidebar-accent-foreground: 209 60% 15%;
+    --sidebar-border: 209 30% 88%;
+    --sidebar-ring: 209 51% 53%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 209 50% 5%;
+    --foreground: 209 20% 90%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 209 50% 8%;
+    --card-foreground: 209 20% 90%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 209 50% 8%;
+    --popover-foreground: 209 20% 90%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 209 51% 53%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 209 30% 15%;
+    --secondary-foreground: 209 20% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 209 30% 15%;
+    --muted-foreground: 209 20% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 209 30% 20%;
+    --accent-foreground: 209 20% 90%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 209 30% 20%;
+    --input: 209 30% 20%;
+    --ring: 209 51% 53%;
+    
+    --sidebar-background: 209 50% 4%;
+    --sidebar-foreground: 209 20% 90%;
+    --sidebar-primary: 209 51% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 209 30% 15%;
+    --sidebar-accent-foreground: 209 20% 90%;
+    --sidebar-border: 209 30% 15%;
   }
 }
 
@@ -71,6 +100,25 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+ 
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3); 
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5); 
 }

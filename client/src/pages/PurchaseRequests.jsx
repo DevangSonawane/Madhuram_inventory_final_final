@@ -151,7 +151,7 @@ function CreatePRDialog({ open, onOpenChange }) {
 
                     {step === 1 && (
                         <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="requester">Requester Name</Label>
                                     <Input id="requester" placeholder="Enter name" defaultValue="John Doe" />
@@ -170,7 +170,7 @@ function CreatePRDialog({ open, onOpenChange }) {
                                     </Select>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2 flex flex-col">
                                     <Label>Required Date</Label>
                                     <Popover>
@@ -220,37 +220,42 @@ function CreatePRDialog({ open, onOpenChange }) {
                                 <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-2" /> Add Item</Button>
                             </div>
                             <div className="border rounded-md p-4 space-y-4">
-                                <div className="grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground mb-2">
+                                <div className="hidden md:grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground mb-2">
                                     <div className="col-span-5">Item Name</div>
                                     <div className="col-span-3">Quantity</div>
                                     <div className="col-span-3">Unit</div>
                                     <div className="col-span-1"></div>
                                 </div>
                                 {/* Mock Item Row */}
-                                <div className="grid grid-cols-12 gap-2 items-center">
-                                    <div className="col-span-5">
+                                <div className="flex flex-col md:grid md:grid-cols-12 gap-2 items-start md:items-center border-b md:border-0 pb-4 md:pb-0 last:border-0 last:pb-0">
+                                    <div className="w-full md:col-span-5">
+                                        <Label className="md:hidden mb-1.5 block">Item Name</Label>
                                         <Input placeholder="Item name" defaultValue="Cement Bags" />
                                     </div>
-                                    <div className="col-span-3">
-                                        <Input type="number" defaultValue="50" />
-                                    </div>
-                                    <div className="col-span-3">
-                                        <Select defaultValue="bags">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="bags">Bags</SelectItem>
-                                                <SelectItem value="kg">Kg</SelectItem>
-                                                <SelectItem value="nos">Nos</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="col-span-1 text-center">
-                                        <Button variant="ghost" size="icon" className="text-destructive">
-                                            <span className="sr-only">Remove</span>
-                                            &times;
-                                        </Button>
+                                    <div className="flex w-full gap-2 md:contents">
+                                        <div className="flex-1 md:col-span-3">
+                                            <Label className="md:hidden mb-1.5 block">Quantity</Label>
+                                            <Input type="number" defaultValue="50" />
+                                        </div>
+                                        <div className="flex-1 md:col-span-3">
+                                            <Label className="md:hidden mb-1.5 block">Unit</Label>
+                                            <Select defaultValue="bags">
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="bags">Bags</SelectItem>
+                                                    <SelectItem value="kg">Kg</SelectItem>
+                                                    <SelectItem value="nos">Nos</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="md:col-span-1 text-center flex items-end">
+                                            <Button variant="ghost" size="icon" className="text-destructive mt-6 md:mt-0">
+                                                <span className="sr-only">Remove</span>
+                                                &times;
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
