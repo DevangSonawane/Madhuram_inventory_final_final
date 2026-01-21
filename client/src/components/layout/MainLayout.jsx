@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useOutlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 
 export function MainLayout() {
   const location = useLocation();
+  const outletComponent = useOutlet();
+  
   // We need to lift the state up or use a context if we want to adjust the main content margin
   // For now, we'll use a CSS-based approach with :has selector or a simpler fixed layout
   // But since the Sidebar component manages its own state, we need to coordinate.
@@ -37,7 +39,7 @@ export function MainLayout() {
               transition={{ duration: 0.3, ease: "easeOut" }}
               className="h-full"
             >
-              <Outlet />
+              {outletComponent}
             </motion.div>
           </AnimatePresence>
         </main>
