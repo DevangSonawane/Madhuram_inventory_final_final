@@ -108,7 +108,7 @@ export default function Support() {
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center justify-between">
                 <span>Email:</span>
-                <a href="mailto:support@madhura.com" className="text-primary hover:underline">support@madhura.com</a>
+                <a href="mailto:support@madhuram.com" className="text-primary hover:underline">support@madhuram.com</a>
               </div>
               <div className="flex items-center justify-between">
                 <span>Phone:</span>
@@ -163,7 +163,7 @@ export default function Support() {
 
       <motion.div variants={itemVariants} className="flex justify-center pt-6">
         <p className="text-xs text-muted-foreground">
-          Madhura Inventory v1.0.0 • © 2024 Madhura Management. All rights reserved.
+          Madhuram Inventory v1.0.0 • © 2024 Madhuram Management. All rights reserved.
         </p>
       </motion.div>
     </motion.div>

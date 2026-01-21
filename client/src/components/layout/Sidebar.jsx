@@ -38,7 +38,7 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
              <Package2 className="h-6 w-6 text-primary" />
             {!collapsed && (
               <h2 className="text-lg font-semibold tracking-tight ml-2">
-                Madhura Inventory
+                Madhuram Inventory
               </h2>
             )}
           </div>

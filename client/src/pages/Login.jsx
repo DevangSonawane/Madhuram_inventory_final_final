@@ -33,7 +33,7 @@ export default function Login() {
       if (success) {
         navigate(from, { replace: true });
       } else {
-        setError('Invalid credentials. Use admin@madhura.com / admin123');
+        setError('Invalid credentials. Use admin@madhuram.com / admin123');
       }
     } catch (err) {
       setError('An error occurred during login');
@@ -43,7 +43,7 @@ export default function Login() {
   };
 
   const handleDemoLogin = () => {
-    setEmail('admin@madhura.com');
+    setEmail('admin@madhuram.com');
     setPassword('admin123');
   };
 
@@ -53,14 +53,14 @@ export default function Login() {
         <div className="absolute inset-0 bg-zinc-900" />
         <div className="relative z-20 flex items-center text-lg font-medium">
           <Package2 className="mr-2 h-6 w-6" />
-          Madhura Inventory
+          Madhuram Inventory
         </div>
         <div className="relative z-20 mt-auto">
           <blockquote className="space-y-2">
             <p className="text-lg">
               &ldquo;Streamline your inventory, optimize your workflow, and take control of your business assets with precision and ease.&rdquo;
             </p>
-            <footer className="text-sm">Madhura Management Team</footer>
+            <footer className="text-sm">Madhuram Management Team</footer>
           </blockquote>
         </div>
       </div>

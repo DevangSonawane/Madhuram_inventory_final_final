@@ -8,7 +8,7 @@ import {
   Send, 
   ArrowRightLeft, 
   User, 
-  Utensils, 
+  TrendingDown, 
   Undo2, 
   Users, 
   BarChart3, 
@@ -89,7 +89,7 @@ export const MENU_CATEGORIES = [
       {
         title: "Consumption",
         path: "/consumption",
-        icon: Utensils,
+        icon: TrendingDown,
       },
       {
         title: "Returns",

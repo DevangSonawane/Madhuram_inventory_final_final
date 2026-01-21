@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     // Dummy credential check
-    if (email === 'admin@madhura.com' && password === 'admin123') {
+    if (email === 'admin@madhuram.com' && password === 'admin123') {
       const userData = {
         id: '1',
         name: 'Admin User',
