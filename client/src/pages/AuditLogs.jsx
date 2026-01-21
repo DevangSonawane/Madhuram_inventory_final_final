@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import {
   Card,
   CardContent,
@@ -81,6 +82,42 @@ const logs = [
 ];
 
 export default function AuditLogs() {
+  const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [actionFilter, setActionFilter] = useState("all_actions");
+  const [userFilter, setUserFilter] = useState("all_users");
+
+  const filteredLogs = logs.filter(log => {
+    const matchesSearch = 
+      log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.entity.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.action.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesAction = actionFilter === "all_actions" || log.action.toLowerCase() === actionFilter.toLowerCase();
+    const matchesUser = userFilter === "all_users" || 
+      (userFilter === "admin" && log.user === "Admin User") ||
+      (userFilter === "john" && log.user === "John Doe") ||
+      (userFilter === "jane" && log.user === "Jane Smith") ||
+      (userFilter === "mike" && log.user === "Mike Johnson");
+
+    return matchesSearch && matchesAction && matchesUser;
+  });
+
+  const handleExport = () => {
+    toast({
+      title: "Export Started",
+      description: "Audit logs are being exported to CSV.",
+    });
+    // Simulate download
+    setTimeout(() => {
+      toast({
+        title: "Export Complete",
+        description: "Your file has been downloaded successfully.",
+      });
+    }, 2000);
+  };
+
   const columns = [
     {
       accessorKey: "timestamp",
@@ -195,10 +232,12 @@ export default function AuditLogs() {
           <Input
             placeholder="Search logs..."
             className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         <div className="flex flex-col sm:flex-row gap-4">
-          <Select defaultValue="all_actions">
+          <Select value={actionFilter} onValueChange={setActionFilter}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Filter by Action" />
             </SelectTrigger>
@@ -210,7 +249,7 @@ export default function AuditLogs() {
               <SelectItem value="login">Login</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="all_users">
+          <Select value={userFilter} onValueChange={setUserFilter}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Filter by User" />
             </SelectTrigger>
@@ -218,16 +257,14 @@ export default function AuditLogs() {
               <SelectItem value="all_users">All Users</SelectItem>
               <SelectItem value="admin">Admin User</SelectItem>
               <SelectItem value="john">John Doe</SelectItem>
+              <SelectItem value="jane">Jane Smith</SelectItem>
+              <SelectItem value="mike">Mike Johnson</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <DataTable columns={columns} data={logs} />
-        </CardContent>
-      </Card>
+      <DataTable columns={columns} data={logs} />
     </div>
   );
 }

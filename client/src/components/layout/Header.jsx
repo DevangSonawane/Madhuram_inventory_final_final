@@ -1,9 +1,12 @@
 import React from 'react';
-import { Menu, Search, Bell, User, ChevronRight } from 'lucide-react';
+import { Menu, Search, Bell, User, ChevronRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Sidebar } from './Sidebar';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +29,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 export function Header() {
   const { user, logout } = useAuth();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const pathnames = location.pathname.split('/').filter((x) => x);
@@ -82,7 +86,7 @@ export function Header() {
       </div>
 
       <div className="w-full flex-1 md:w-auto md:flex-none ml-auto">
-        <form className="relative group">
+        <form className="relative group" onSubmit={(e) => e.preventDefault()}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <Input
             type="search"
@@ -93,10 +97,71 @@ export function Header() {
       </div>
       
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/5 relative rounded-full h-10 w-10">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-background" />
-        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/5 relative rounded-full h-10 w-10">
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-background" />
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-0" align="end">
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h4 className="font-semibold text-sm">Notifications</h4>
+              {unreadCount > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-auto px-1 text-xs text-muted-foreground hover:text-primary" 
+                  onClick={markAllAsRead}
+                >
+                  Mark all read
+                </Button>
+              )}
+            </div>
+            <ScrollArea className="h-[300px]">
+              {notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full p-4 text-center text-muted-foreground">
+                  <Bell className="h-8 w-8 mb-2 opacity-20" />
+                  <p className="text-sm">No notifications</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {notifications.map((notification) => (
+                    <div 
+                      key={notification.id} 
+                      className={`flex flex-col gap-1 p-4 text-sm hover:bg-muted/50 transition-colors ${!notification.read ? 'bg-muted/30' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className={`font-medium ${!notification.read ? 'text-primary' : 'text-foreground'}`}>
+                          {notification.title}
+                        </span>
+                        {!notification.read && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-5 w-5 -mt-1 -mr-1 text-muted-foreground hover:text-primary"
+                            onClick={() => markAsRead(notification.id)}
+                            title="Mark as read"
+                          >
+                            <span className="h-1.5 w-1.5 bg-primary rounded-full" />
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-muted-foreground line-clamp-2">
+                        {notification.message}
+                      </p>
+                      <span className="text-xs text-muted-foreground mt-1">
+                        {notification.time}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </PopoverContent>
+        </Popover>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 ring-2 ring-transparent hover:ring-primary/20 transition-all">
@@ -116,12 +181,16 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/settings')}>
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer">Settings</DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer">Support</DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/settings')}>
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/support')}>
+              Support
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50">
               Logout

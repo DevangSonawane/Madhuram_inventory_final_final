@@ -5,6 +5,7 @@ import StockArea from '../models/StockArea.js';
 import MaterialRequest from '../models/MaterialRequest.js';
 import InventoryMaster from '../models/InventoryMaster.js';
 import User from '../models/User.js';
+import { createNotification } from './notificationController.js';
 // validationResult removed - using validate middleware in routes instead
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
@@ -283,6 +284,28 @@ export const createStockTransfer = async (req, res, next) => {
     }
 
     await transaction.commit();
+
+    // Create notification
+    await createNotification(
+      userId,
+      'stock_transfer',
+      `Stock Transfer ${stockTransfer.transfer_number} created successfully`,
+      'Transfer Created',
+      'stock_transfer',
+      stockTransfer.transfer_id
+    );
+
+    // If transferred to a user, notify them
+    if (normalizedToUserId && normalizedToUserId !== userId) {
+      await createNotification(
+        normalizedToUserId,
+        'stock_transfer_received',
+        `You have received stock transfer ${stockTransfer.transfer_number}`,
+        'Stock Received',
+        'stock_transfer',
+        stockTransfer.transfer_id
+      );
+    }
 
     // Fetch complete transfer with items
     const completeTransfer = await StockTransfer.findOne({

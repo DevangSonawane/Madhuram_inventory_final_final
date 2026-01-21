@@ -47,6 +47,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/ui/data-table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock data
 const employees = [
@@ -88,8 +89,33 @@ const assignedItems = [
 ];
 
 export default function PersonStock() {
+  const { toast } = useToast();
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [newItem, setNewItem] = useState({
+    employeeId: "",
+    item: "",
+    date: "",
+    notes: ""
+  });
+
+  const handleAssignItem = () => {
+    if (!newItem.employeeId || !newItem.item) {
+      toast({
+        title: "Error",
+        description: "Please select an employee and an item.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Item assigned successfully.",
+    });
+    setIsAssignOpen(false);
+    setNewItem({ employeeId: "", item: "", date: "", notes: "" });
+  };
 
   const columns = [
     {
@@ -239,11 +265,7 @@ export default function PersonStock() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <DataTable columns={columns} data={employees} />
-        </CardContent>
-      </Card>
+      <DataTable columns={columns} data={employees} />
 
       {/* Employee Inventory Dialog */}
       <Dialog open={!!selectedEmployee} onOpenChange={(open) => !open && setSelectedEmployee(null)}>
@@ -317,7 +339,7 @@ export default function PersonStock() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Employee</Label>
-              <Select>
+              <Select value={newItem.employeeId} onValueChange={(val) => setNewItem({...newItem, employeeId: val})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select employee" />
                 </SelectTrigger>
@@ -330,29 +352,37 @@ export default function PersonStock() {
             </div>
             <div className="space-y-2">
               <Label>Item</Label>
-              <Select>
+              <Select value={newItem.item} onValueChange={(val) => setNewItem({...newItem, item: val})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select item from inventory" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tool-1">Fluke Multimeter (TOOL-001)</SelectItem>
-                  <SelectItem value="laptop-1">Dell XPS 15 (IT-005)</SelectItem>
-                  <SelectItem value="drill-1">Bosch Power Drill (TOOL-012)</SelectItem>
+                  <SelectItem value="Fluke Multimeter|TOOL-001">Fluke Multimeter (TOOL-001)</SelectItem>
+                  <SelectItem value="Dell XPS 15|IT-005">Dell XPS 15 (IT-005)</SelectItem>
+                  <SelectItem value="Bosch Power Drill|TOOL-012">Bosch Power Drill (TOOL-012)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Expected Return Date (Optional)</Label>
-              <Input type="date" />
+              <Input 
+                type="date" 
+                value={newItem.date}
+                onChange={(e) => setNewItem({...newItem, date: e.target.value})}
+              />
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
-              <Input placeholder="Condition, accessories, etc." />
+              <Input 
+                placeholder="Condition, accessories, etc." 
+                value={newItem.notes}
+                onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAssignOpen(false)}>Cancel</Button>
-            <Button onClick={() => setIsAssignOpen(false)}>Assign Item</Button>
+            <Button onClick={handleAssignItem}>Assign Item</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

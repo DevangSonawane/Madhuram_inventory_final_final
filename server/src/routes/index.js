@@ -8,6 +8,7 @@ import travelTrackerRoutes from './travelTrackerRoute.js';
 import inventoryRoutes from './inventoryRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import chatRoutes from './chatRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { requestLogger } from '../middleware/requestLogger.js';
 import { getMetricsSnapshot } from '../middleware/metrics.js';
@@ -35,6 +36,7 @@ router.use('/users', userRoutes);
 router.use('/travelTracker', travelTrackerRoutes);
 router.use('/admin', adminRoutes);
 router.use('/chat', chatRoutes);
+router.use('/notifications', notificationRoutes);
 
 // Metrics endpoint (in-process metrics, not suitable for multi-instance without shared store)
 router.get('/metrics', (req, res) => {

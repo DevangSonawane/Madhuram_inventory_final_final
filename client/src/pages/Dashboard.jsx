@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Package, ShoppingCart, TrendingUp, AlertTriangle, ArrowUpRight, ArrowDownRight, Plus, FileText, Users, Activity } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -6,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { motion } from 'framer-motion';
 import { containerVariants, itemVariants } from '@/components/PageTransition';
+import { useToast } from "@/hooks/use-toast";
 
 const data = [
   { name: 'Jan', total: 1200 },
@@ -48,6 +50,23 @@ const activity = [
 ];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleExport = () => {
+    toast({
+      title: "Export Started",
+      description: "Dashboard report is being generated...",
+    });
+    // Simulate export
+    setTimeout(() => {
+        toast({
+            title: "Export Complete",
+            description: "Dashboard report has been downloaded.",
+        });
+    }, 1500);
+  };
+
   return (
     <motion.div 
       className="space-y-8"
@@ -57,15 +76,15 @@ export default function Dashboard() {
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-            <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Dashboard</h1>
-            <p className="text-muted-foreground text-lg">Overview of your inventory and operations.</p>
+            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground">Overview of your inventory and operations.</p>
         </div>
         <div className="flex items-center space-x-3">
-            <Button variant="outline" size="sm" className="h-10 px-4 border-muted-foreground/20 hover:border-primary hover:text-primary transition-colors">
+            <Button variant="outline" size="sm" className="h-10 px-4 border-muted-foreground/20 hover:border-primary hover:text-primary transition-colors" onClick={handleExport}>
                 <FileText className="mr-2 h-4 w-4" />
                 Export
             </Button>
-            <Button size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95">
+            <Button size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95" onClick={() => navigate('/purchase-requests')}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Request
             </Button>

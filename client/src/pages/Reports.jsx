@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import {
   Card,
   CardContent,
@@ -69,6 +70,21 @@ const movementData = [
 
 export default function Reports() {
   const [dateRange, setDateRange] = useState("this_month");
+  const { toast } = useToast();
+
+  const handleExport = () => {
+    toast({
+        title: "Report Exported",
+        description: `Inventory report for ${dateRange.replace('_', ' ')} has been downloaded.`,
+    });
+  };
+
+  const handleCreatePO = (id) => {
+    toast({
+        title: "Purchase Order Created",
+        description: `Draft PO created for Item #${id}. Check Purchase Orders page.`,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -241,7 +257,7 @@ export default function Reports() {
                         <div className="text-sm text-muted-foreground">Reorder Point</div>
                         <div className="font-medium">20 Units</div>
                       </div>
-                      <Button size="sm" variant="outline">Create PO</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleCreatePO(i)}>Create PO</Button>
                     </div>
                   </div>
                 ))}

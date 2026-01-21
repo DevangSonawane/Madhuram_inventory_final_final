@@ -22,8 +22,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
-const data = [
+const initialData = [
   {
     id: "MR-2023-055",
     project: "Skyline Towers",
@@ -106,7 +107,18 @@ const columns = [
   },
 ]
 
-function NewRequestDialog({ open, onOpenChange }) {
+function NewRequestDialog({ open, onOpenChange, onSubmit }) {
+    const [formData, setFormData] = useState({
+        project: "",
+        items: "",
+        date: ""
+    });
+
+    const handleSubmit = () => {
+        onSubmit(formData);
+        setFormData({ project: "", items: "", date: "" });
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
@@ -119,30 +131,39 @@ function NewRequestDialog({ open, onOpenChange }) {
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label htmlFor="project">Project / Site</Label>
-                         <Select>
+                         <Select value={formData.project} onValueChange={(val) => setFormData({...formData, project: val})}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select project" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="p1">Skyline Towers</SelectItem>
-                                <SelectItem value="p2">Riverfront Park</SelectItem>
-                                <SelectItem value="p3">Metro Station 5</SelectItem>
+                                <SelectItem value="Skyline Towers">Skyline Towers</SelectItem>
+                                <SelectItem value="Riverfront Park">Riverfront Park</SelectItem>
+                                <SelectItem value="Metro Station 5">Metro Station 5</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                      <div className="grid gap-2">
                         <Label htmlFor="items">Items Required</Label>
-                        <Textarea placeholder="List items (e.g. Cement - 50 bags, Steel - 100kg)" />
+                        <Textarea 
+                            placeholder="List items (e.g. Cement - 50 bags, Steel - 100kg)" 
+                            value={formData.items}
+                            onChange={(e) => setFormData({...formData, items: e.target.value})}
+                        />
                         <p className="text-xs text-muted-foreground">Or use the advanced item selector (Coming Soon)</p>
                     </div>
                     <div className="grid gap-2">
                         <Label htmlFor="date">Required By Date</Label>
-                        <Input id="date" type="date" />
+                        <Input 
+                            id="date" 
+                            type="date" 
+                            value={formData.date}
+                            onChange={(e) => setFormData({...formData, date: e.target.value})}
+                        />
                     </div>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={() => onOpenChange(false)}>Submit Request</Button>
+                    <Button onClick={handleSubmit}>Submit Request</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -150,13 +171,42 @@ function NewRequestDialog({ open, onOpenChange }) {
 }
 
 export default function MaterialRequests() {
+  const [data, setData] = useState(initialData);
   const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleCreateRequest = (newRequest) => {
+    if (!newRequest.project || !newRequest.items || !newRequest.date) {
+        toast({
+            title: "Error",
+            description: "Please fill in all fields.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    const request = {
+        id: `MR-2023-${String(data.length + 55).padStart(3, '0')}`,
+        project: newRequest.project,
+        requester: "Current User",
+        date: newRequest.date,
+        status: "Pending",
+        items: newRequest.items.split(',').length // Rough estimate
+    };
+
+    setData([request, ...data]);
+    setOpen(false);
+    toast({
+        title: "Success",
+        description: "Material Request submitted successfully.",
+    });
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-            <h2 className="text-3xl font-bold tracking-tight">Material Requests</h2>
+            <h1 className="text-3xl font-bold tracking-tight">Material Requests</h1>
             <p className="text-muted-foreground">Manage internal material requests from sites.</p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -164,7 +214,7 @@ export default function MaterialRequests() {
         </Button>
       </div>
       <DataTable columns={columns} data={data} searchKey="project" />
-      <NewRequestDialog open={open} onOpenChange={setOpen} />
+      <NewRequestDialog open={open} onOpenChange={setOpen} onSubmit={handleCreateRequest} />
     </div>
   );
 }

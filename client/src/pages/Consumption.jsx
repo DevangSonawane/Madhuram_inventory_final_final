@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import {
   Card,
   CardContent,
@@ -93,7 +94,70 @@ const logs = [
 ];
 
 export default function Consumption() {
+  const { toast } = useToast();
   const [isLogOpen, setIsLogOpen] = useState(false);
+  const [consumptionLogs, setConsumptionLogs] = useState(logs);
+  const [newLog, setNewLog] = useState({
+    department: "",
+    item: "",
+    quantity: "",
+    date: new Date().toISOString().split('T')[0],
+    notes: ""
+  });
+
+  const handleExport = () => {
+    toast({
+      title: "Export Started",
+      description: "Generating consumption report...",
+    });
+    setTimeout(() => {
+      toast({
+        title: "Export Complete",
+        description: "Report has been downloaded successfully.",
+      });
+    }, 1500);
+  };
+
+  const handleLogConsumption = () => {
+    if (!newLog.department || !newLog.item || !newLog.quantity || !newLog.date) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const itemParts = newLog.item.split('|'); // Assuming value="name|unit"
+    const itemName = itemParts[0] || "Unknown Item";
+    const itemUnit = itemParts[1] || "Units";
+
+    const log = {
+      id: `LOG-${String(consumptionLogs.length + 1).padStart(3, '0')}`,
+      item: itemName,
+      quantity: parseInt(newLog.quantity),
+      unit: itemUnit,
+      consumedBy: newLog.department,
+      department: newLog.department.includes("Project") ? "Projects" : "Internal",
+      date: newLog.date,
+      cost: Math.floor(Math.random() * 5000) // Mock cost
+    };
+
+    setConsumptionLogs([log, ...consumptionLogs]);
+    setIsLogOpen(false);
+    setNewLog({
+      department: "",
+      item: "",
+      quantity: "",
+      date: new Date().toISOString().split('T')[0],
+      notes: ""
+    });
+    
+    toast({
+      title: "Success",
+      description: "Consumption logged successfully.",
+    });
+  };
 
   const columns = [
     {
@@ -239,11 +303,7 @@ export default function Consumption() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <DataTable columns={columns} data={logs} />
-        </CardContent>
-      </Card>
+      <DataTable columns={columns} data={consumptionLogs} />
 
       {/* Log Consumption Dialog */}
       <Dialog open={isLogOpen} onOpenChange={setIsLogOpen}>
@@ -257,7 +317,7 @@ export default function Consumption() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Department / Project</Label>
-              <Select>
+              <Select value={newLog.department} onValueChange={(val) => setNewLog({...newLog, department: val})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select who consumed it" />
                 </SelectTrigger>
@@ -271,21 +331,27 @@ export default function Consumption() {
             </div>
             <div className="space-y-2">
               <Label>Item</Label>
-              <Select>
+              <Select value={newLog.item} onValueChange={(val) => setNewLog({...newLog, item: val})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select item" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="item-1">Copper Wire 2mm</SelectItem>
-                  <SelectItem value="item-2">Machine Oil</SelectItem>
-                  <SelectItem value="item-3">Safety Gloves</SelectItem>
+                  <SelectItem value="Copper Wire 2mm|m">Copper Wire 2mm</SelectItem>
+                  <SelectItem value="Machine Oil|L">Machine Oil</SelectItem>
+                  <SelectItem value="Safety Gloves|pairs">Safety Gloves</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Quantity</Label>
-                <Input type="number" min="1" placeholder="0" />
+                <Input 
+                    type="number" 
+                    min="1" 
+                    placeholder="0" 
+                    value={newLog.quantity}
+                    onChange={(e) => setNewLog({...newLog, quantity: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Unit</Label>
@@ -294,16 +360,24 @@ export default function Consumption() {
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
-              <Input type="date" />
+              <Input 
+                type="date" 
+                value={newLog.date}
+                onChange={(e) => setNewLog({...newLog, date: e.target.value})}
+              />
             </div>
             <div className="space-y-2">
               <Label>Notes (Optional)</Label>
-              <Input placeholder="Purpose of usage..." />
+              <Input 
+                placeholder="Purpose of usage..." 
+                value={newLog.notes}
+                onChange={(e) => setNewLog({...newLog, notes: e.target.value})}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsLogOpen(false)}>Cancel</Button>
-            <Button onClick={() => setIsLogOpen(false)}>Record Usage</Button>
+            <Button onClick={handleLogConsumption}>Record Usage</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

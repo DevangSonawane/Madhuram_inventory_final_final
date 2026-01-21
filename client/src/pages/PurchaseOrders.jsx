@@ -1,10 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Plus, Eye, CheckCircle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-const data = [
+const initialData = [
   {
     id: "PO-2023-001",
     vendor: "UltraTech Cement Ltd",
@@ -108,19 +127,129 @@ const columns = [
   },
 ]
 
+function CreatePODialog({ open, onOpenChange, onSubmit }) {
+    const [formData, setFormData] = useState({
+        vendor: "",
+        date: "",
+        items: "",
+        amount: ""
+    });
+
+    const handleSubmit = () => {
+        onSubmit(formData);
+        setFormData({ vendor: "", date: "", items: "", amount: "" });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle>Create Purchase Order</DialogTitle>
+                    <DialogDescription>
+                        Create a new purchase order for a vendor.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="vendor">Vendor</Label>
+                        <Select value={formData.vendor} onValueChange={(val) => setFormData({...formData, vendor: val})}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select vendor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="UltraTech Cement Ltd">UltraTech Cement Ltd</SelectItem>
+                                <SelectItem value="Asian Paints">Asian Paints</SelectItem>
+                                <SelectItem value="Local Hardware Store">Local Hardware Store</SelectItem>
+                                <SelectItem value="Steel Authority of India">Steel Authority of India</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                         <div className="grid gap-2">
+                            <Label htmlFor="date">Date</Label>
+                            <Input 
+                                id="date" 
+                                type="date" 
+                                value={formData.date}
+                                onChange={(e) => setFormData({...formData, date: e.target.value})}
+                            />
+                        </div>
+                         <div className="grid gap-2">
+                            <Label htmlFor="items">Item Count</Label>
+                            <Input 
+                                id="items" 
+                                type="number" 
+                                placeholder="e.g. 5"
+                                value={formData.items}
+                                onChange={(e) => setFormData({...formData, items: e.target.value})}
+                            />
+                        </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="amount">Total Amount (INR)</Label>
+                        <Input 
+                            id="amount" 
+                            type="number" 
+                            placeholder="0.00"
+                            value={formData.amount}
+                            onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                    <Button onClick={handleSubmit}>Create PO</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function PurchaseOrders() {
+  const [data, setData] = useState(initialData);
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleCreatePO = (newPO) => {
+    if (!newPO.vendor || !newPO.date || !newPO.amount) {
+        toast({
+            title: "Error",
+            description: "Please fill in all required fields.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    const po = {
+        id: `PO-2023-${String(data.length + 5).padStart(3, '0')}`,
+        vendor: newPO.vendor,
+        date: newPO.date,
+        amount: parseFloat(newPO.amount),
+        status: "Draft",
+        items: parseInt(newPO.items) || 1
+    };
+
+    setData([po, ...data]);
+    setOpen(false);
+    toast({
+        title: "Success",
+        description: "Purchase Order created successfully.",
+    });
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-            <h2 className="text-3xl font-bold tracking-tight">Purchase Orders</h2>
+            <h1 className="text-3xl font-bold tracking-tight">Purchase Orders</h1>
             <p className="text-muted-foreground">Manage and track purchase orders.</p>
         </div>
-        <Button>
+        <Button onClick={() => setOpen(true)}>
             <Plus className="mr-2 h-4 w-4" /> Create PO
         </Button>
       </div>
       <DataTable columns={columns} data={data} searchKey="vendor" />
+      <CreatePODialog open={open} onOpenChange={setOpen} onSubmit={handleCreatePO} />
     </div>
   );
 }

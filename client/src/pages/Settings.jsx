@@ -37,13 +37,88 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { motion } from 'framer-motion';
 import { containerVariants, itemVariants } from '@/components/PageTransition';
 
 export default function Settings() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    current: '',
+    new: '',
+    confirm: ''
+  });
+
+  const handlePasswordChange = (e) => {
+    const { id, value } = e.target;
+    // Map input IDs to state keys
+    const key = id === 'current-password' ? 'current' : 
+                id === 'new-password' ? 'new' : 'confirm';
+    
+    setPasswordData(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleUpdatePassword = () => {
+    if (!passwordData.current || !passwordData.new || !passwordData.confirm) {
+      toast({
+        title: "Error",
+        description: "Please fill in all password fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (passwordData.new !== passwordData.confirm) {
+      toast({
+        title: "Error",
+        description: "New passwords do not match.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    // Simulate API call
+    setTimeout(() => {
+      setLoading(false);
+      setPasswordData({ current: '', new: '', confirm: '' });
+      toast({
+        title: "Success",
+        description: "Password updated successfully.",
+      });
+    }, 1500);
+  };
+
+  const [profileData, setProfileData] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    department: 'Administration'
+  });
+
+  const handleProfileChange = (e) => {
+    setProfileData({ ...profileData, [e.target.id]: e.target.value });
+  };
+
+  const handleAvatarClick = () => {
+    document.getElementById('avatar-upload').click();
+  };
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      toast({
+        title: "Image Selected",
+        description: "Avatar upload simulated.",
+      });
+      // Here you would upload the file
+    }
+  };
 
   const handleSave = () => {
     setLoading(true);
@@ -102,24 +177,43 @@ export default function Settings() {
                       className="h-full w-full object-cover"
                     />
                   </div>
-                  <Button variant="outline" size="sm">Change Avatar</Button>
+                  <input 
+                    type="file" 
+                    id="avatar-upload" 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                  />
+                  <Button variant="outline" size="sm" onClick={handleAvatarClick}>Change Avatar</Button>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" defaultValue={user?.name} />
+                    <Input 
+                      id="name" 
+                      value={profileData.name} 
+                      onChange={handleProfileChange}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
-                    <Input id="email" defaultValue={user?.email} disabled />
+                    <Input 
+                      id="email" 
+                      value={profileData.email} 
+                      disabled 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="role">Role</Label>
-                    <Input id="role" defaultValue={user?.role} disabled />
+                    <Input id="role" defaultValue={user?.role || "User"} disabled />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="department">Department</Label>
-                    <Input id="department" defaultValue="Administration" />
+                    <Input 
+                      id="department" 
+                      value={profileData.department} 
+                      onChange={handleProfileChange}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -177,7 +271,7 @@ export default function Settings() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Theme</Label>
-                  <Select defaultValue="system">
+                  <Select value={theme} onValueChange={setTheme}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select theme" />
                     </SelectTrigger>
@@ -217,16 +311,34 @@ export default function Settings() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="current-password">Current Password</Label>
-                  <Input id="current-password" type="password" />
+                  <Input 
+                    id="current-password" 
+                    type="password" 
+                    value={passwordData.current}
+                    onChange={handlePasswordChange}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-password">New Password</Label>
-                  <Input id="new-password" type="password" />
+                  <Input 
+                    id="new-password" 
+                    type="password" 
+                    value={passwordData.new}
+                    onChange={handlePasswordChange}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm Password</Label>
-                  <Input id="confirm-password" type="password" />
+                  <Input 
+                    id="confirm-password" 
+                    type="password" 
+                    value={passwordData.confirm}
+                    onChange={handlePasswordChange}
+                  />
                 </div>
+                <Button onClick={handleUpdatePassword} disabled={loading}>
+                  Update Password
+                </Button>
                 <Separator className="my-4" />
                 <div className="flex items-center justify-between space-x-2">
                   <div className="flex flex-col space-y-1">

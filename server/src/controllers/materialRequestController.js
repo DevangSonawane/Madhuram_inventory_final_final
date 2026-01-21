@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import Group from '../models/Group.js';
 import Team from '../models/Team.js';
 import StockArea from '../models/StockArea.js';
+import { createNotification } from './notificationController.js';
 // validationResult removed - using validate middleware in routes instead
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
@@ -196,6 +197,16 @@ export const createMaterialRequest = async (req, res, next) => {
     }
 
     await transaction.commit();
+
+    // Create notification for creator
+    await createNotification(
+      userId,
+      'material_request',
+      `Material Request ${materialRequest.mr_number} created successfully`,
+      'Request Created',
+      'material_request',
+      materialRequest.request_id
+    );
 
     // Fetch complete request with items and all associations
     const completeRequest = await MaterialRequest.findOne({

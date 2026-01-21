@@ -21,8 +21,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
-const data = [
+const initialData = [
   {
     id: "INW-2023-001",
     poNumber: "PO-2023-001",
@@ -89,8 +90,13 @@ const columns = [
   },
 ]
 
-function NewInwardDialog({ open, onOpenChange }) {
+function NewInwardDialog({ open, onOpenChange, onSubmit }) {
     const [file, setFile] = useState(null);
+    const [formData, setFormData] = useState({
+        poNumber: "",
+        invoiceNumber: "",
+        date: ""
+    });
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
@@ -105,6 +111,12 @@ function NewInwardDialog({ open, onOpenChange }) {
         }
     };
 
+    const handleSubmit = () => {
+        onSubmit({ ...formData, file });
+        setFormData({ poNumber: "", invoiceNumber: "", date: "" });
+        setFile(null);
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
@@ -117,24 +129,35 @@ function NewInwardDialog({ open, onOpenChange }) {
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                         <Label htmlFor="po">Purchase Order Reference</Label>
-                        <Select>
+                        <Select value={formData.poNumber} onValueChange={(val) => setFormData({...formData, poNumber: val})}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select PO" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="po1">PO-2023-001 (UltraTech)</SelectItem>
-                                <SelectItem value="po2">PO-2023-002 (Asian Paints)</SelectItem>
+                                <SelectItem value="PO-2023-001">PO-2023-001 (UltraTech)</SelectItem>
+                                <SelectItem value="PO-2023-002">PO-2023-002 (Asian Paints)</SelectItem>
+                                <SelectItem value="PO-2023-003">PO-2023-003 (JSW Steel)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid gap-2">
                             <Label htmlFor="invoice">Invoice / Challan No</Label>
-                            <Input id="invoice" placeholder="Enter number" />
+                            <Input 
+                                id="invoice" 
+                                placeholder="Enter number" 
+                                value={formData.invoiceNumber}
+                                onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})}
+                            />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="date">Received Date</Label>
-                            <Input id="date" type="date" />
+                            <Input 
+                                id="date" 
+                                type="date" 
+                                value={formData.date}
+                                onChange={(e) => setFormData({...formData, date: e.target.value})}
+                            />
                         </div>
                     </div>
                     
@@ -180,7 +203,7 @@ function NewInwardDialog({ open, onOpenChange }) {
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={() => onOpenChange(false)}>Create Entry</Button>
+                    <Button onClick={handleSubmit}>Create Entry</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -188,13 +211,43 @@ function NewInwardDialog({ open, onOpenChange }) {
 }
 
 export default function InwardEntry() {
+  const [data, setData] = useState(initialData);
   const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleCreateEntry = (newEntry) => {
+    if (!newEntry.poNumber || !newEntry.invoiceNumber || !newEntry.date) {
+        toast({
+            title: "Error",
+            description: "Please fill in all required fields.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    const entry = {
+        id: `INW-2023-${String(data.length + 1).padStart(3, '0')}`,
+        poNumber: newEntry.poNumber,
+        vendor: newEntry.poNumber.includes('001') ? "UltraTech Cement Ltd" : newEntry.poNumber.includes('002') ? "Asian Paints" : "Unknown Vendor",
+        receivedDate: newEntry.date,
+        invoiceNumber: newEntry.invoiceNumber,
+        status: "Pending Inspection",
+        document: newEntry.file ? newEntry.file.name : "No Document"
+    };
+
+    setData([entry, ...data]);
+    setOpen(false);
+    toast({
+        title: "Success",
+        description: "Inward entry created successfully.",
+    });
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-            <h2 className="text-3xl font-bold tracking-tight">Inward Entry</h2>
+            <h1 className="text-3xl font-bold tracking-tight">Inward Entry</h1>
             <p className="text-muted-foreground">Manage incoming goods and receipts.</p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -202,7 +255,7 @@ export default function InwardEntry() {
         </Button>
       </div>
       <DataTable columns={columns} data={data} searchKey="poNumber" />
-      <NewInwardDialog open={open} onOpenChange={setOpen} />
+      <NewInwardDialog open={open} onOpenChange={setOpen} onSubmit={handleCreateEntry} />
     </div>
   );
 }

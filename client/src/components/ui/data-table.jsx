@@ -19,7 +19,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 
 export function DataTable({
   columns,
@@ -45,20 +46,23 @@ export function DataTable({
   })
 
   return (
-    <div className="space-y-4">
+    <Card>
       {searchKey && (
-        <div className="flex items-center py-4">
-          <Input
-            placeholder="Search..."
-            value={(table.getColumn(searchKey)?.getFilterValue()) ?? ""}
-            onChange={(event) =>
-              table.getColumn(searchKey)?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm"
-          />
+        <div className="flex items-center p-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              value={(table.getColumn(searchKey)?.getFilterValue()) ?? ""}
+              onChange={(event) =>
+                table.getColumn(searchKey)?.setFilterValue(event.target.value)
+              }
+              className="pl-8"
+            />
+          </div>
         </div>
       )}
-      <div className="rounded-md border">
+      <CardContent className="p-0">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -101,8 +105,8 @@ export function DataTable({
             )}
           </TableBody>
         </Table>
-      </div>
-      <div className="flex items-center justify-between px-2">
+      </CardContent>
+      <div className="flex items-center justify-between p-4">
         <div className="flex-1 text-sm text-muted-foreground">
           {table.getFilteredSelectedRowModel().rows.length} of{" "}
           {table.getFilteredRowModel().rows.length} row(s) selected.
@@ -172,6 +176,6 @@ export function DataTable({
             </div>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

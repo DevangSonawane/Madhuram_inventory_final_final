@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -15,8 +15,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-const warehouses = [
+const initialWarehouses = [
   {
     id: "WH-001",
     name: "Main Warehouse (Mumbai)",
@@ -72,16 +91,112 @@ const warehouses = [
 ];
 
 export default function StockAreas() {
+  const [warehouses, setWarehouses] = useState(initialWarehouses);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [newWarehouse, setNewWarehouse] = useState({
+    name: "",
+    status: "Active"
+  });
+  const { toast } = useToast();
+
+  const handleInputChange = (e) => {
+    const { id, value } = e.target;
+    setNewWarehouse((prev) => ({
+      ...prev,
+      [id]: value,
+    }));
+  };
+
+  const handleStatusChange = (value) => {
+    setNewWarehouse((prev) => ({
+      ...prev,
+      status: value,
+    }));
+  };
+
+  const handleAddWarehouse = () => {
+    if (!newWarehouse.name) {
+      toast({
+        title: "Error",
+        description: "Warehouse name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const warehouse = {
+      id: `WH-${String(warehouses.length + 1).padStart(3, '0')}`,
+      name: newWarehouse.name,
+      type: "Warehouse",
+      status: newWarehouse.status,
+      capacity: "0%",
+      zones: []
+    };
+
+    setWarehouses([...warehouses, warehouse]);
+    setIsAddDialogOpen(false);
+    setNewWarehouse({ name: "", status: "Active" });
+    
+    toast({
+      title: "Success",
+      description: "Warehouse added successfully.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-            <h2 className="text-3xl font-bold tracking-tight">Stock Areas</h2>
+            <h1 className="text-3xl font-bold tracking-tight">Stock Areas</h1>
             <p className="text-muted-foreground">Manage warehouses, zones, and storage locations.</p>
         </div>
-        <Button>
-            <Plus className="mr-2 h-4 w-4" /> Add Warehouse
-        </Button>
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> Add Warehouse
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add New Warehouse</DialogTitle>
+              <DialogDescription>
+                Create a new warehouse location to manage inventory.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  id="name"
+                  value={newWarehouse.name}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="e.g. Mumbai Warehouse"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="status" className="text-right">
+                  Status
+                </Label>
+                <Select onValueChange={handleStatusChange} value={newWarehouse.status}>
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Maintenance">Maintenance</SelectItem>
+                    <SelectItem value="Closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" onClick={handleAddWarehouse}>Save changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-6">

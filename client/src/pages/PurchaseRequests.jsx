@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Eye, Calendar as CalendarIcon, Check, ChevronsRight } from "lucide-react";
+import { Plus, Eye, Calendar as CalendarIcon, Check, ChevronsRight, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,8 +30,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
 
-const data = [
+const initialData = [
   {
     id: "PR-2023-101",
     requester: "John Doe",
@@ -61,64 +62,54 @@ const data = [
   },
 ];
 
-const columns = [
-  {
-    accessorKey: "id",
-    header: "PR Number",
-    cell: ({ row }) => <span className="font-medium">{row.getValue("id")}</span>
-  },
-  {
-    accessorKey: "requester",
-    header: "Requester",
-  },
-  {
-    accessorKey: "department",
-    header: "Department",
-  },
-  {
-    accessorKey: "date",
-    header: "Date",
-  },
-  {
-    accessorKey: "priority",
-    header: "Priority",
-    cell: ({ row }) => {
-        const priority = row.getValue("priority");
-        let className = "";
-        if (priority === "High") className = "text-red-600 bg-red-100 border-red-200";
-        if (priority === "Medium") className = "text-yellow-600 bg-yellow-100 border-yellow-200";
-        if (priority === "Low") className = "text-blue-600 bg-blue-100 border-blue-200";
-        return <Badge variant="outline" className={className}>{priority}</Badge>
-    }
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => {
-        const status = row.getValue("status");
-        let className = "";
-        if (status === "Approved") className = "bg-green-100 text-green-800 hover:bg-green-100 border-green-200";
-        if (status === "Pending Approval") className = "bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200";
-        if (status === "Draft") className = "bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200";
-
-        return <Badge variant="outline" className={className}>{status}</Badge>
-    }
-  },
-  {
-    id: "actions",
-    cell: ({ row }) => {
-      return (
-        <Button variant="ghost" size="icon">
-            <Eye className="h-4 w-4" />
-        </Button>
-      )
-    },
-  },
-]
-
-function CreatePRDialog({ open, onOpenChange }) {
+function CreatePRDialog({ open, onOpenChange, onSubmit }) {
     const [step, setStep] = useState(1);
     const [date, setDate] = useState(new Date());
+    const [formData, setFormData] = useState({
+        requester: "",
+        department: "",
+        priority: "medium",
+        remarks: "",
+        items: []
+    });
+    const [currentItem, setCurrentItem] = useState({ name: "", quantity: "", unit: "bags" });
+
+    const handleInputChange = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleAddItem = () => {
+        if (currentItem.name && currentItem.quantity) {
+            setFormData(prev => ({
+                ...prev,
+                items: [...prev.items, { ...currentItem, id: Date.now() }]
+            }));
+            setCurrentItem({ name: "", quantity: "", unit: "bags" });
+        }
+    };
+
+    const handleRemoveItem = (id) => {
+        setFormData(prev => ({
+            ...prev,
+            items: prev.items.filter(item => item.id !== id)
+        }));
+    };
+
+    const handleSubmit = () => {
+        onSubmit({
+            ...formData,
+            date: format(date, "yyyy-MM-dd"),
+            itemsCount: formData.items.length
+        });
+        setStep(1);
+        setFormData({
+            requester: "",
+            department: "",
+            priority: "medium",
+            remarks: "",
+            items: []
+        });
+    };
 
     const nextStep = () => setStep(step + 1);
     const prevStep = () => setStep(step - 1);
@@ -154,18 +145,23 @@ function CreatePRDialog({ open, onOpenChange }) {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="requester">Requester Name</Label>
-                                    <Input id="requester" placeholder="Enter name" defaultValue="John Doe" />
+                                    <Input 
+                                        id="requester" 
+                                        placeholder="Enter name" 
+                                        value={formData.requester}
+                                        onChange={(e) => handleInputChange("requester", e.target.value)}
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="department">Department</Label>
-                                    <Select defaultValue="civil">
+                                    <Select value={formData.department} onValueChange={(val) => handleInputChange("department", val)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select department" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="civil">Civil</SelectItem>
-                                            <SelectItem value="electrical">Electrical</SelectItem>
-                                            <SelectItem value="mechanical">Mechanical</SelectItem>
+                                            <SelectItem value="Civil">Civil</SelectItem>
+                                            <SelectItem value="Electrical">Electrical</SelectItem>
+                                            <SelectItem value="Mechanical">Mechanical</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -198,14 +194,14 @@ function CreatePRDialog({ open, onOpenChange }) {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="priority">Priority</Label>
-                                    <Select defaultValue="medium">
+                                    <Select value={formData.priority} onValueChange={(val) => handleInputChange("priority", val)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select priority" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="high">High</SelectItem>
-                                            <SelectItem value="medium">Medium</SelectItem>
-                                            <SelectItem value="low">Low</SelectItem>
+                                            <SelectItem value="High">High</SelectItem>
+                                            <SelectItem value="Medium">Medium</SelectItem>
+                                            <SelectItem value="Low">Low</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -217,7 +213,6 @@ function CreatePRDialog({ open, onOpenChange }) {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <Label>Items List</Label>
-                                <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-2" /> Add Item</Button>
                             </div>
                             <div className="border rounded-md p-4 space-y-4">
                                 <div className="hidden md:grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground mb-2">
@@ -226,20 +221,25 @@ function CreatePRDialog({ open, onOpenChange }) {
                                     <div className="col-span-3">Unit</div>
                                     <div className="col-span-1"></div>
                                 </div>
-                                {/* Mock Item Row */}
-                                <div className="flex flex-col md:grid md:grid-cols-12 gap-2 items-start md:items-center border-b md:border-0 pb-4 md:pb-0 last:border-0 last:pb-0">
+                                {/* New Item Input */}
+                                <div className="flex flex-col md:grid md:grid-cols-12 gap-2 items-start md:items-center border-b md:border-0 pb-4 md:pb-0">
                                     <div className="w-full md:col-span-5">
-                                        <Label className="md:hidden mb-1.5 block">Item Name</Label>
-                                        <Input placeholder="Item name" defaultValue="Cement Bags" />
+                                        <Input 
+                                            placeholder="Item name" 
+                                            value={currentItem.name}
+                                            onChange={(e) => setCurrentItem({...currentItem, name: e.target.value})}
+                                        />
                                     </div>
                                     <div className="flex w-full gap-2 md:contents">
                                         <div className="flex-1 md:col-span-3">
-                                            <Label className="md:hidden mb-1.5 block">Quantity</Label>
-                                            <Input type="number" defaultValue="50" />
+                                            <Input 
+                                                type="number" 
+                                                value={currentItem.quantity}
+                                                onChange={(e) => setCurrentItem({...currentItem, quantity: e.target.value})}
+                                            />
                                         </div>
                                         <div className="flex-1 md:col-span-3">
-                                            <Label className="md:hidden mb-1.5 block">Unit</Label>
-                                            <Select defaultValue="bags">
+                                            <Select value={currentItem.unit} onValueChange={(val) => setCurrentItem({...currentItem, unit: val})}>
                                                 <SelectTrigger>
                                                     <SelectValue />
                                                 </SelectTrigger>
@@ -250,14 +250,26 @@ function CreatePRDialog({ open, onOpenChange }) {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="md:col-span-1 text-center flex items-end">
-                                            <Button variant="ghost" size="icon" className="text-destructive mt-6 md:mt-0">
-                                                <span className="sr-only">Remove</span>
-                                                &times;
+                                        <div className="md:col-span-1 text-center">
+                                            <Button size="sm" variant="outline" onClick={handleAddItem}>
+                                                <Plus className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     </div>
                                 </div>
+                                {/* List of added items */}
+                                {formData.items.map((item) => (
+                                    <div key={item.id} className="flex flex-col md:grid md:grid-cols-12 gap-2 items-start md:items-center border-t pt-2">
+                                        <div className="w-full md:col-span-5 text-sm">{item.name}</div>
+                                        <div className="flex-1 md:col-span-3 text-sm">{item.quantity}</div>
+                                        <div className="flex-1 md:col-span-3 text-sm">{item.unit}</div>
+                                        <div className="md:col-span-1 text-center">
+                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveItem(item.id)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -266,17 +278,22 @@ function CreatePRDialog({ open, onOpenChange }) {
                         <div className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="remarks">Justification / Remarks</Label>
-                                <Textarea id="remarks" placeholder="Enter reason for purchase request..." />
+                                <Textarea 
+                                    id="remarks" 
+                                    placeholder="Enter reason for purchase request..." 
+                                    value={formData.remarks}
+                                    onChange={(e) => handleInputChange("remarks", e.target.value)}
+                                />
                             </div>
                             <div className="rounded-lg bg-muted p-4 text-sm">
                                 <h4 className="font-semibold mb-2">Summary</h4>
                                 <div className="grid grid-cols-2 gap-2">
                                     <span className="text-muted-foreground">Requester:</span>
-                                    <span>John Doe</span>
+                                    <span>{formData.requester}</span>
                                     <span className="text-muted-foreground">Department:</span>
-                                    <span>Civil</span>
+                                    <span>{formData.department}</span>
                                     <span className="text-muted-foreground">Items:</span>
-                                    <span>1 Item(s)</span>
+                                    <span>{formData.items.length} Item(s)</span>
                                 </div>
                             </div>
                         </div>
@@ -290,7 +307,7 @@ function CreatePRDialog({ open, onOpenChange }) {
                     {step < 3 ? (
                         <Button onClick={nextStep}>Next <ChevronsRight className="ml-2 h-4 w-4" /></Button>
                     ) : (
-                        <Button onClick={() => onOpenChange(false)}>Submit Request</Button>
+                        <Button onClick={handleSubmit}>Submit Request</Button>
                     )}
                 </DialogFooter>
             </DialogContent>
@@ -299,13 +316,89 @@ function CreatePRDialog({ open, onOpenChange }) {
 }
 
 export default function PurchaseRequests() {
+  const [data, setData] = useState(initialData);
   const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleCreateRequest = (newRequest) => {
+    const request = {
+      id: `PR-2023-${100 + data.length + 1}`,
+      requester: newRequest.requester,
+      department: newRequest.department,
+      date: newRequest.date,
+      priority: newRequest.priority,
+      status: "Draft",
+      items: newRequest.itemsCount
+    };
+    
+    setData([...data, request]);
+    setOpen(false);
+    toast({
+        title: "Success",
+        description: "Purchase Request created successfully.",
+    });
+  };
+
+  const columns = [
+    {
+      accessorKey: "id",
+      header: "PR Number",
+      cell: ({ row }) => <span className="font-medium">{row.getValue("id")}</span>
+    },
+    {
+      accessorKey: "requester",
+      header: "Requester",
+    },
+    {
+      accessorKey: "department",
+      header: "Department",
+    },
+    {
+      accessorKey: "date",
+      header: "Date",
+    },
+    {
+      accessorKey: "priority",
+      header: "Priority",
+      cell: ({ row }) => {
+          const priority = row.getValue("priority");
+          let className = "";
+          if (priority === "High") className = "text-red-600 bg-red-100 border-red-200";
+          if (priority === "Medium") className = "text-yellow-600 bg-yellow-100 border-yellow-200";
+          if (priority === "Low") className = "text-blue-600 bg-blue-100 border-blue-200";
+          return <Badge variant="outline" className={className}>{priority}</Badge>
+      }
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+          const status = row.getValue("status");
+          let className = "";
+          if (status === "Approved") className = "bg-green-100 text-green-800 hover:bg-green-100 border-green-200";
+          if (status === "Pending Approval") className = "bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200";
+          if (status === "Draft") className = "bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200";
+  
+          return <Badge variant="outline" className={className}>{status}</Badge>
+      }
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        return (
+          <Button variant="ghost" size="icon">
+              <Eye className="h-4 w-4" />
+          </Button>
+        )
+      },
+    },
+  ]
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-            <h2 className="text-3xl font-bold tracking-tight">Purchase Requests</h2>
+            <h1 className="text-3xl font-bold tracking-tight">Purchase Requests</h1>
             <p className="text-muted-foreground">Create and manage material purchase requests.</p>
         </div>
         <Button onClick={() => setOpen(true)}>
@@ -313,7 +406,7 @@ export default function PurchaseRequests() {
         </Button>
       </div>
       <DataTable columns={columns} data={data} searchKey="requester" />
-      <CreatePRDialog open={open} onOpenChange={setOpen} />
+      <CreatePRDialog open={open} onOpenChange={setOpen} onSubmit={handleCreateRequest} />
     </div>
   );
 }

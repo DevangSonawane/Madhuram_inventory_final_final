@@ -16,14 +16,41 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    // Dummy credential check
+    try {
+      // Try to login via API
+      const response = await fetch('http://localhost:3000/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ identifier: email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        const userData = {
+          ...data.data.user,
+          token: data.data.accessToken,
+          refreshToken: data.data.refreshToken
+        };
+        setUser(userData);
+        localStorage.setItem('inventory_user', JSON.stringify(userData));
+        return true;
+      }
+    } catch (error) {
+      console.warn("API Login failed, falling back to local demo if applicable", error);
+    }
+
+    // Fallback/Dummy credential check for demo purposes
     if (email === 'admin@madhuram.com' && password === 'admin123') {
       const userData = {
         id: '1',
         name: 'Admin User',
         email: email,
         role: 'admin',
-        avatar: 'https://github.com/shadcn.png'
+        avatar: 'https://github.com/shadcn.png',
+        token: 'demo-token'
       };
       setUser(userData);
       localStorage.setItem('inventory_user', JSON.stringify(userData));

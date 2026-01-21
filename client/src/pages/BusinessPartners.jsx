@@ -46,9 +46,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { DataTable } from "@/components/ui/data-table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock Data
-const partners = [
+const initialPartners = [
   {
     id: "BP-001",
     name: "Acme Supplies Ltd",
@@ -85,7 +86,51 @@ const partners = [
 ];
 
 export default function BusinessPartners() {
+  const [partners, setPartners] = useState(initialPartners);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newPartner, setNewPartner] = useState({
+    name: "",
+    type: "Vendor",
+    contactPerson: "",
+    email: "",
+    phone: "",
+    location: "",
+    status: "Active"
+  });
+  const { toast } = useToast();
+
+  const handleCreatePartner = () => {
+    if (!newPartner.name || !newPartner.email || !newPartner.contactPerson) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields (Name, Email, Contact Person).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const partner = {
+      id: `BP-${String(partners.length + 1).padStart(3, '0')}`,
+      ...newPartner,
+      rating: 5.0
+    };
+
+    setPartners([...partners, partner]);
+    setIsAddOpen(false);
+    setNewPartner({
+      name: "",
+      type: "Vendor",
+      contactPerson: "",
+      email: "",
+      phone: "",
+      location: "",
+      status: "Active"
+    });
+    toast({
+      title: "Success",
+      description: "Business Partner added successfully.",
+    });
+  };
 
   const columns = [
     {
@@ -238,11 +283,7 @@ export default function BusinessPartners() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <DataTable columns={columns} data={partners} />
-        </CardContent>
-      </Card>
+      <DataTable columns={columns} data={partners} />
 
       {/* Add Partner Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -257,27 +298,27 @@ export default function BusinessPartners() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Partner Type</Label>
-                <Select defaultValue="vendor">
+                <Select value={newPartner.type} onValueChange={(val) => setNewPartner({...newPartner, type: val})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="vendor">Vendor</SelectItem>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="service">Service Provider</SelectItem>
+                    <SelectItem value="Vendor">Vendor</SelectItem>
+                    <SelectItem value="Customer">Customer</SelectItem>
+                    <SelectItem value="Service Provider">Service Provider</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select defaultValue="active">
+                <Select value={newPartner.status} onValueChange={(val) => setNewPartner({...newPartner, status: val})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="blocked">Blocked</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Blocked">Blocked</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -285,34 +326,55 @@ export default function BusinessPartners() {
             
             <div className="space-y-2">
               <Label>Company Name</Label>
-              <Input placeholder="e.g. Acme Supplies Ltd" />
+              <Input 
+                placeholder="e.g. Acme Supplies Ltd" 
+                value={newPartner.name}
+                onChange={(e) => setNewPartner({...newPartner, name: e.target.value})}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Contact Person</Label>
-                <Input placeholder="Full Name" />
+                <Input 
+                    placeholder="Full Name" 
+                    value={newPartner.contactPerson}
+                    onChange={(e) => setNewPartner({...newPartner, contactPerson: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" placeholder="contact@company.com" />
+                <Input 
+                    type="email" 
+                    placeholder="contact@company.com" 
+                    value={newPartner.email}
+                    onChange={(e) => setNewPartner({...newPartner, email: e.target.value})}
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Phone</Label>
-                <Input placeholder="+1 234 567 890" />
+                <Input 
+                    placeholder="+1 234 567 890" 
+                    value={newPartner.phone}
+                    onChange={(e) => setNewPartner({...newPartner, phone: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Location/City</Label>
-                <Input placeholder="New York, USA" />
+                <Input 
+                    placeholder="New York, USA" 
+                    value={newPartner.location}
+                    onChange={(e) => setNewPartner({...newPartner, location: e.target.value})}
+                />
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-            <Button onClick={() => setIsAddOpen(false)}>Create Partner</Button>
+            <Button onClick={handleCreatePartner}>Create Partner</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

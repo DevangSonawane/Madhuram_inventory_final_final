@@ -45,6 +45,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/ui/data-table";
+import { useToast } from "@/hooks/use-toast";
 
 // Mock Data
 const initialReturns = [
@@ -84,13 +85,76 @@ const initialReturns = [
 ];
 
 export default function Returns() {
+  const { toast } = useToast();
   const [returns, setReturns] = useState(initialReturns);
   const [isNewReturnOpen, setIsNewReturnOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState(null);
+  
+  // New Return State
+  const [newReturn, setNewReturn] = useState({
+    returnedBy: "",
+    item: "",
+    quantity: "",
+    condition: "",
+    reason: ""
+  });
+
+  // Inspection State
+  const [inspectionData, setInspectionData] = useState({
+    notes: "",
+    targetLocation: ""
+  });
 
   const handleStatusUpdate = (id, newStatus) => {
+    if (newStatus === "Approved" && !inspectionData.targetLocation) {
+        toast({
+            title: "Error",
+            description: "Please select a target warehouse/zone for approved items.",
+            variant: "destructive",
+        });
+        return;
+    }
+
     setReturns(returns.map(r => r.id === id ? { ...r, status: newStatus } : r));
     setSelectedReturn(null);
+    setInspectionData({ notes: "", targetLocation: "" });
+    
+    toast({
+      title: "Return Processed",
+      description: `Return has been ${newStatus.toLowerCase()}.`,
+    });
+  };
+
+  const handleCreateReturn = () => {
+    if (!newReturn.returnedBy || !newReturn.item || !newReturn.quantity || !newReturn.condition) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const ret = {
+      id: `RET-2024-${String(returns.length + 1).padStart(3, '0')}`,
+      item: newReturn.item.split('|')[0] || "Unknown Item",
+      quantity: parseInt(newReturn.quantity),
+      returnedBy: newReturn.returnedBy.split('|')[0] || "Unknown User",
+      department: newReturn.returnedBy.split('|')[1] || "General",
+      reason: newReturn.reason || "No reason provided",
+      condition: newReturn.condition,
+      date: new Date().toISOString().split('T')[0],
+      status: "Pending Inspection"
+    };
+
+    setReturns([ret, ...returns]);
+    setIsNewReturnOpen(false);
+    setNewReturn({ returnedBy: "", item: "", quantity: "", condition: "", reason: "" });
+    
+    toast({
+      title: "Success",
+      description: "Return initiated successfully.",
+    });
   };
 
   const columns = [
@@ -227,11 +291,7 @@ export default function Returns() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <DataTable columns={columns} data={returns} />
-        </CardContent>
-      </Card>
+      <DataTable columns={columns} data={returns} />
 
       {/* New Return Dialog */}
       <Dialog open={isNewReturnOpen} onOpenChange={setIsNewReturnOpen}>
@@ -245,55 +305,64 @@ export default function Returns() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Returned By</Label>
-              <Select>
+              <Select value={newReturn.returnedBy} onValueChange={(val) => setNewReturn({...newReturn, returnedBy: val})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select employee or project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="emp-1">John Doe (Maintenance)</SelectItem>
-                  <SelectItem value="proj-1">Project Alpha</SelectItem>
+                  <SelectItem value="John Doe|Maintenance">John Doe (Maintenance)</SelectItem>
+                  <SelectItem value="Project Alpha|Projects">Project Alpha</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>Item</Label>
-              <Select>
+              <Select value={newReturn.item} onValueChange={(val) => setNewReturn({...newReturn, item: val})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select item" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="item-1">Power Drill</SelectItem>
-                  <SelectItem value="item-2">Copper Wire</SelectItem>
+                  <SelectItem value="Power Drill|TOOL-001">Power Drill</SelectItem>
+                  <SelectItem value="Copper Wire|MAT-002">Copper Wire</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Quantity</Label>
-                <Input type="number" min="1" />
+                <Input 
+                    type="number" 
+                    min="1" 
+                    value={newReturn.quantity}
+                    onChange={(e) => setNewReturn({...newReturn, quantity: e.target.value})}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Condition</Label>
-                <Select>
+                <Select value={newReturn.condition} onValueChange={(val) => setNewReturn({...newReturn, condition: val})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="good">Good / Unused</SelectItem>
-                    <SelectItem value="used">Used / Functional</SelectItem>
-                    <SelectItem value="damaged">Damaged / Scrap</SelectItem>
+                    <SelectItem value="Good">Good / Unused</SelectItem>
+                    <SelectItem value="Used">Used / Functional</SelectItem>
+                    <SelectItem value="Damaged">Damaged / Scrap</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-2">
               <Label>Reason for Return</Label>
-              <Textarea placeholder="Why is this being returned?" />
+              <Textarea 
+                placeholder="Why is this being returned?" 
+                value={newReturn.reason}
+                onChange={(e) => setNewReturn({...newReturn, reason: e.target.value})}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsNewReturnOpen(false)}>Cancel</Button>
-            <Button onClick={() => setIsNewReturnOpen(false)}>Create Return</Button>
+            <Button onClick={handleCreateReturn}>Create Return</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -330,12 +399,19 @@ export default function Returns() {
 
             <div className="space-y-2">
               <Label>Inspection Notes</Label>
-              <Textarea placeholder="Verify condition, check for defects..." />
+              <Textarea 
+                placeholder="Verify condition, check for defects..." 
+                value={inspectionData.notes}
+                onChange={(e) => setInspectionData({...inspectionData, notes: e.target.value})}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Target Warehouse/Zone</Label>
-              <Select>
+              <Select
+                value={inspectionData.targetLocation}
+                onValueChange={(val) => setInspectionData({...inspectionData, targetLocation: val})}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Where to store it?" />
                 </SelectTrigger>

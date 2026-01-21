@@ -16,6 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useNotifications } from "@/contexts/NotificationContext";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +95,7 @@ const mockItems = [
 ];
 
 export default function StockTransfers() {
+  const { addNotification } = useNotifications();
   const [transfers, setTransfers] = useState(initialTransfers);
   const [isNewTransferOpen, setIsNewTransferOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -194,6 +197,19 @@ export default function StockTransfers() {
   const handleCreateTransfer = () => {
     // Logic to save transfer
     console.log("Creating transfer:", formData);
+
+    const newTransfer = {
+      id: `TR-2024-${String(transfers.length + 1).padStart(3, '0')}`,
+      from: formData.source || "Unknown Source",
+      to: formData.destination || "Unknown Destination",
+      items: formData.items.reduce((acc, item) => acc + item.quantity, 0),
+      requestedBy: "Current User",
+      date: new Date().toISOString().split('T')[0],
+      status: "Pending",
+      priority: formData.priority
+    };
+
+    setTransfers([newTransfer, ...transfers]);
     setIsNewTransferOpen(false);
     setStep(1);
     setFormData({
@@ -203,6 +219,45 @@ export default function StockTransfers() {
       priority: "Medium",
       notes: ""
     });
+    
+    toast({
+      title: "Success",
+      description: "Stock transfer request created successfully.",
+    });
+  };
+
+  const handleNextStep = () => {
+    if (step === 1) {
+      if (!formData.source || !formData.destination) {
+        toast({
+          title: "Error",
+          description: "Please select both source and destination locations.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (formData.source === formData.destination) {
+        toast({
+            title: "Error",
+            description: "Source and destination cannot be the same.",
+            variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    if (step === 2) {
+      if (formData.items.length === 0) {
+        toast({
+          title: "Error",
+          description: "Please add at least one item to transfer.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setStep(step + 1);
   };
 
   const handleAddItem = (itemId) => {
@@ -259,11 +314,7 @@ export default function StockTransfers() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <DataTable columns={columns} data={transfers} />
-        </CardContent>
-      </Card>
+      <DataTable columns={columns} data={transfers} />
 
       {/* New Transfer Wizard Dialog */}
       <Dialog open={isNewTransferOpen} onOpenChange={setIsNewTransferOpen}>
@@ -444,7 +495,7 @@ export default function StockTransfers() {
               </Button>
             )}
             {step < 3 ? (
-              <Button onClick={() => setStep(step + 1)}>
+              <Button onClick={handleNextStep}>
                 Next Step
               </Button>
             ) : (

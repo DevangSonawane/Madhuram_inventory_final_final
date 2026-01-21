@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   HelpCircle, 
   Book, 
@@ -17,6 +16,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import React, { useState } from 'react';
+import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -27,6 +46,40 @@ import { motion } from 'framer-motion';
 import { containerVariants, itemVariants } from '@/components/PageTransition';
 
 export default function Support() {
+  const { toast } = useToast();
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [ticketOpen, setTicketOpen] = useState(false);
+  const [ticketData, setTicketData] = useState({ subject: '', message: '', priority: 'medium' });
+
+  const handleStartChat = () => {
+    toast({
+      title: "Chat Initiated",
+      description: "Connecting to an agent... (Demo)",
+    });
+    // Simulate connection
+    setTimeout(() => {
+        setIsChatOpen(true);
+    }, 1500);
+  };
+
+  const handleCreateTicket = () => {
+    if(!ticketData.subject || !ticketData.message) {
+        toast({
+            title: "Error",
+            description: "Please fill in subject and message.",
+            variant: "destructive"
+        });
+        return;
+    }
+    
+    toast({
+        title: "Ticket Created",
+        description: `Ticket #${Math.floor(Math.random() * 10000)} created successfully.`,
+    });
+    setTicketOpen(false);
+    setTicketData({ subject: '', message: '', priority: 'medium' });
+  };
+
   return (
     <motion.div 
       className="space-y-6"
@@ -89,7 +142,7 @@ export default function Support() {
               </p>
             </CardContent>
             <CardFooter className="mt-auto">
-              <Button className="w-full">Start Chat</Button>
+              <Button className="w-full" onClick={handleStartChat}>Start Chat</Button>
             </CardFooter>
           </Card>
         </motion.div>
@@ -116,11 +169,57 @@ export default function Support() {
               </div>
             </CardContent>
             <CardFooter className="mt-auto">
-              <Button variant="secondary" className="w-full">Open Ticket</Button>
+              <Button variant="secondary" className="w-full" onClick={() => setTicketOpen(true)}>Open Ticket</Button>
             </CardFooter>
           </Card>
         </motion.div>
       </div>
+
+      <Dialog open={ticketOpen} onOpenChange={setTicketOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Create Support Ticket</DialogTitle>
+                <DialogDescription>Describe your issue and we'll get back to you.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                    <Label>Subject</Label>
+                    <Input 
+                        value={ticketData.subject} 
+                        onChange={(e) => setTicketData({...ticketData, subject: e.target.value})} 
+                        placeholder="Brief description of the issue"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label>Priority</Label>
+                    <Select value={ticketData.priority} onValueChange={(val) => setTicketData({...ticketData, priority: val})}>
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="critical">Critical</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Message</Label>
+                    <Textarea 
+                        value={ticketData.message} 
+                        onChange={(e) => setTicketData({...ticketData, message: e.target.value})} 
+                        placeholder="Detailed explanation..."
+                        rows={4}
+                    />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setTicketOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateTicket}>Submit Ticket</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <motion.div variants={itemVariants}>
         <Card>

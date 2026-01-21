@@ -20,13 +20,17 @@ import Settings from '@/pages/Settings';
 import Support from '@/pages/Support';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/AuthContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
+    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+      <AuthProvider>
+        <NotificationProvider>
+          <Router>
+            <Routes>
           <Route path="/login" element={<Login />} />
           
           <Route path="/" element={
@@ -53,8 +57,10 @@ function App() {
           </Route>
         </Routes>
         <Toaster />
-      </Router>
-    </AuthProvider>
+          </Router>
+        </NotificationProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
