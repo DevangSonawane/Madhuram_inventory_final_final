@@ -13,7 +13,8 @@ export const getAllStockAreas = async (req, res, next) => {
       page = 1,
       limit = 50,
       search = '',
-      showInactive = false
+      showInactive = false,
+      projectId
     } = req.query;
 
     const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
@@ -22,6 +23,10 @@ export const getAllStockAreas = async (req, res, next) => {
 
     // Build where clause
     const whereClause = req.withOrg ? req.withOrg({}) : {};
+
+    if (projectId) {
+      whereClause.project_id = projectId;
+    }
 
     if (!showInactive || showInactive === 'false') {
       whereClause.is_active = true;
@@ -140,7 +145,8 @@ export const createStockArea = async (req, res, next) => {
       localityDistrict,
       city,
       stateProvince,
-      country
+      country,
+      projectId
     } = req.body;
 
     const stockArea = await StockArea.create({
@@ -159,6 +165,7 @@ export const createStockArea = async (req, res, next) => {
       state_province: stateProvince || null,
       country: country ? country.toUpperCase() : null,
       org_id: req.orgId || null,
+      project_id: projectId || null,
       is_active: true
     });
 
@@ -195,7 +202,8 @@ export const updateStockArea = async (req, res, next) => {
       localityDistrict,
       city,
       stateProvince,
-      country
+      country,
+      projectId
     } = req.body;
 
     const stockArea = await StockArea.findOne({
@@ -233,6 +241,7 @@ export const updateStockArea = async (req, res, next) => {
       city: city !== undefined ? city : stockArea.city,
       state_province: stateProvince !== undefined ? stateProvince : stockArea.state_province,
       country: country !== undefined ? (country ? country.toUpperCase() : null) : stockArea.country,
+      project_id: projectId !== undefined ? projectId : stockArea.project_id,
     });
 
     return res.status(200).json({

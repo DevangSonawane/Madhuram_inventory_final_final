@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useParams } from 'react-router-dom';
 import { cn } from "@/lib/utils";
 import { MENU_CATEGORIES } from "@/constants/menuItems";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,15 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
   // But to be safe, we can default isCollapsed to false if undefined.
   
   const collapsed = isCollapsed === undefined ? false : isCollapsed;
+  const { projectId } = useParams();
+
+  const getPath = (path) => {
+    if (path === '/projects') return '/projects';
+    if (!projectId) return path;
+    
+    if (path === '/') return `/${projectId}`;
+    return `/${projectId}${path}`;
+  };
 
   return (
     <div className={cn(
@@ -53,7 +62,7 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
               {category.items.map((item) => (
                 <NavLink
                   key={item.path}
-                  to={item.path}
+                  to={getPath(item.path)}
                   className={({ isActive }) =>
                     cn(
                       "flex items-center rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200 group relative overflow-hidden",

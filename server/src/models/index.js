@@ -35,6 +35,7 @@ import FAQ from './FAQ.js';
 import ChatConversation from './ChatConversation.js';
 import ChatMessage from './ChatMessage.js';
 import FAQInteraction from './FAQInteraction.js';
+import Project from './Project.js';
 
 // ==================== INVENTORY MODEL ASSOCIATIONS ====================
 
@@ -242,6 +243,13 @@ FAQInteraction.belongsTo(FAQ, { foreignKey: 'faq_id', as: 'faq' });
 User.hasMany(FAQInteraction, { foreignKey: 'user_id', as: 'faqInteractions' });
 FAQ.hasMany(FAQInteraction, { foreignKey: 'faq_id', as: 'interactions' });
 
+// ==================== PROJECT ASSOCIATIONS ====================
+Project.belongsTo(User, { foreignKey: 'manager_id', as: 'manager' });
+User.hasMany(Project, { foreignKey: 'manager_id', as: 'managedProjects' });
+
+Project.hasMany(StockArea, { foreignKey: 'project_id', as: 'stockAreas' });
+StockArea.belongsTo(Project, { foreignKey: 'project_id', as: 'project' });
+
 // Export all models
 const models = {
   User,
@@ -280,6 +288,7 @@ const models = {
   ChatConversation,
   ChatMessage,
   FAQInteraction,
+  Project,
 };
 
 export default models;

@@ -82,6 +82,11 @@ const StockArea = sequelize.define('stock_area', {
     allowNull: true,
     comment: 'Organization ID for multi-tenant support'
   },
+  project_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    comment: 'Project ID this stock area belongs to'
+  },
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

@@ -25,11 +25,13 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from '@/contexts/AuthContext';
+import { useProject } from '@/contexts/ProjectContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
 export function Header() {
   const { user, logout } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { selectedProject } = useProject();
   const navigate = useNavigate();
   const location = useLocation();
   const pathnames = location.pathname.split('/').filter((x) => x);
@@ -64,8 +66,12 @@ export function Header() {
             {pathnames.map((name, index) => {
               const routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
               const isLast = index === pathnames.length - 1;
-              const formattedName = name.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+              let formattedName = name.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
               
+              if (selectedProject && name === selectedProject.id) {
+                formattedName = selectedProject.name;
+              }
+
               return (
                 <React.Fragment key={name}>
                   <BreadcrumbSeparator className="text-muted-foreground/40" />
