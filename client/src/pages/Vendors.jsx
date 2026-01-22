@@ -8,8 +8,10 @@ import {
   Phone,
   Mail,
   MapPin,
-  Globe
+  Globe,
+  ArrowRightLeft
 } from 'lucide-react';
+import { VendorComparison } from "@/components/VendorComparison";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +88,7 @@ const initialPartners = [
 ];
 
 export default function BusinessPartners() {
+  const [showComparison, setShowComparison] = useState(false);
   const [partners, setPartners] = useState(initialPartners);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newPartner, setNewPartner] = useState({
@@ -222,6 +225,10 @@ export default function BusinessPartners() {
     },
   ];
 
+  if (showComparison) {
+    return <VendorComparison onBack={() => setShowComparison(false)} />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -231,9 +238,14 @@ export default function BusinessPartners() {
             Manage vendors, suppliers, and customers.
           </p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Add Partner
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowComparison(true)}>
+            <ArrowRightLeft className="mr-2 h-4 w-4" /> Price Comparison
+          </Button>
+          <Button onClick={() => setIsAddOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Add Partner
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

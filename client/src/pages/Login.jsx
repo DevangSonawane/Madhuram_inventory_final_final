@@ -19,13 +19,6 @@ export default function Login() {
   
   const from = location.state?.from?.pathname || "/projects";
 
-  // Redirect if already logged in
-  React.useEffect(() => {
-    if (user) {
-      navigate(from, { replace: true });
-    }
-  }, [user, navigate, from]);
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);

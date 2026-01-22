@@ -35,7 +35,7 @@ export const ProjectProvider = ({ children }) => {
   const { toast } = useToast();
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Initialize projects from localStorage or mock data
   useEffect(() => {
@@ -71,6 +71,7 @@ export const ProjectProvider = ({ children }) => {
     } else {
       setProjects([]);
       setSelectedProject(null);
+      setLoading(false);
     }
   }, [user]);
 
@@ -118,6 +119,25 @@ export const ProjectProvider = ({ children }) => {
       });
   };
 
+  const deleteProject = async (projectId) => {
+    setLoading(true);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const updatedProjects = projects.filter(p => p.id !== projectId);
+        setProjects(updatedProjects);
+        localStorage.setItem('mock_projects', JSON.stringify(updatedProjects));
+        
+        // If the deleted project was selected, clear selection
+        if (selectedProject && selectedProject.id === projectId) {
+          clearProject();
+        }
+        
+        setLoading(false);
+        resolve({ success: true });
+      }, 500);
+    });
+  };
+
   const selectProject = (project) => {
     setSelectedProject(project);
     if (project) {
@@ -140,7 +160,8 @@ export const ProjectProvider = ({ children }) => {
       clearProject, 
       loading,
       fetchProjects,
-      createProject 
+      createProject,
+      deleteProject
     }}>
       {children}
     </ProjectContext.Provider>

@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Building, MapPin, Calendar, FileText } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Plus, Search, Building, MapPin, Calendar, FileText, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
 // Mock Data
@@ -49,6 +49,14 @@ export default function Projects() {
   const [projects, setProjects] = useState(MOCK_PROJECTS);
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+
+  const handleDeleteProject = () => {
+    if (projectToDelete) {
+      setProjects(projects.filter(p => p.id !== projectToDelete.id));
+      setProjectToDelete(null);
+    }
+  };
 
   const filteredProjects = projects.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -203,7 +211,16 @@ export default function Projects() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">View</Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm">View</Button>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => setProjectToDelete(project)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" /> Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -211,6 +228,21 @@ export default function Projects() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the project <strong>{projectToDelete?.name}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectToDelete(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteProject}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
