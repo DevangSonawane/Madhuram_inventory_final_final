@@ -169,6 +169,13 @@ PurchaseRequest.belongsTo(User, { foreignKey: 'requested_by', as: 'requester' })
 PurchaseRequest.belongsTo(User, { foreignKey: 'approved_by', as: 'approver' });
 User.hasMany(PurchaseRequest, { foreignKey: 'requested_by', as: 'purchaseRequests' });
 
+PurchaseRequest.hasMany(VendorQuotation, { foreignKey: 'pr_id', as: 'quotations' });
+VendorQuotation.belongsTo(PurchaseRequest, { foreignKey: 'pr_id', as: 'purchaseRequest' });
+VendorQuotation.belongsTo(BusinessPartner, { foreignKey: 'vendor_id', as: 'vendor' });
+
+PurchaseRequest.hasOne(VendorComparison, { foreignKey: 'pr_id', as: 'vendorComparison' });
+VendorComparison.belongsTo(PurchaseRequest, { foreignKey: 'pr_id', as: 'purchaseRequest' });
+
 PurchaseRequestItem.belongsTo(Material, { foreignKey: 'material_id', as: 'material' });
 Material.hasMany(PurchaseRequestItem, { foreignKey: 'material_id', as: 'purchaseRequestItems' });
 
@@ -178,6 +185,12 @@ BusinessPartner.hasMany(PurchaseRequestItem, { foreignKey: 'business_partner_id'
 // PurchaseOrder associations
 PurchaseOrder.hasMany(PurchaseOrderItem, { foreignKey: 'po_id', as: 'items' });
 PurchaseOrderItem.belongsTo(PurchaseOrder, { foreignKey: 'po_id', as: 'purchaseOrder' });
+
+PurchaseOrder.hasMany(DeliveryChallan, { foreignKey: 'po_id', as: 'challans' });
+DeliveryChallan.belongsTo(PurchaseOrder, { foreignKey: 'po_id', as: 'purchaseOrder' });
+
+DeliveryChallan.hasOne(MER, { foreignKey: 'challan_id', as: 'mer' });
+MER.belongsTo(DeliveryChallan, { foreignKey: 'challan_id', as: 'deliveryChallan' });
 
 PurchaseOrderItem.belongsTo(Material, { foreignKey: 'material_id', as: 'material' });
 Material.hasMany(PurchaseOrderItem, { foreignKey: 'material_id', as: 'purchaseOrderItems' });

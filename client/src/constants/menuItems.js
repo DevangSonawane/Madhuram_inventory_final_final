@@ -4,17 +4,22 @@ import {
   Warehouse, 
   ShoppingCart, 
   FileText, 
-  ArrowDownToLine, 
-  Send, 
   ArrowRightLeft, 
-  User, 
   TrendingDown, 
   Undo2, 
   Users, 
   BarChart3, 
   History,
-  Settings,
-  HelpCircle
+  Briefcase,
+  ClipboardList,
+  CheckSquare,
+  Layers,
+  Truck,
+  FileCheck,
+  Eye,
+  Hammer,
+  Receipt,
+  FolderOpen
 } from "lucide-react";
 
 export const MENU_CATEGORIES = [
@@ -29,22 +34,22 @@ export const MENU_CATEGORIES = [
     ]
   },
   {
-    category: "Inventory",
+    category: "Project Management",
     items: [
       {
-        title: "Materials",
-        path: "/materials",
-        icon: Package,
+        title: "Projects",
+        path: "/projects",
+        icon: Briefcase,
       },
       {
-        title: "Stock Areas",
-        path: "/stock-areas",
-        icon: Warehouse,
+        title: "BOQ Management",
+        path: "/boq",
+        icon: ClipboardList,
       },
       {
-        title: "Person Stock",
-        path: "/person-stock",
-        icon: User,
+        title: "MAS",
+        path: "/mas",
+        icon: CheckSquare,
       },
     ]
   },
@@ -52,9 +57,19 @@ export const MENU_CATEGORIES = [
     category: "Procurement",
     items: [
       {
+        title: "Sample Management",
+        path: "/samples",
+        icon: Layers,
+      },
+      {
         title: "Purchase Requests",
         path: "/purchase-requests",
         icon: ShoppingCart,
+      },
+      {
+        title: "Vendor Comparison",
+        path: "/vendor-comparison",
+        icon: ArrowRightLeft,
       },
       {
         title: "Purchase Orders",
@@ -62,24 +77,59 @@ export const MENU_CATEGORIES = [
         icon: FileText,
       },
       {
-        title: "Business Partners",
-        path: "/business-partners",
+        title: "Vendors",
+        path: "/vendors",
         icon: Users,
       },
     ]
   },
   {
-    category: "Operations",
+    category: "Delivery & Inspection",
     items: [
       {
-        title: "Inward Entry",
-        path: "/inward-entry",
-        icon: ArrowDownToLine,
+        title: "Delivery Challans",
+        path: "/challans",
+        icon: Truck,
       },
       {
-        title: "Material Requests",
-        path: "/material-requests",
-        icon: Send,
+        title: "MER",
+        path: "/mer",
+        icon: FileCheck,
+      },
+      {
+        title: "MIR",
+        path: "/mir",
+        icon: Eye,
+      },
+      {
+        title: "ITR",
+        path: "/itr",
+        icon: Hammer,
+      },
+    ]
+  },
+  {
+    category: "Billing",
+    items: [
+      {
+        title: "Billing & Invoices",
+        path: "/billing",
+        icon: Receipt,
+      },
+    ]
+  },
+  {
+    category: "Inventory",
+    items: [
+      {
+        title: "Stock Overview",
+        path: "/stock-areas",
+        icon: Warehouse,
+      },
+      {
+        title: "Product Master",
+        path: "/materials",
+        icon: Package,
       },
       {
         title: "Stock Transfers",
@@ -99,7 +149,17 @@ export const MENU_CATEGORIES = [
     ]
   },
   {
-    category: "Analytics & System",
+    category: "Documents",
+    items: [
+      {
+        title: "Repository",
+        path: "/documents",
+        icon: FolderOpen,
+      },
+    ]
+  },
+  {
+    category: "Analytics",
     items: [
       {
         title: "Reports",
@@ -111,16 +171,6 @@ export const MENU_CATEGORIES = [
         path: "/audit-logs",
         icon: History,
       },
-      {
-        title: "Settings",
-        path: "/settings",
-        icon: Settings,
-      },
-      {
-        title: "Support",
-        path: "/support",
-        icon: HelpCircle,
-      }
     ]
   }
 ];

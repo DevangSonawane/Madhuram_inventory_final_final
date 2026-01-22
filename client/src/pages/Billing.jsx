@@ -1,0 +1,95 @@
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Receipt, Download, Plus, DollarSign } from "lucide-react";
+
+// Mock Invoice Data
+const MOCK_INVOICES = [
+  { id: "INV-2026-101", date: "2026-03-01", client: "Lodha Group", project: "Lodha World One", type: "MIR Based", amount: 450000, status: "Paid", dueDate: "2026-03-15" },
+  { id: "INV-2026-102", date: "2026-03-05", client: "Hiranandani Group", project: "Hiranandani Gardens", type: "ITR Based", amount: 125000, status: "Pending", dueDate: "2026-03-20" },
+];
+
+export default function Billing() {
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Billing & Invoices</h1>
+          <p className="text-muted-foreground mt-2">Generate invoices based on MIR (Delivery) or ITR (Installation).</p>
+        </div>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" /> Generate Invoice
+        </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Invoiced (This Month)</CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹5,75,000</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
+            <DollarSign className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹1,25,000</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Invoices</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invoice No</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead>Project</TableHead>
+                <TableHead>Billing Type</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {MOCK_INVOICES.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-medium">{item.id}</TableCell>
+                  <TableCell>{item.date}</TableCell>
+                  <TableCell>{item.client}</TableCell>
+                  <TableCell>{item.project}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{item.type}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-bold">₹{item.amount.toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Badge variant={item.status === "Paid" ? "success" : "secondary"}>
+                      {item.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

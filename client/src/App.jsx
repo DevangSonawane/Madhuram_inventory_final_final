@@ -7,17 +7,23 @@ import Materials from '@/pages/Materials';
 import StockAreas from '@/pages/StockAreas';
 import PurchaseRequests from '@/pages/PurchaseRequests';
 import PurchaseOrders from '@/pages/PurchaseOrders';
-import InwardEntry from '@/pages/InwardEntry';
-import MaterialRequests from '@/pages/MaterialRequests';
 import StockTransfers from '@/pages/StockTransfers';
-import PersonStock from '@/pages/PersonStock';
 import Consumption from '@/pages/Consumption';
 import Returns from '@/pages/Returns';
-import BusinessPartners from '@/pages/BusinessPartners';
+import Vendors from '@/pages/Vendors';
 import Reports from '@/pages/Reports';
 import AuditLogs from '@/pages/AuditLogs';
-import Settings from '@/pages/Settings';
-import Support from '@/pages/Support';
+import Projects from '@/pages/Projects';
+import BOQ from '@/pages/BOQ';
+import MAS from '@/pages/MAS';
+import Samples from '@/pages/Samples';
+import VendorComparison from '@/pages/VendorComparison';
+import Challans from '@/pages/Challans';
+import MER from '@/pages/MER';
+import MIR from '@/pages/MIR';
+import ITR from '@/pages/ITR';
+import Billing from '@/pages/Billing';
+import Documents from '@/pages/Documents';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
@@ -43,17 +49,23 @@ function App() {
             <Route path="stock-areas" element={<StockAreas />} />
             <Route path="purchase-requests" element={<PurchaseRequests />} />
             <Route path="purchase-orders" element={<PurchaseOrders />} />
-            <Route path="inward-entry" element={<InwardEntry />} />
-            <Route path="material-requests" element={<MaterialRequests />} />
             <Route path="stock-transfers" element={<StockTransfers />} />
-            <Route path="person-stock" element={<PersonStock />} />
             <Route path="consumption" element={<Consumption />} />
             <Route path="returns" element={<Returns />} />
-            <Route path="business-partners" element={<BusinessPartners />} />
+            <Route path="vendors" element={<Vendors />} />
             <Route path="reports" element={<Reports />} />
             <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="support" element={<Support />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="boq" element={<BOQ />} />
+            <Route path="mas" element={<MAS />} />
+            <Route path="samples" element={<Samples />} />
+            <Route path="vendor-comparison" element={<VendorComparison />} />
+            <Route path="challans" element={<Challans />} />
+            <Route path="mer" element={<MER />} />
+            <Route path="mir" element={<MIR />} />
+            <Route path="itr" element={<ITR />} />
+            <Route path="billing" element={<Billing />} />
+            <Route path="documents" element={<Documents />} />
           </Route>
         </Routes>
         <Toaster />
