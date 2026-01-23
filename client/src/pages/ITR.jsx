@@ -14,17 +14,17 @@ const MOCK_ITR = [
 export default function ITR() {
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Installation Test Reports (ITR)</h1>
-          <p className="text-muted-foreground mt-2">Document installation quality and test results.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Installation Test Reports (ITR)</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Document installation quality and test results.</p>
         </div>
-        <Button>
+        <Button className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" /> Create New ITR
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Tests Conducted (This Month)</CardTitle>
@@ -59,7 +59,49 @@ export default function ITR() {
           <CardTitle>ITR History</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Mobile Card View */}
+          <div className="grid grid-cols-1 gap-4 md:hidden">
+            {MOCK_ITR.map((item) => (
+              <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-medium">{item.id}</div>
+                    <div className="text-xs text-muted-foreground">{item.date}</div>
+                  </div>
+                  <Badge variant={item.result === "Pass" ? "success" : "destructive"}>
+                    {item.result}
+                  </Badge>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
+                  <div>
+                    <div className="text-muted-foreground text-xs">Floor</div>
+                    <div>{item.floor}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Test</div>
+                    <div>{item.test}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-muted-foreground text-xs">Location</div>
+                    <div>{item.location}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-muted-foreground text-xs">Item</div>
+                    <div>{item.item}</div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center border-t pt-2 mt-2">
+                  <Badge variant="outline">{item.status}</Badge>
+                  <Button variant="ghost" size="sm" className="h-8">Details</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>ITR No</TableHead>

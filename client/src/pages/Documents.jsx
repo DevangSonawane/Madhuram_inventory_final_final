@@ -16,17 +16,17 @@ const MOCK_DOCS = [
 export default function Documents() {
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Document Repository</h1>
-          <p className="text-muted-foreground mt-2">Centralized storage for all project and product documents.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Document Repository</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Centralized storage for all project and product documents.</p>
         </div>
-        <Button>
+        <Button className="w-full sm:w-auto">
           <Upload className="mr-2 h-4 w-4" /> Upload Document
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
           <CardHeader className="flex flex-row items-center space-y-0 pb-2">
             <FolderOpen className="h-8 w-8 text-blue-500 mr-2" />
@@ -72,12 +72,48 @@ export default function Documents() {
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input 
               placeholder="Search documents..." 
-              className="max-w-sm"
+              className="max-w-sm w-full"
             />
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Mobile Card View */}
+          <div className="grid grid-cols-1 gap-4 md:hidden">
+            {MOCK_DOCS.map((item) => (
+              <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center">
+                    <FileText className="h-5 w-5 mr-2 text-muted-foreground" />
+                    <div>
+                      <div className="font-medium truncate max-w-[200px]">{item.name}</div>
+                      <div className="text-xs text-muted-foreground">{item.type}</div>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
+                  <div>
+                    <div className="text-muted-foreground text-xs">Project</div>
+                    <div>{item.project}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground text-xs">Size</div>
+                    <div>{item.size}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-muted-foreground text-xs">Date Uploaded</div>
+                    <div>{item.date}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>

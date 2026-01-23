@@ -50,12 +50,26 @@ export const AuthProvider = ({ children }) => {
         email: email,
         role: 'admin',
         avatar: 'https://github.com/shadcn.png',
-        token: 'demo-token'
+        token: 'demo-token-admin'
       };
       setUser(userData);
       localStorage.setItem('inventory_user', JSON.stringify(userData));
       return true;
     }
+    
+    if (email === 'pm@madhuram.com' && password === 'pm123') {
+         const userData = {
+           id: '2',
+           name: 'Rajesh Kumar',
+           email: email,
+           role: 'project_manager',
+           avatar: 'https://github.com/shadcn.png',
+           token: 'demo-token-pm'
+         };
+         setUser(userData);
+        localStorage.setItem('inventory_user', JSON.stringify(userData));
+        return true;
+      }
     return false;
   };
 

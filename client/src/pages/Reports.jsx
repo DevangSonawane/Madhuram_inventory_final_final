@@ -243,21 +243,21 @@ export default function Reports() {
             <CardContent>
               <div className="space-y-4">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+                  <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
                     <div>
                       <div className="font-medium">Item Name {i}</div>
                       <div className="text-sm text-muted-foreground">SKU: ITEM-00{i}</div>
                     </div>
-                    <div className="flex items-center gap-8">
-                      <div className="text-right">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 w-full md:w-auto">
+                      <div className="text-left sm:text-right w-full sm:w-auto">
                         <div className="text-sm text-muted-foreground">Current Stock</div>
                         <div className="font-bold text-red-600">5 Units</div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right w-full sm:w-auto">
                         <div className="text-sm text-muted-foreground">Reorder Point</div>
                         <div className="font-medium">20 Units</div>
                       </div>
-                      <Button size="sm" variant="outline" onClick={() => handleCreatePO(i)}>Create PO</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleCreatePO(i)} className="w-full sm:w-auto">Create PO</Button>
                     </div>
                   </div>
                 ))}

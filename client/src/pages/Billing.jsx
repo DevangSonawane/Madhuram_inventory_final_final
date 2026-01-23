@@ -14,12 +14,12 @@ const MOCK_INVOICES = [
 export default function Billing() {
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Billing & Invoices</h1>
           <p className="text-muted-foreground mt-2">Generate invoices based on MIR (Delivery) or ITR (Installation).</p>
         </div>
-        <Button>
+        <Button className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" /> Generate Invoice
         </Button>
       </div>
@@ -50,44 +50,82 @@ export default function Billing() {
           <CardTitle>Invoices</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice No</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead>Billing Type</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {MOCK_INVOICES.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.id}</TableCell>
-                  <TableCell>{item.date}</TableCell>
-                  <TableCell>{item.client}</TableCell>
-                  <TableCell>{item.project}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{item.type}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-bold">₹{item.amount.toLocaleString()}</TableCell>
-                  <TableCell>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice No</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Project</TableHead>
+                  <TableHead>Billing Type</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {MOCK_INVOICES.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.id}</TableCell>
+                    <TableCell>{item.date}</TableCell>
+                    <TableCell>{item.client}</TableCell>
+                    <TableCell>{item.project}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{item.type}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-bold">₹{item.amount.toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.status === "Paid" ? "success" : "secondary"}>
+                        {item.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="grid grid-cols-1 gap-4 md:hidden">
+            {MOCK_INVOICES.map((item) => (
+              <Card key={item.id} className="border shadow-none">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium">{item.id}</div>
+                      <div className="text-xs text-muted-foreground">{item.date}</div>
+                    </div>
                     <Badge variant={item.status === "Paid" ? "success" : "secondary"}>
                       {item.status}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm border-t pt-2">
+                    <div>
+                      <div className="font-medium">{item.project}</div>
+                      <div className="text-xs text-muted-foreground">{item.client}</div>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Type:</span>
+                      <Badge variant="outline" className="text-xs">{item.type}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="font-bold">₹{item.amount.toLocaleString()}</span>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>

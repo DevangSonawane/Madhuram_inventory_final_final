@@ -288,33 +288,100 @@ export default function StockTransfers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Stock Transfers</h1>
           <p className="text-muted-foreground">
             Manage internal stock movements between warehouses and zones.
           </p>
         </div>
-        <Button onClick={() => setIsNewTransferOpen(true)}>
+        <Button onClick={() => setIsNewTransferOpen(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" /> New Transfer
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 mb-6">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
+        <div className="relative flex-1 w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search transfers..."
-            className="pl-8"
+            className="pl-8 w-full"
           />
         </div>
-        <Button variant="outline" className="flex gap-2">
+        <Button variant="outline" className="flex gap-2 w-full sm:w-auto">
           <Filter className="h-4 w-4" />
           Filters
         </Button>
       </div>
 
-      <DataTable columns={columns} data={transfers} />
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={transfers} />
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {transfers.map((transfer) => (
+          <Card key={transfer.id}>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-medium text-base">{transfer.id}</div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                    <Calendar className="h-3 w-3" />
+                    {transfer.date}
+                  </div>
+                </div>
+                <Badge variant={
+                  transfer.status === "Completed" ? "default" :
+                  transfer.status === "In Transit" ? "secondary" :
+                  "outline"
+                }>
+                  {transfer.status}
+                </Badge>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
+                <div className="grid gap-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-muted-foreground">Source</span>
+                      <span>{transfer.from}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <ArrowRight className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-muted-foreground">Destination</span>
+                      <span>{transfer.to}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                    <span>{transfer.items} items</span>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>View Details</DropdownMenuItem>
+                      <DropdownMenuItem>Download Slip</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-red-600">Cancel Transfer</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {/* New Transfer Wizard Dialog */}
       <Dialog open={isNewTransferOpen} onOpenChange={setIsNewTransferOpen}>

@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+} from "@/components/ui/card";
 
 const initialData = [
   {
@@ -239,16 +243,73 @@ export default function PurchaseOrders() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
             <h1 className="text-3xl font-bold tracking-tight">Purchase Orders</h1>
             <p className="text-muted-foreground">Manage and track purchase orders.</p>
         </div>
-        <Button onClick={() => setOpen(true)}>
+        <Button onClick={() => setOpen(true)} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" /> Create PO
         </Button>
       </div>
-      <DataTable columns={columns} data={data} searchKey="vendor" />
+
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {data.map((po) => (
+            <Card key={po.id}>
+                <CardContent className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <div className="font-semibold text-base">{po.vendor}</div>
+                            <div className="text-xs text-muted-foreground">{po.id}</div>
+                        </div>
+                        {columns.find(c => c.accessorKey === 'status').cell({ row: { getValue: () => po.status } })}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Date</span>
+                            <span className="font-medium">{po.date}</span>
+                        </div>
+                         <div>
+                            <span className="text-muted-foreground text-xs block">Items</span>
+                            <span className="font-medium">{po.items}</span>
+                        </div>
+                        <div className="col-span-2">
+                            <span className="text-muted-foreground text-xs block">Total Amount</span>
+                            <span className="font-medium text-lg">
+                                {new Intl.NumberFormat("en-IN", {
+                                    style: "currency",
+                                    currency: "INR",
+                                }).format(po.amount)}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="pt-2 border-t flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" title="View Details">
+                            <Eye className="h-4 w-4 mr-2" /> View
+                        </Button>
+                        {po.status === 'Pending' && (
+                            <>
+                                <Button variant="ghost" size="sm" className="text-green-600" title="Approve">
+                                    <CheckCircle className="h-4 w-4 mr-2" /> Approve
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-red-600" title="Reject">
+                                    <XCircle className="h-4 w-4 mr-2" /> Reject
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={data} searchKey="vendor" />
+      </div>
+      
       <CreatePODialog open={open} onOpenChange={setOpen} onSubmit={handleCreatePO} />
     </div>
   );

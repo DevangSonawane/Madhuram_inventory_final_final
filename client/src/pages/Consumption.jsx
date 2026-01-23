@@ -205,24 +205,24 @@ export default function Consumption() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Consumption</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Consumption</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Track material usage across departments and projects.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2">
+          <Button variant="outline" className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" /> Export Report
           </Button>
-          <Button onClick={() => setIsLogOpen(true)}>
+          <Button onClick={() => setIsLogOpen(true)} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" /> Log Consumption
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Consumption</CardTitle>
@@ -289,21 +289,60 @@ export default function Consumption() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-center gap-4">
+        <div className="relative flex-1 w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search logs..."
-            className="pl-8"
+            className="pl-8 w-full"
           />
         </div>
-        <Button variant="outline" className="flex gap-2">
+        <Button variant="outline" className="flex gap-2 w-full sm:w-auto">
           <Filter className="h-4 w-4" />
           Filter by Dept
         </Button>
       </div>
 
-      <DataTable columns={columns} data={consumptionLogs} />
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {consumptionLogs.map((log) => (
+          <Card key={log.id} className="border shadow-none">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-medium">{log.item}</div>
+                  <div className="text-xs text-muted-foreground">{log.id}</div>
+                </div>
+                <Badge variant="outline">{log.department}</Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
+                <div>
+                  <div className="text-muted-foreground text-xs">Quantity</div>
+                  <div>{log.quantity} {log.unit}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Cost</div>
+                  <div>₹{log.cost}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-muted-foreground text-xs">Consumed By</div>
+                  <div>{log.consumedBy}</div>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 text-muted-foreground text-xs border-t pt-2 mt-2">
+                <CalendarIcon className="h-3 w-3" />
+                <span>{log.date}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={consumptionLogs} />
+      </div>
 
       {/* Log Consumption Dialog */}
       <Dialog open={isLogOpen} onOpenChange={setIsLogOpen}>

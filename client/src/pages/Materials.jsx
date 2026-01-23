@@ -258,14 +258,14 @@ export default function Materials() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
             <h1 className="text-3xl font-bold tracking-tight">Materials</h1>
             <p className="text-muted-foreground">Manage your inventory materials and stock levels.</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" /> Add Material
             </Button>
           </DialogTrigger>
@@ -350,7 +350,52 @@ export default function Materials() {
           </DialogContent>
         </Dialog>
       </div>
-      <DataTable columns={columns} data={data} searchKey="name" />
+
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {data.map((material) => (
+            <Card key={material.id}>
+                <CardContent className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <div className="font-semibold text-base">{material.name}</div>
+                            <div className="text-xs text-muted-foreground">{material.id}</div>
+                        </div>
+                        {columns.find(c => c.accessorKey === 'status').cell({ row: { getValue: () => material.status } })}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Category</span>
+                            <span className="font-medium">{material.category}</span>
+                        </div>
+                         <div>
+                            <span className="text-muted-foreground text-xs block">Unit</span>
+                            <span className="font-medium">{material.unit}</span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground text-xs block">Stock Level</span>
+                            <span className="font-medium">{material.stock}</span>
+                        </div>
+                         <div>
+                            <span className="text-muted-foreground text-xs block">Unit Price</span>
+                            <span className="font-medium">
+                                {new Intl.NumberFormat("en-IN", {
+                                    style: "currency",
+                                    currency: "INR",
+                                }).format(material.price)}
+                            </span>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={data} searchKey="name" />
+      </div>
     </div>
   );
 }

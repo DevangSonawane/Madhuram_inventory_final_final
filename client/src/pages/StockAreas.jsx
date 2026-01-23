@@ -145,14 +145,14 @@ export default function StockAreas() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
             <h1 className="text-3xl font-bold tracking-tight">Stock Areas</h1>
             <p className="text-muted-foreground">Manage warehouses, zones, and storage locations.</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" /> Add Warehouse
             </Button>
           </DialogTrigger>
@@ -202,14 +202,14 @@ export default function StockAreas() {
       <div className="grid gap-6">
         {warehouses.map((warehouse) => (
             <Card key={warehouse.id}>
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                    <div className="flex items-center gap-4">
+                <CardHeader className="flex flex-col sm:flex-row items-start justify-between gap-4 space-y-0 pb-2">
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
                         <div className="p-2 bg-primary/10 rounded-lg">
                             <Warehouse className="h-6 w-6 text-primary" />
                         </div>
                         <div>
                             <CardTitle className="text-xl">{warehouse.name}</CardTitle>
-                            <CardDescription className="flex items-center gap-2 mt-1">
+                            <CardDescription className="flex flex-wrap items-center gap-2 mt-1">
                                 <span>{warehouse.id}</span>
                                 <span>•</span>
                                 <Badge variant={warehouse.status === 'Active' ? 'default' : 'secondary'}>
@@ -222,7 +222,7 @@ export default function StockAreas() {
                             </CardDescription>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                         <Button variant="outline" size="sm">View Details</Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>

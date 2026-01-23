@@ -17,7 +17,15 @@ export default function Login() {
   const location = useLocation();
   const { login, user } = useAuth();
   
-  const from = location.state?.from?.pathname || "/projects";
+  // Enforce flow: Login -> Project Selection -> Dashboard
+  // We ignore location.state.from to ensure users always land on project selection first
+  const redirectPath = "/projects";
+
+  React.useEffect(() => {
+    if (user) {
+      navigate(redirectPath, { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -31,9 +39,9 @@ export default function Login() {
       const success = await login(email, password);
       
       if (success) {
-        navigate(from, { replace: true });
+        navigate(redirectPath, { replace: true });
       } else {
-        setError('Invalid credentials. Use admin@madhuram.com / admin123');
+        setError('Invalid credentials. Use admin@madhuram.com / admin123 or pm@madhuram.com / pm123');
       }
     } catch (err) {
       setError('An error occurred during login');
@@ -42,13 +50,18 @@ export default function Login() {
     }
   };
 
-  const handleDemoLogin = () => {
+  const handleDemoAdminLogin = () => {
     setEmail('admin@madhuram.com');
     setPassword('admin123');
   };
 
+  const handleDemoPMLogin = () => {
+    setEmail('pm@madhuram.com');
+    setPassword('pm123');
+  };
+
   return (
-    <div className="container relative h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0">
+    <div className="container relative min-h-screen flex-col items-center justify-center grid lg:max-w-none lg:grid-cols-2 lg:px-0 px-4 md:px-0">
       <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
         <div className="absolute inset-0 bg-zinc-900" />
         <div className="absolute inset-0 bg-gradient-to-br from-primary to-blue-900 opacity-90" />
@@ -65,9 +78,13 @@ export default function Login() {
           </blockquote>
         </div>
       </div>
-      <div className="lg:p-8">
+      <div className="lg:p-8 w-full">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <div className="flex flex-col space-y-2 text-center">
+            <div className="flex items-center justify-center mb-2 lg:hidden">
+               <Package2 className="h-8 w-8 text-primary mr-2" />
+               <span className="text-xl font-bold">Madhuram Inventory</span>
+            </div>
             <h1 className="text-2xl font-semibold tracking-tight">
               Welcome back
             </h1>
@@ -99,6 +116,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    className="h-11 md:h-10"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -112,9 +130,10 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    className="h-11 md:h-10"
                   />
                 </div>
-                <Button disabled={isLoading}>
+                <Button disabled={isLoading} className="h-11 md:h-10">
                   {isLoading && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
@@ -132,9 +151,14 @@ export default function Login() {
                 </span>
               </div>
             </div>
-             <Button variant="outline" type="button" disabled={isLoading} onClick={handleDemoLogin}>
-              Fill Demo Credentials
-            </Button>
+            <div className="grid grid-cols-2 gap-4">
+              <Button variant="outline" type="button" disabled={isLoading} onClick={handleDemoAdminLogin} className="h-11 md:h-10">
+                Admin Demo
+              </Button>
+              <Button variant="outline" type="button" disabled={isLoading} onClick={handleDemoPMLogin} className="h-11 md:h-10">
+                PM Demo
+              </Button>
+            </div>
           </div>
           <p className="px-8 text-center text-sm text-muted-foreground">
             By clicking continue, you agree to our{" "}

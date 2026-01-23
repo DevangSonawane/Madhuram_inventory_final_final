@@ -71,7 +71,7 @@ export function MainLayout() {
         isSidebarCollapsed ? "md:pl-20" : "md:pl-72"
       )}>
         <Header />
-        <main className="flex-1 p-8 overflow-y-auto overflow-x-hidden">
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

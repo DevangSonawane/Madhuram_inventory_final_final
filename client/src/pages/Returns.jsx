@@ -232,14 +232,14 @@ export default function Returns() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Returns Management</h1>
           <p className="text-muted-foreground">
             Process items returned from projects and employees.
           </p>
         </div>
-        <Button onClick={() => setIsNewReturnOpen(true)}>
+        <Button onClick={() => setIsNewReturnOpen(true)} className="w-full sm:w-auto">
           <Undo2 className="mr-2 h-4 w-4" /> New Return
         </Button>
       </div>
@@ -277,21 +277,81 @@ export default function Returns() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search returns..."
-            className="pl-8"
+            className="pl-8 w-full"
           />
         </div>
-        <Button variant="outline" className="flex gap-2">
+        <Button variant="outline" className="flex gap-2 w-full sm:w-auto">
           <Filter className="h-4 w-4" />
           Status
         </Button>
       </div>
 
-      <DataTable columns={columns} data={returns} />
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={returns} />
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {returns.map((ret) => (
+          <Card key={ret.id}>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-medium">{ret.item}</div>
+                  <div className="text-sm text-muted-foreground">{ret.id}</div>
+                </div>
+                <Badge variant={
+                  ret.status === "Approved" ? "default" :
+                  ret.status === "Rejected" ? "destructive" :
+                  "secondary"
+                }>
+                  {ret.status}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                 <div>
+                   <span className="text-muted-foreground block">Qty:</span>
+                   <span>{ret.quantity}</span>
+                 </div>
+                 <div>
+                   <span className="text-muted-foreground block">Condition:</span>
+                   <span>{ret.condition}</span>
+                 </div>
+                 <div className="col-span-2">
+                   <span className="text-muted-foreground block">Returned By:</span>
+                   <span>{ret.returnedBy} ({ret.department})</span>
+                 </div>
+                 <div className="col-span-2">
+                   <span className="text-muted-foreground block">Reason:</span>
+                   <span>{ret.reason}</span>
+                 </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                  {ret.status === "Pending Inspection" && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => setSelectedReturn(ret)}
+                    >
+                      Inspect
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {/* New Return Dialog */}
       <Dialog open={isNewReturnOpen} onOpenChange={setIsNewReturnOpen}>

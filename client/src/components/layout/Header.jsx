@@ -42,7 +42,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-background/80 backdrop-blur-md px-8 transition-all duration-300">
+    <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-background/80 backdrop-blur-md px-4 md:px-8 transition-all duration-300">
       <Sheet>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="shrink-0 md:hidden -ml-2 text-muted-foreground hover:text-foreground">
@@ -91,13 +91,13 @@ export function Header() {
         </Breadcrumb>
       </div>
 
-      <div className="w-full flex-1 md:w-auto md:flex-none ml-auto">
-        <form className="relative group" onSubmit={(e) => e.preventDefault()}>
+      <div className="w-full flex-1 md:w-auto md:flex-none ml-auto flex justify-end">
+        <form className="relative group w-full max-w-[180px] sm:max-w-xs md:max-w-[240px] lg:max-w-[320px]" onSubmit={(e) => e.preventDefault()}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <Input
             type="search"
             placeholder="Search..."
-            className="w-full bg-muted/50 border-transparent focus:bg-background focus:border-primary/20 pl-10 md:w-[240px] lg:w-[320px] h-10 rounded-full transition-all duration-300 shadow-sm focus:shadow-md"
+            className="w-full bg-muted/50 border-transparent focus:bg-background focus:border-primary/20 pl-10 h-10 rounded-full transition-all duration-300 shadow-sm focus:shadow-md"
           />
         </form>
       </div>

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { Building, Calendar, MapPin, Loader2, Plus, LayoutGrid, Trash2 } from "lucide-react";
+import { Building, Calendar, MapPin, Loader2, Plus, LayoutGrid, Trash2, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ProjectSelection() {
@@ -31,54 +31,29 @@ export default function ProjectSelection() {
     status: 'Planning'
   });
   const [isCreating, setIsCreating] = useState(false);
-  
-  // Work Order State
-  const [isWorkOrderEnabled, setIsWorkOrderEnabled] = useState(false);
-  const [workOrderPreview, setWorkOrderPreview] = useState('');
-  const [isManuallyEdited, setIsManuallyEdited] = useState(false);
-
-  // Auto-generate Work Order Preview when project details change
-  useEffect(() => {
-    if (isWorkOrderEnabled && !isManuallyEdited) {
-      const generatedPreview = `WORK ORDER
---------------------------------
-Date: ${new Date().toLocaleDateString()}
-Project Name: ${newProject.name || '[Project Name]'}
-Client: ${newProject.client || '[Client Name]'}
-Location: ${newProject.location || '[Location]'}
-Floors: ${newProject.floors || '[No. of Floors]'}
-Start Date: ${newProject.start_date || '[Start Date]'}
-Estimated Value: ${newProject.value || '[Value]'}
-
-Scope of Work:
-1. Installation of Ethernet Cabling
-2. Network Configuration
-3. Testing and Commissioning
-
-Authorized By:
-${user?.name || 'Project Manager'}
---------------------------------`;
-      setWorkOrderPreview(generatedPreview);
-    }
-  }, [newProject, isWorkOrderEnabled, user?.name, isManuallyEdited]);
-
-  const handleWorkOrderChange = (e) => {
-    setWorkOrderPreview(e.target.value);
-    setIsManuallyEdited(true);
-  };
-
-  const handleResetWorkOrder = () => {
-    setIsManuallyEdited(false);
-    // The useEffect will trigger and regenerate the preview
-  };
+  const [workOrderFile, setWorkOrderFile] = useState(null);
 
   useEffect(() => {
     fetchProjects();
   }, []);
 
+  const filteredProjects = projects.filter(project => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    if (user.role === 'project_manager') return project.manager_id === user.id;
+    return false;
+  });
+
   const handleSelectProject = (project) => {
     selectProject(project);
     navigate(`/${project.id}`);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setWorkOrderFile(file);
+    }
   };
 
   const handleCreateProject = async () => {
@@ -86,20 +61,16 @@ ${user?.name || 'Project Manager'}
     try {
       const projectData = {
         ...newProject,
-        manager_id: user.id
+        manager_id: user.id,
+        work_order_file: workOrderFile ? workOrderFile.name : null
       };
-
-      if (isWorkOrderEnabled) {
-        projectData.work_order_number = `WO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-        projectData.work_order_details = workOrderPreview;
-      }
 
       const result = await createProject(projectData);
       
       if (result.success) {
         toast({
           title: "Project Created",
-          description: isWorkOrderEnabled ? "Project and Work Order created successfully." : "New project has been successfully created.",
+          description: "New project has been successfully created.",
         });
         setIsNewProjectOpen(false);
         setNewProject({
@@ -111,9 +82,7 @@ ${user?.name || 'Project Manager'}
             value: '',
             status: 'Planning'
         });
-        setIsWorkOrderEnabled(false);
-        setWorkOrderPreview('');
-        setIsManuallyEdited(false);
+        setWorkOrderFile(null);
       } else {
         toast({
           title: "Error",
@@ -122,6 +91,7 @@ ${user?.name || 'Project Manager'}
         });
       }
     } catch (error) {
+      console.error(error);
       toast({
         title: "Error",
         description: "Failed to create project",
@@ -149,6 +119,7 @@ ${user?.name || 'Project Manager'}
           description: `Project ${projectToDelete.name} has been deleted successfully.`,
         });
       } catch (error) {
+        console.error(error);
         toast({
           title: "Error",
           description: "Failed to delete project",
@@ -173,15 +144,15 @@ ${user?.name || 'Project Manager'}
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex justify-between items-end">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div className="space-y-2">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900">Welcome, {user?.name}</h1>
             <p className="text-lg text-gray-500">Select a project to continue to the dashboard.</p>
             </div>
             
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                 {isAdmin && (
-                    <Button variant="outline" onClick={handleViewAllData}>
+                    <Button variant="outline" onClick={handleViewAllData} className="w-full sm:w-auto">
                         <LayoutGrid className="mr-2 h-4 w-4" />
                         View All Consolidated Data
                     </Button>
@@ -190,7 +161,7 @@ ${user?.name || 'Project Manager'}
                 {/* Only show create project if needed (e.g. Admin or Manager) */}
                 <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
                 <DialogTrigger asChild>
-                    <Button><Plus className="mr-2 h-4 w-4" /> New Project</Button>
+                    <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> New Project</Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[600px]">
                     <DialogHeader>
@@ -256,43 +227,22 @@ ${user?.name || 'Project Manager'}
                         />
                     </div>
                     
-                    <div className="flex items-center space-x-2 pt-2">
-                        <Checkbox 
-                            id="work_order" 
-                            checked={isWorkOrderEnabled}
-                            onCheckedChange={(checked) => setIsWorkOrderEnabled(checked)}
-                        />
-                        <Label htmlFor="work_order" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                            Generate Work Order
-                        </Label>
-                    </div>
-
-                    {isWorkOrderEnabled && (
-                        <div className="space-y-2 border rounded-md p-4 bg-gray-50 mt-2">
-                            <div className="flex justify-between items-center mb-2">
-                                <Label htmlFor="preview">Work Order Preview</Label>
-                                {isManuallyEdited && (
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        onClick={handleResetWorkOrder}
-                                        className="h-6 text-xs text-blue-600 hover:text-blue-800"
-                                    >
-                                        Reset to Auto-generated
-                                    </Button>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mb-2">
-                                Review and edit the work order details before creating the project.
-                            </p>
-                            <Textarea 
-                                id="preview" 
-                                value={workOrderPreview}
-                                onChange={handleWorkOrderChange}
-                                className="min-h-[200px] font-mono text-sm"
+                    <div className="space-y-2 pt-2">
+                        <Label htmlFor="work_order_file">Upload Work Order</Label>
+                        <div className="flex items-center gap-2">
+                            <Input 
+                                id="work_order_file" 
+                                type="file" 
+                                accept=".csv, .xlsx, .pdf"
+                                onChange={handleFileChange}
+                                className="cursor-pointer"
                             />
                         </div>
-                    )}
+                        <p className="text-xs text-muted-foreground">
+                            Supported formats: CSV, Excel, PDF
+                        </p>
+                    </div>
+
                     </div>
                     <DialogFooter>
                     <Button variant="outline" onClick={() => setIsNewProjectOpen(false)}>Cancel</Button>
@@ -307,7 +257,7 @@ ${user?.name || 'Project Manager'}
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <Card key={project.id} className="hover:shadow-lg transition-shadow cursor-pointer border-t-4 border-t-primary relative group" onClick={() => handleSelectProject(project)}>
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -348,6 +298,12 @@ ${user?.name || 'Project Manager'}
                   <div className="text-lg font-semibold text-gray-900">
                     {project.value}
                   </div>
+                )}
+                {project.work_order_file && (
+                    <div className="flex items-center text-sm text-blue-600 mt-2">
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span className="truncate max-w-[200px]">{project.work_order_file}</span>
+                    </div>
                 )}
               </CardContent>
               <CardFooter>

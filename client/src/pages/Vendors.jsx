@@ -231,24 +231,24 @@ export default function BusinessPartners() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Business Partners</h1>
           <p className="text-muted-foreground">
             Manage vendors, suppliers, and customers.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowComparison(true)}>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => setShowComparison(true)} className="w-full sm:w-auto">
             <ArrowRightLeft className="mr-2 h-4 w-4" /> Price Comparison
           </Button>
-          <Button onClick={() => setIsAddOpen(true)}>
+          <Button onClick={() => setIsAddOpen(true)} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" /> Add Partner
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Vendors</CardTitle>
@@ -281,8 +281,8 @@ export default function BusinessPartners() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+        <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search partners..."
@@ -295,7 +295,55 @@ export default function BusinessPartners() {
         </Button>
       </div>
 
-      <DataTable columns={columns} data={partners} />
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {partners.map((partner) => (
+            <Card key={partner.id}>
+                <CardContent className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-3">
+                           <Avatar className="h-9 w-9">
+                              <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${partner.name}`} />
+                              <AvatarFallback>{partner.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                                <div className="font-semibold text-base">{partner.name}</div>
+                                <div className="text-xs text-muted-foreground">{partner.id}</div>
+                            </div>
+                        </div>
+                        <Badge variant={partner.status === "Active" ? "default" : "secondary"}>
+                          {partner.status}
+                        </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-2 text-sm mt-2">
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Type</span>
+                            <Badge variant="outline">{partner.type}</Badge>
+                        </div>
+                        <div className="space-y-1 pt-2 border-t">
+                             <div className="flex items-center gap-2 text-muted-foreground">
+                                <span className="text-foreground font-medium">{partner.contactPerson}</span>
+                             </div>
+                             <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                                <Mail className="h-3 w-3" /> {partner.email}
+                             </div>
+                             <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                                <Phone className="h-3 w-3" /> {partner.phone}
+                             </div>
+                             <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                                <MapPin className="h-3 w-3" /> {partner.location}
+                             </div>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        ))}
+      </div>
+
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={partners} />
+      </div>
 
       {/* Add Partner Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>

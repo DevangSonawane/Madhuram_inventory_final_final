@@ -264,7 +264,51 @@ export default function AuditLogs() {
         </div>
       </div>
 
-      <DataTable columns={columns} data={logs} />
+      <div className="hidden md:block">
+        <DataTable columns={columns} data={logs} />
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {filteredLogs.map((log) => (
+          <Card key={log.id}>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    <span className="font-medium text-sm">{log.user}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    <span className="font-mono">{log.timestamp}</span>
+                  </div>
+                </div>
+                <Badge variant={
+                  log.action === "CREATE" ? "default" :
+                  log.action === "UPDATE" ? "secondary" :
+                  log.action === "DELETE" ? "destructive" :
+                  "outline"
+                }>{log.action}</Badge>
+              </div>
+
+              <div className="space-y-2 text-sm border-t pt-2">
+                <div>
+                  <span className="text-muted-foreground text-xs">Entity:</span>
+                  <div className="font-medium">{log.entity} <span className="text-xs text-muted-foreground">({log.entityId})</span></div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">Details:</span>
+                  <p className="text-sm">{log.details}</p>
+                </div>
+                <div className="text-xs text-muted-foreground font-mono">
+                  IP: {log.ip}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ const MOCK_PROJECTS = [
     location: "Lower Parel, Mumbai",
     floors: 117,
     start_date: "2026-01-10",
-    manager_id: "1", // Admin User
+    manager_id: "2", // Project Manager (Rajesh Kumar)
     status: "In Progress",
     value: "₹500 Cr"
   },
@@ -24,7 +24,7 @@ const MOCK_PROJECTS = [
     location: "Powai, Mumbai",
     floors: 45,
     start_date: "2026-02-01",
-    manager_id: "2",
+    manager_id: "1", // Admin
     status: "Planning",
     value: "₹250 Cr"
   }
