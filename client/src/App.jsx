@@ -24,6 +24,7 @@ import MIR from '@/pages/MIR';
 import ITR from '@/pages/ITR';
 import Billing from '@/pages/Billing';
 import Documents from '@/pages/Documents';
+import Users from '@/pages/Users';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ProjectProvider } from '@/contexts/ProjectContext';
@@ -75,6 +76,7 @@ function App() {
                   <Route path="itr" element={<ITR />} />
                   <Route path="billing" element={<Billing />} />
                   <Route path="documents" element={<Documents />} />
+                  <Route path="users" element={<Users />} />
                 </Route>
               </Routes>
               <Toaster />

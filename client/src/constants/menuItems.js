@@ -19,7 +19,7 @@ import {
   Eye,
   Hammer,
   Receipt,
-  FolderOpen
+  FolderOpen,
 } from "lucide-react";
 
 export const MENU_CATEGORIES = [
@@ -172,5 +172,15 @@ export const MENU_CATEGORIES = [
         icon: History,
       },
     ]
-  }
+  },
+  // {
+  //   category: "Administration",
+  //   items: [
+  //     {
+  //       title: "User Management",
+  //       path: "/users",
+  //       // icon: UserCog,
+  //     },
+  //   ]
+  // }
 ];

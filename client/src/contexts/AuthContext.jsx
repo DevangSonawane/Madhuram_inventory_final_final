@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { api } from '@/lib/api';
 
 const AuthContext = createContext(null);
 
@@ -18,21 +19,12 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       // Try to login via API
-      const response = await fetch('http://localhost:3000/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ identifier: email, password }),
-      });
+      const result = await api.login(email, password);
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (result.success) {
         const userData = {
-          ...data.data.user,
-          token: data.data.accessToken,
-          refreshToken: data.data.refreshToken
+          ...result.data.user,
+          token: result.data.token
         };
         setUser(userData);
         localStorage.setItem('inventory_user', JSON.stringify(userData));
@@ -45,12 +37,13 @@ export const AuthProvider = ({ children }) => {
     // Fallback/Dummy credential check for demo purposes
     if (email === 'admin@madhuram.com' && password === 'admin123') {
       const userData = {
-        id: '1',
+        user_id: '1',
         name: 'Admin User',
         email: email,
         role: 'admin',
         avatar: 'https://github.com/shadcn.png',
-        token: 'demo-token-admin'
+        token: 'demo-token-admin',
+        project_list: []
       };
       setUser(userData);
       localStorage.setItem('inventory_user', JSON.stringify(userData));
@@ -59,12 +52,13 @@ export const AuthProvider = ({ children }) => {
     
     if (email === 'pm@madhuram.com' && password === 'pm123') {
          const userData = {
-           id: '2',
+           user_id: '2',
            name: 'Rajesh Kumar',
            email: email,
            role: 'project_manager',
            avatar: 'https://github.com/shadcn.png',
-           token: 'demo-token-pm'
+           token: 'demo-token-pm',
+           project_list: []
          };
          setUser(userData);
         localStorage.setItem('inventory_user', JSON.stringify(userData));
@@ -73,7 +67,12 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.logout();
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
     setUser(null);
     localStorage.removeItem('inventory_user');
   };
