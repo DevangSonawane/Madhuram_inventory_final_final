@@ -1,22 +1,19 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { loginStart, loginSuccess, loginFailure, logout as logoutAction } from '../redux/slices/authSlice';
 import { api } from '@/lib/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useDispatch();
+  const { user, isAuthenticated, loading, error } = useSelector((state) => state.auth);
 
-  useEffect(() => {
-    // Check for saved user in localStorage on mount
-    const savedUser = localStorage.getItem('inventory_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setLoading(false);
-  }, []);
+  // We rely on Redux initial state for checking localStorage on mount
+  // But if we wanted to sync or re-validate token on mount, we could do it here.
 
   const login = async (email, password) => {
+    dispatch(loginStart());
     try {
       // Try to login via API
       const result = await api.login(email, password);
@@ -26,45 +23,17 @@ export const AuthProvider = ({ children }) => {
           ...result.data.user,
           token: result.data.token
         };
-        setUser(userData);
-        localStorage.setItem('inventory_user', JSON.stringify(userData));
+        dispatch(loginSuccess(userData));
         return true;
+      } else {
+        dispatch(loginFailure(result.error || 'Login failed'));
+        return false;
       }
     } catch (error) {
-      console.warn("API Login failed, falling back to local demo if applicable", error);
+      console.warn("API Login failed", error);
+      dispatch(loginFailure(error.message || 'Login error'));
+      return false;
     }
-
-    // Fallback/Dummy credential check for demo purposes
-    if (email === 'admin@madhuram.com' && password === 'admin123') {
-      const userData = {
-        user_id: '1',
-        name: 'Admin User',
-        email: email,
-        role: 'admin',
-        avatar: 'https://github.com/shadcn.png',
-        token: 'demo-token-admin',
-        project_list: []
-      };
-      setUser(userData);
-      localStorage.setItem('inventory_user', JSON.stringify(userData));
-      return true;
-    }
-    
-    if (email === 'pm@madhuram.com' && password === 'pm123') {
-         const userData = {
-           user_id: '2',
-           name: 'Rajesh Kumar',
-           email: email,
-           role: 'project_manager',
-           avatar: 'https://github.com/shadcn.png',
-           token: 'demo-token-pm',
-           project_list: []
-         };
-         setUser(userData);
-        localStorage.setItem('inventory_user', JSON.stringify(userData));
-        return true;
-      }
-    return false;
   };
 
   const logout = async () => {
@@ -73,13 +42,12 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Logout failed", error);
     }
-    setUser(null);
-    localStorage.removeItem('inventory_user');
+    dispatch(logoutAction());
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
-      {!loading && children}
+    <AuthContext.Provider value={{ user, isAuthenticated, login, logout, loading, error }}>
+      {children}
     </AuthContext.Provider>
   );
 };

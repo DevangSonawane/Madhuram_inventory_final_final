@@ -41,7 +41,7 @@ export default function Login() {
       if (success) {
         navigate(redirectPath, { replace: true });
       } else {
-        setError('Invalid credentials. Use admin@madhuram.com / admin123 or pm@madhuram.com / pm123');
+        setError('Invalid credentials. Use admin@madhuram.com / admin123, pm@madhuram.com / pm123, or devang@gmail.com / 123456');
       }
     } catch (err) {
       setError('An error occurred during login');
@@ -58,6 +58,11 @@ export default function Login() {
   const handleDemoPMLogin = () => {
     setEmail('pm@madhuram.com');
     setPassword('pm123');
+  };
+
+  const handleDemoDevangLogin = () => {
+    setEmail('devang@gmail.com');
+    setPassword('123456');
   };
 
   return (
@@ -157,6 +162,9 @@ export default function Login() {
               </Button>
               <Button variant="outline" type="button" disabled={isLoading} onClick={handleDemoPMLogin} className="h-11 md:h-10">
                 PM Demo
+              </Button>
+              <Button variant="outline" type="button" disabled={isLoading} onClick={handleDemoDevangLogin} className="col-span-2 h-11 md:h-10">
+                Devang Demo
               </Button>
             </div>
           </div>
