@@ -70,6 +70,123 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  // Projects
+  createProject: async (projectData) => {
+    const formData = new FormData();
+    
+    // Add text fields
+    if (projectData.project_name) formData.append('project_name', projectData.project_name);
+    if (projectData.product_duration) formData.append('product_duration', projectData.product_duration);
+    if (projectData.client_name) formData.append('client_name', projectData.client_name);
+    if (projectData.work_order_information) formData.append('work_order_information', projectData.work_order_information);
+    
+    // Add arrays
+    if (projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking)) {
+      projectData.pr_po_tracking.forEach((item, index) => {
+        formData.append(`pr_po_tracking[${index}]`, item);
+      });
+    }
+    
+    if (projectData.samples && Array.isArray(projectData.samples)) {
+      projectData.samples.forEach((item, index) => {
+        formData.append(`samples[${index}]`, item);
+      });
+    }
+    
+    // Add files
+    if (projectData.work_order_file instanceof File) {
+      formData.append('work_order_file', projectData.work_order_file);
+    }
+    
+    if (projectData.mas_file instanceof File) {
+      formData.append('mas_file', projectData.mas_file);
+    }
+    
+    // Add ml_management object
+    if (projectData.ml_management) {
+      if (projectData.ml_management.ml_task) {
+        formData.append('ml_management[ml_task]', projectData.ml_management.ml_task);
+      }
+    }
+
+    const response = await fetch(`${BASE_URL}/api/projects`, {
+      method: 'POST',
+      headers: getAuthHeaders(), // Don't set Content-Type, browser will set it with boundary for FormData
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  getProjects: async () => {
+    const response = await fetch(`${BASE_URL}/api/projects`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getProjectById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/projects/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateProject: async (id, projectData) => {
+    const formData = new FormData();
+    
+    // Add text fields
+    if (projectData.project_name) formData.append('project_name', projectData.project_name);
+    if (projectData.product_duration) formData.append('product_duration', projectData.product_duration);
+    if (projectData.client_name) formData.append('client_name', projectData.client_name);
+    if (projectData.work_order_information) formData.append('work_order_information', projectData.work_order_information);
+    
+    // Add arrays
+    if (projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking)) {
+      projectData.pr_po_tracking.forEach((item, index) => {
+        formData.append(`pr_po_tracking[${index}]`, item);
+      });
+    }
+    
+    if (projectData.samples && Array.isArray(projectData.samples)) {
+      projectData.samples.forEach((item, index) => {
+        formData.append(`samples[${index}]`, item);
+      });
+    }
+    
+    // Add files (only if new files are provided)
+    if (projectData.mas_file instanceof File) {
+      formData.append('mas_file', projectData.mas_file);
+    }
+    
+    // Add ml_management object
+    if (projectData.ml_management) {
+      if (projectData.ml_management.ml_task) {
+        formData.append('ml_management[ml_task]', projectData.ml_management.ml_task);
+      }
+    }
+
+    const response = await fetch(`${BASE_URL}/api/projects/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  deleteProject: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/projects/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  // Helper to get file URL
+  getFileUrl: (filename) => {
+    if (!filename) return null;
+    return `${BASE_URL}/uploads/${filename}`;
+  },
 };
 
 // Helper to get token from storage
@@ -98,7 +215,8 @@ const handleResponse = async (response) => {
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
-    const error = (data && data.message) || response.statusText;
+    // API returns error in format: { "error": "..." }
+    const error = (data && (data.error || data.message)) || response.statusText;
     return { success: false, error, status: response.status };
   }
 

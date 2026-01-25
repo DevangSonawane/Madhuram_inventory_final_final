@@ -1,98 +1,124 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Building, MapPin, Calendar, FileText, Trash2 } from "lucide-react";
+import { Plus, Search, Building, MapPin, Calendar, FileText, Trash2, Edit, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-
-// Mock Data
-const MOCK_PROJECTS = [
-  {
-    id: "PRJ-2026-001",
-    name: "Lodha World One Tower",
-    client: "Lodha Group",
-    location: "Lower Parel, Mumbai",
-    floors: 117,
-    startDate: "2026-01-10",
-    manager: "Rajesh Kumar",
-    status: "In Progress",
-    value: "₹500 Cr"
-  },
-  {
-    id: "PRJ-2026-002",
-    name: "Hiranandani Gardens",
-    client: "Hiranandani Group",
-    location: "Powai, Mumbai",
-    floors: 45,
-    startDate: "2026-02-01",
-    manager: "Sneha Patel",
-    status: "Planning",
-    value: "₹250 Cr"
-  },
-  {
-    id: "PRJ-2026-003",
-    name: "Prestige City",
-    client: "Prestige Group",
-    location: "Mulund, Mumbai",
-    floors: 60,
-    startDate: "2025-11-15",
-    manager: "Amit Shah",
-    status: "Active",
-    value: "₹300 Cr"
-  }
-];
+import { api } from "@/lib/api";
+import ProjectForm from "@/components/forms/ProjectForm";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Projects() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState(MOCK_PROJECTS);
+  const { toast } = useToast();
+  const [projects, setProjects] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [isEditProjectOpen, setIsEditProjectOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
-  
-  // New Project State
-  const [newProject, setNewProject] = useState({
-      name: "",
-      client: "",
-      location: "",
-      floors: "",
-      value: ""
-  });
+  const [projectToEdit, setProjectToEdit] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
-  const handleDeleteProject = () => {
-    if (projectToDelete) {
-      setProjects(projects.filter(p => p.id !== projectToDelete.id));
-      setProjectToDelete(null);
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      const result = await api.getProjects();
+      if (result.success) {
+        setProjects(Array.isArray(result.data) ? result.data : []);
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to fetch projects",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while fetching projects",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreateProject = () => {
-      const project = {
-          id: `PRJ-2026-${String(projects.length + 1).padStart(3, '0')}`,
-          ...newProject,
-          startDate: new Date().toISOString().split('T')[0],
-          manager: user?.role === 'project_manager' ? user.name : (user?.name || "Unassigned"),
-          status: "Planning"
-      };
-      setProjects([...projects, project]);
-      setIsNewProjectOpen(false);
-      setNewProject({ name: "", client: "", location: "", floors: "", value: "" });
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    
+    try {
+      setDeleting(true);
+      const result = await api.deleteProject(projectToDelete.project_id);
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Project deleted successfully"
+        });
+        setProjects(projects.filter(p => p.project_id !== projectToDelete.project_id));
+        setProjectToDelete(null);
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to delete project",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while deleting project",
+        variant: "destructive"
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const userProjects = projects.filter(p => {
-    if (!user) return true;
-    if (user.role === 'admin') return true;
-    if (user.role === 'project_manager') return p.manager === user.name;
-    return true;
-  });
+  const handleCreateSuccess = (project) => {
+    toast({
+      title: "Success",
+      description: "Project created successfully"
+    });
+    setIsNewProjectOpen(false);
+    fetchProjects();
+  };
 
-  const filteredProjects = userProjects.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.client.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleEditSuccess = (project) => {
+    toast({
+      title: "Success",
+      description: "Project updated successfully"
+    });
+    setIsEditProjectOpen(false);
+    setProjectToEdit(null);
+    fetchProjects();
+  };
+
+  const handleEditClick = (project) => {
+    setProjectToEdit(project);
+    setIsEditProjectOpen(true);
+  };
+
+  const filteredProjects = projects.filter(p => 
+    (p.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -105,65 +131,17 @@ export default function Projects() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> New Project</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
+              <DialogDescription>
+                Fill in the project details below. Fields marked with * are required.
+              </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Project Name</Label>
-                  <Input 
-                    id="name" 
-                    placeholder="e.g. Lodha Park"
-                    value={newProject.name}
-                    onChange={(e) => setNewProject({...newProject, name: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="client">Client Name</Label>
-                  <Input 
-                    id="client" 
-                    placeholder="e.g. Lodha Group" 
-                    value={newProject.client}
-                    onChange={(e) => setNewProject({...newProject, client: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Input 
-                    id="location" 
-                    placeholder="Project Address" 
-                    value={newProject.location}
-                    onChange={(e) => setNewProject({...newProject, location: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="floors">No. of Floors</Label>
-                  <Input 
-                    id="floors" 
-                    type="number" 
-                    value={newProject.floors}
-                    onChange={(e) => setNewProject({...newProject, floors: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="value">Est. Value</Label>
-                  <Input 
-                    id="value" 
-                    placeholder="₹" 
-                    value={newProject.value}
-                    onChange={(e) => setNewProject({...newProject, value: e.target.value})}
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsNewProjectOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreateProject}>Create Project</Button>
-            </DialogFooter>
+            <ProjectForm
+              onSuccess={handleCreateSuccess}
+              onCancel={() => setIsNewProjectOpen(false)}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -175,34 +153,40 @@ export default function Projects() {
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userProjects.length}</div>
+            <div className="text-2xl font-bold">{projects.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Value</CardTitle>
+            <CardTitle className="text-sm font-medium">Clients</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹1,050 Cr</div>
+            <div className="text-2xl font-bold">
+              {new Set(projects.map(p => p.client_name).filter(Boolean)).size}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-            <Building className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">With Work Orders</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userProjects.filter(p => p.status === 'In Progress').length}</div>
+            <div className="text-2xl font-bold">
+              {projects.filter(p => p.work_order_file).length}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Planning</CardTitle>
+            <CardTitle className="text-sm font-medium">With MAS Files</CardTitle>
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{userProjects.filter(p => p.status === 'Planning').length}</div>
+            <div className="text-2xl font-bold">
+              {projects.filter(p => p.mas_file).length}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -221,131 +205,175 @@ export default function Projects() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Mobile Card View */}
-          <div className="grid grid-cols-1 gap-4 md:hidden">
-            {filteredProjects.map((project) => (
-              <div key={project.id} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold leading-none tracking-tight">{project.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">{project.id}</p>
-                  </div>
-                  <Badge variant={
-                      project.status === "In Progress" ? "default" : 
-                      project.status === "Active" ? "success" : "secondary"
-                    }>
-                      {project.status}
-                  </Badge>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-muted-foreground text-xs">Client</span>
-                    <span className="font-medium">{project.client}</span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <span className="text-muted-foreground text-xs">Value</span>
-                     <span className="font-medium">{project.value}</span>
-                  </div>
-                  <div className="flex flex-col gap-1 col-span-2">
-                     <span className="text-muted-foreground text-xs">Location</span>
-                     <span className="flex items-center">
-                        <MapPin className="mr-1 h-3 w-3 text-muted-foreground" />
-                        {project.location}
-                     </span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <span className="text-muted-foreground text-xs">Manager</span>
-                     <span>{project.manager}</span>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                     <span className="text-muted-foreground text-xs">Start Date</span>
-                     <span className="flex items-center">
-                        <Calendar className="mr-1 h-3 w-3 text-muted-foreground" />
-                        {project.startDate}
-                     </span>
-                  </div>
-                </div>
+          {filteredProjects.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No projects found. Create your first project to get started.
+            </div>
+          ) : (
+            <>
+              {/* Mobile Card View */}
+              <div className="grid grid-cols-1 gap-4 md:hidden">
+                {filteredProjects.map((project) => (
+                  <div key={project.project_id} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold leading-none tracking-tight">{project.project_name}</h3>
+                        <p className="text-xs text-muted-foreground mt-1">ID: {project.project_id}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-muted-foreground text-xs">Client</span>
+                        <span className="font-medium">{project.client_name}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                         <span className="text-muted-foreground text-xs">Duration</span>
+                         <span className="font-medium">
+                           {project.product_duration ? new Date(project.product_duration).toLocaleDateString() : 'N/A'}
+                         </span>
+                      </div>
+                      <div className="flex flex-col gap-1 col-span-2">
+                         <span className="text-muted-foreground text-xs">Created</span>
+                         <span className="flex items-center">
+                            <Calendar className="mr-1 h-3 w-3 text-muted-foreground" />
+                            {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
+                         </span>
+                      </div>
+                      {project.work_order_file && (
+                        <div className="flex flex-col gap-1 col-span-2">
+                          <span className="text-muted-foreground text-xs">Work Order</span>
+                          <a
+                            href={api.getFileUrl(project.work_order_file)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-1 text-sm"
+                          >
+                            <FileText className="h-3 w-3" />
+                            View File
+                          </a>
+                        </div>
+                      )}
+                    </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t mt-2">
-                   <Button variant="outline" size="sm" className="flex-1">View</Button>
-                   <Button 
-                        variant="destructive" 
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => setProjectToDelete(project)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" /> Delete
-                   </Button>
-                </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+                       <Button 
+                         variant="outline" 
+                         size="sm" 
+                         className="flex-1"
+                         onClick={() => handleEditClick(project)}
+                       >
+                         <Edit className="h-4 w-4 mr-1" /> Edit
+                       </Button>
+                       <Button 
+                            variant="destructive" 
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => setProjectToDelete(project)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" /> Delete
+                       </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Desktop Table View */}
-          <div className="hidden md:block">
-            <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Project Name</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Floors</TableHead>
-                <TableHead>Manager</TableHead>
-                <TableHead>Start Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProjects.map((project) => (
-                <TableRow key={project.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                      <span>{project.name}</span>
-                      <span className="text-xs text-muted-foreground">{project.id}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{project.client}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center text-muted-foreground">
-                      <MapPin className="mr-1 h-3 w-3" />
-                      {project.location}
-                    </div>
-                  </TableCell>
-                  <TableCell>{project.floors}</TableCell>
-                  <TableCell>{project.manager}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center text-muted-foreground">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {project.startDate}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={
-                      project.status === "In Progress" ? "default" : 
-                      project.status === "Active" ? "success" : "secondary"
-                    }>
-                      {project.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm">View</Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => setProjectToDelete(project)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" /> Delete
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          </div>
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Project Name</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Product Duration</TableHead>
+                    <TableHead>Work Order</TableHead>
+                    <TableHead>PR/PO Tracking</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProjects.map((project) => (
+                    <TableRow key={project.project_id}>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                          <span>{project.project_name}</span>
+                          <span className="text-xs text-muted-foreground">ID: {project.project_id}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{project.client_name}</TableCell>
+                      <TableCell>
+                        {project.product_duration ? (
+                          <div className="flex items-center text-muted-foreground">
+                            <Calendar className="mr-1 h-3 w-3" />
+                            {new Date(project.product_duration).toLocaleDateString()}
+                          </div>
+                        ) : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {project.work_order_file ? (
+                          <a
+                            href={api.getFileUrl(project.work_order_file)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <FileText className="h-3 w-3" />
+                            View
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">No file</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {project.pr_po_tracking && project.pr_po_tracking.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {project.pr_po_tracking.slice(0, 2).map((item, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">
+                                {item}
+                              </Badge>
+                            ))}
+                            {project.pr_po_tracking.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{project.pr_po_tracking.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">None</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center text-muted-foreground">
+                          <Calendar className="mr-1 h-3 w-3" />
+                          {project.created_at ? new Date(project.created_at).toLocaleDateString() : 'N/A'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleEditClick(project)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" /> Edit
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm"
+                            onClick={() => setProjectToDelete(project)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" /> Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -354,13 +382,43 @@ export default function Projects() {
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the project <strong>{projectToDelete?.name}</strong>? This action cannot be undone.
+              Are you sure you want to delete the project <strong>{projectToDelete?.project_name}</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProjectToDelete(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteProject}>Delete</Button>
+            <Button variant="outline" onClick={() => setProjectToDelete(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProject} disabled={deleting}>
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditProjectOpen} onOpenChange={setIsEditProjectOpen}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update the project details below. Fields marked with * are required.
+            </DialogDescription>
+          </DialogHeader>
+          <ProjectForm
+            project={projectToEdit}
+            onSuccess={handleEditSuccess}
+            onCancel={() => {
+              setIsEditProjectOpen(false);
+              setProjectToEdit(null);
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>
