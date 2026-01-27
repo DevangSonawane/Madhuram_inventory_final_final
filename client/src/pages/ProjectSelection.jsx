@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProject } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { Building, Calendar, MapPin, Loader2, Plus, LayoutGrid, Trash2, FileText } from "lucide-react";
+import { Building, Calendar, MapPin, Loader2, Plus, LayoutGrid, Trash2, FileText, Upload, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { extractTextFromPdf } from "@/lib/pdfUtils";
+import { extractWorkOrderFields, mapExtractedToProjectForm } from "@/lib/workOrderExtractor";
 
 export default function ProjectSelection() {
   const { projects, loading, selectProject, fetchProjects, createProject, deleteProject } = useProject();
@@ -28,10 +30,23 @@ export default function ProjectSelection() {
     floors: '',
     start_date: '',
     value: '',
+    wo_number: '',
     status: 'Planning'
   });
   const [isCreating, setIsCreating] = useState(false);
   const [workOrderFile, setWorkOrderFile] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [extractedPreview, setExtractedPreview] = useState({
+    name: '',
+    client: '',
+    location: '',
+    start_date: '',
+    value: '',
+    wo_number: ''
+  });
+  const workOrderInputRef = useRef(null);
 
   useEffect(() => {
     fetchProjects();
@@ -49,11 +64,82 @@ export default function ProjectSelection() {
     navigate(`/${project.id}`);
   };
 
+  const ACCEPT_WO = '.pdf,.csv,.xlsx,.xls';
+  const isPdf = (f) => f && (f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
+
+  const runExtractAndPreview = async (file) => {
+    setExtractError(null);
+    setExtracting(true);
+    try {
+      const raw = await extractTextFromPdf(file);
+      const ext = extractWorkOrderFields(raw);
+      const mapped = mapExtractedToProjectForm(ext);
+      setExtractedPreview({ ...mapped });
+      setPreviewOpen(true);
+    } catch (err) {
+      console.error(err);
+      setExtractError(err?.message || 'Could not read PDF.');
+      toast({
+        title: 'Extraction failed',
+        description: 'We couldn’t read this PDF. You can still attach it and fill the form manually.',
+        variant: 'destructive',
+      });
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setWorkOrderFile(file);
+    if (!file) return;
+    setWorkOrderFile(file);
+    if (isPdf(file)) runExtractAndPreview(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    const ext = (file.name || '').toLowerCase();
+    const ok = ext.endsWith('.pdf') || ext.endsWith('.csv') || ext.endsWith('.xlsx') || ext.endsWith('.xls');
+    if (!ok) {
+      toast({ title: 'Invalid file', description: 'Use PDF, CSV, or Excel.', variant: 'destructive' });
+      return;
     }
+    setWorkOrderFile(file);
+    if (isPdf(file)) runExtractAndPreview(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const removeWorkOrderFile = () => {
+    setWorkOrderFile(null);
+    setExtractError(null);
+    setPreviewOpen(false);
+    if (workOrderInputRef.current) workOrderInputRef.current.value = '';
+  };
+
+  const applyPreviewToForm = () => {
+    setNewProject((prev) => {
+      const next = { ...prev };
+      if (!prev.name && extractedPreview.name) next.name = extractedPreview.name;
+      if (!prev.client && extractedPreview.client) next.client = extractedPreview.client;
+      if (!prev.location && extractedPreview.location) next.location = extractedPreview.location;
+      if (!prev.start_date && extractedPreview.start_date) next.start_date = extractedPreview.start_date;
+      if (!prev.value && extractedPreview.value) next.value = extractedPreview.value;
+      if (!prev.wo_number && extractedPreview.wo_number) next.wo_number = extractedPreview.wo_number;
+      return next;
+    });
+    setPreviewOpen(false);
+    toast({ title: 'Applied', description: 'Extracted values filled into empty fields.' });
+  };
+
+  const updatePreview = (field, value) => {
+    setExtractedPreview((p) => ({ ...p, [field]: value }));
   };
 
   const handleCreateProject = async () => {
@@ -62,7 +148,8 @@ export default function ProjectSelection() {
       const projectData = {
         ...newProject,
         manager_id: user.id,
-        work_order_file: workOrderFile ? workOrderFile.name : null
+        work_order_file: workOrderFile || null,
+        wo_number: newProject.wo_number || null
       };
 
       const result = await createProject(projectData);
@@ -80,9 +167,13 @@ export default function ProjectSelection() {
             floors: '',
             start_date: '',
             value: '',
+            wo_number: '',
             status: 'Planning'
         });
         setWorkOrderFile(null);
+        setPreviewOpen(false);
+        setExtractError(null);
+        if (workOrderInputRef.current) workOrderInputRef.current.value = '';
       } else {
         toast({
           title: "Error",
@@ -159,7 +250,13 @@ export default function ProjectSelection() {
                 )}
                 
                 {/* Only show create project if needed (e.g. Admin or Manager) */}
-                <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
+                <Dialog
+                  open={isNewProjectOpen}
+                  onOpenChange={(open) => {
+                    setIsNewProjectOpen(open);
+                    if (!open) setPreviewOpen(false);
+                  }}
+                >
                 <DialogTrigger asChild>
                     <Button className="w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> New Project</Button>
                 </DialogTrigger>
@@ -217,29 +314,74 @@ export default function ProjectSelection() {
                         />
                         </div>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="start_date">Start Date</Label>
-                        <Input 
-                            id="start_date" 
-                            type="date"
-                            value={newProject.start_date}
-                            onChange={(e) => setNewProject({...newProject, start_date: e.target.value})}
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="start_date">Start Date</Label>
+                            <Input 
+                                id="start_date" 
+                                type="date"
+                                value={newProject.start_date}
+                                onChange={(e) => setNewProject({...newProject, start_date: e.target.value})}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="wo_number">WO Number</Label>
+                            <Input 
+                                id="wo_number" 
+                                placeholder="Optional"
+                                value={newProject.wo_number}
+                                onChange={(e) => setNewProject({...newProject, wo_number: e.target.value})}
+                            />
+                        </div>
                     </div>
                     
                     <div className="space-y-2 pt-2">
-                        <Label htmlFor="work_order_file">Upload Work Order</Label>
-                        <div className="flex items-center gap-2">
-                            <Input 
-                                id="work_order_file" 
-                                type="file" 
-                                accept=".csv, .xlsx, .pdf"
-                                onChange={handleFileChange}
-                                className="cursor-pointer"
-                            />
+                        <Label>Upload Work Order</Label>
+                        <div
+                          className="border-2 border-dashed rounded-lg p-6 text-center transition-colors hover:bg-muted/50"
+                          onDragOver={handleDragOver}
+                          onDrop={handleDrop}
+                        >
+                          <input
+                            ref={workOrderInputRef}
+                            id="work_order_file"
+                            type="file"
+                            accept={ACCEPT_WO}
+                            onChange={handleFileChange}
+                            className="sr-only"
+                          />
+                          {workOrderFile ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <FileText className="h-10 w-10 text-primary" />
+                              <span className="font-medium">{workOrderFile.name}</span>
+                              <span className="text-sm text-muted-foreground">
+                                {(workOrderFile.size / 1024).toFixed(1)} KB
+                                {isPdf(workOrderFile) && (extracting ? ' · Extracting…' : ' · PDF ready')}
+                              </span>
+                              {extractError && (
+                                <span className="text-sm text-destructive">{extractError}</span>
+                              )}
+                              <div className="flex gap-2 mt-1">
+                                <Button type="button" variant="outline" size="sm" onClick={() => workOrderInputRef.current?.click()}>
+                                  Replace
+                                </Button>
+                                <Button type="button" variant="ghost" size="sm" onClick={removeWorkOrderFile}>
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label htmlFor="work_order_file" className="flex flex-col items-center gap-2 cursor-pointer">
+                              <Upload className="h-10 w-10 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">
+                                Drag and drop or click to upload
+                              </span>
+                              <span className="text-xs text-muted-foreground">PDF, CSV, Excel</span>
+                            </label>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Supported formats: CSV, Excel, PDF
+                            PDF: we’ll try to extract project details for preview. CSV/Excel: attach only.
                         </p>
                     </div>
 
@@ -252,6 +394,90 @@ export default function ProjectSelection() {
                     </Button>
                     </DialogFooter>
                 </DialogContent>
+                </Dialog>
+
+                <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        Preview extracted from work order
+                      </DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                      Review and edit below. Apply will fill only <strong>empty</strong> project fields.
+                    </p>
+                    <ScrollArea className="max-h-[60vh] pr-4">
+                      <div className="grid gap-4 py-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="preview_name">Project name</Label>
+                          <Input
+                            id="preview_name"
+                            value={extractedPreview.name}
+                            onChange={(e) => updatePreview('name', e.target.value)}
+                            placeholder="e.g. Oakwood Kalyan"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="preview_client">Client (issuer)</Label>
+                          <Input
+                            id="preview_client"
+                            value={extractedPreview.client}
+                            onChange={(e) => updatePreview('client', e.target.value)}
+                            placeholder="e.g. Golden Mile Builders"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="preview_location">Location</Label>
+                          <Textarea
+                            id="preview_location"
+                            value={extractedPreview.location}
+                            onChange={(e) => updatePreview('location', e.target.value)}
+                            placeholder="Project address"
+                            rows={2}
+                            className="resize-none"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="preview_start_date">Start date</Label>
+                            <Input
+                              id="preview_start_date"
+                              type="date"
+                              value={extractedPreview.start_date}
+                              onChange={(e) => updatePreview('start_date', e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="preview_value">Est. value</Label>
+                            <Input
+                              id="preview_value"
+                              value={extractedPreview.value}
+                              onChange={(e) => updatePreview('value', e.target.value)}
+                              placeholder="₹"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="preview_wo_number">WO number</Label>
+                          <Input
+                            id="preview_wo_number"
+                            value={extractedPreview.wo_number}
+                            onChange={(e) => updatePreview('wo_number', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                      </div>
+                    </ScrollArea>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setPreviewOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={applyPreviewToForm}>
+                        Apply to form
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
                 </Dialog>
             </div>
         </div>

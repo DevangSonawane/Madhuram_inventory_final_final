@@ -24,6 +24,10 @@ export default function Projects() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
+  const isAdmin = user?.role === 'admin';
+  const isProjectManager = user?.role === 'project_manager';
+  const canEditDelete = isAdmin || isProjectManager;
+
   useEffect(() => {
     fetchProjects();
   }, []);
@@ -256,24 +260,26 @@ export default function Projects() {
                       )}
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-2 border-t mt-2">
-                       <Button 
-                         variant="outline" 
-                         size="sm" 
-                         className="flex-1"
-                         onClick={() => handleEditClick(project)}
-                       >
-                         <Edit className="h-4 w-4 mr-1" /> Edit
-                       </Button>
-                       <Button 
-                            variant="destructive" 
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => setProjectToDelete(project)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" /> Delete
-                       </Button>
-                    </div>
+                    {(isAdmin || isProjectManager) && (
+                      <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => handleEditClick(project)}
+                        >
+                          <Edit className="h-4 w-4 mr-1" /> Edit
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => setProjectToDelete(project)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Delete
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -350,22 +356,27 @@ export default function Projects() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleEditClick(project)}
-                          >
-                            <Edit className="h-4 w-4 mr-1" /> Edit
-                          </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm"
-                            onClick={() => setProjectToDelete(project)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" /> Delete
-                          </Button>
-                        </div>
+                        {canEditDelete && (
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleEditClick(project)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" /> Edit
+                            </Button>
+                            <Button 
+                              variant="destructive" 
+                              size="sm"
+                              onClick={() => setProjectToDelete(project)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" /> Delete
+                            </Button>
+                          </div>
+                        )}
+                        {!canEditDelete && (
+                          <span className="text-muted-foreground text-sm">View only</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

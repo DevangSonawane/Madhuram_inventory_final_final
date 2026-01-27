@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Upload, FileText } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { X, Upload, FileText, CheckCircle2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { extractTextFromPdf } from "@/lib/pdfUtils";
+import { extractWorkOrderFields, mapExtractedToProjectFormForm } from "@/lib/workOrderExtractor";
 
 export default function ProjectForm({ project, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
@@ -33,6 +38,21 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
   const [sampleInput, setSampleInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [extractedPreview, setExtractedPreview] = useState({
+    project_name: '',
+    client_name: '',
+    product_duration: '',
+    work_order_information: '',
+    wo_number: ''
+  });
+  const workOrderInputRef = useRef(null);
+  const { toast } = useToast();
+
+  const ACCEPT_WO = '.pdf,.csv,.xlsx,.xls,.doc,.docx';
+  const isPdf = (f) => f && (f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
 
   useEffect(() => {
     if (project) {
@@ -80,29 +100,88 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     }
   };
 
-  const handleFileChange = (e, fileType) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFiles(prev => ({
-        ...prev,
-        [fileType]: file
-      }));
-      setFilePreviews(prev => ({
-        ...prev,
-        [fileType]: URL.createObjectURL(file)
-      }));
+  const runExtractAndPreview = async (file) => {
+    setExtractError(null);
+    setExtracting(true);
+    try {
+      const raw = await extractTextFromPdf(file);
+      const ext = extractWorkOrderFields(raw);
+      const mapped = mapExtractedToProjectFormForm(ext);
+      setExtractedPreview({ ...mapped });
+      setPreviewOpen(true);
+    } catch (err) {
+      console.error(err);
+      setExtractError(err?.message || 'Could not read PDF.');
+      toast({
+        title: 'Extraction failed',
+        description: "We couldn't read this PDF. You can still attach it and fill the form manually.",
+        variant: 'destructive',
+      });
+    } finally {
+      setExtracting(false);
     }
   };
 
+  const handleFileChange = (e, fileType) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFiles(prev => ({ ...prev, [fileType]: file }));
+    setFilePreviews(prev => ({ ...prev, [fileType]: URL.createObjectURL(file) }));
+    if (fileType === 'work_order_file' && isPdf(file)) runExtractAndPreview(file);
+  };
+
+  const handleWorkOrderDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    const ext = (file.name || '').toLowerCase();
+    const ok = ['.pdf', '.csv', '.xlsx', '.xls', '.doc', '.docx'].some((x) => ext.endsWith(x));
+    if (!ok) {
+      toast({ title: 'Invalid file', description: 'Use PDF, CSV, Excel, or Word.', variant: 'destructive' });
+      return;
+    }
+    setFiles(prev => ({ ...prev, work_order_file: file }));
+    setFilePreviews(prev => ({ ...prev, work_order_file: URL.createObjectURL(file) }));
+    if (isPdf(file)) runExtractAndPreview(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   const removeFile = (fileType) => {
-    setFiles(prev => ({
-      ...prev,
-      [fileType]: null
-    }));
-    setFilePreviews(prev => ({
-      ...prev,
-      [fileType]: null
-    }));
+    setFiles(prev => ({ ...prev, [fileType]: null }));
+    setFilePreviews(prev => {
+      const next = { ...prev, [fileType]: null };
+      if (fileType === 'work_order_file' && project?.work_order_file) {
+        next.work_order_file = api.getFileUrl(project.work_order_file);
+      }
+      return next;
+    });
+    if (fileType === 'work_order_file') {
+      setExtractError(null);
+      setPreviewOpen(false);
+      if (workOrderInputRef.current) workOrderInputRef.current.value = '';
+    }
+  };
+
+  const applyPreviewToForm = () => {
+    setFormData((prev) => {
+      const next = { ...prev };
+      if (!prev.project_name && extractedPreview.project_name) next.project_name = extractedPreview.project_name;
+      if (!prev.client_name && extractedPreview.client_name) next.client_name = extractedPreview.client_name;
+      if (!prev.product_duration && extractedPreview.product_duration) next.product_duration = extractedPreview.product_duration;
+      if (!prev.work_order_information && extractedPreview.work_order_information) next.work_order_information = extractedPreview.work_order_information;
+      return next;
+    });
+    setPreviewOpen(false);
+    toast({ title: 'Applied', description: 'Extracted values filled into empty fields.' });
+  };
+
+  const updatePreview = (field, value) => {
+    setExtractedPreview((p) => ({ ...p, [field]: value }));
   };
 
   const addPrPo = () => {
@@ -217,18 +296,40 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="work_order_file">Work Order File {!project && '*'}</Label>
-        <div className="flex items-center gap-2">
-          <Input
+        <Label>Work Order File {!project && '*'}</Label>
+        <div
+          className="border-2 border-dashed rounded-lg p-4 text-center transition-colors hover:bg-muted/50"
+          onDragOver={handleDragOver}
+          onDrop={handleWorkOrderDrop}
+        >
+          <input
+            ref={workOrderInputRef}
             id="work_order_file"
             type="file"
-            accept=".pdf,.doc,.docx"
+            accept={ACCEPT_WO}
             onChange={(e) => handleFileChange(e, 'work_order_file')}
-            className="flex-1"
-            disabled={!!filePreviews.work_order_file && !files.work_order_file}
+            className="sr-only"
           />
-          {filePreviews.work_order_file && (
-            <div className="flex items-center gap-2">
+          {files.work_order_file ? (
+            <div className="flex flex-col items-center gap-2">
+              <FileText className="h-8 w-8 text-primary" />
+              <span className="font-medium">{files.work_order_file.name}</span>
+              <span className="text-sm text-muted-foreground">
+                {(files.work_order_file.size / 1024).toFixed(1)} KB
+                {isPdf(files.work_order_file) && (extracting ? ' · Extracting…' : ' · PDF ready')}
+              </span>
+              {extractError && <span className="text-sm text-destructive">{extractError}</span>}
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => workOrderInputRef.current?.click()}>
+                  Replace
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => removeFile('work_order_file')}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ) : filePreviews.work_order_file ? (
+            <div className="flex flex-col items-center gap-2">
               <a
                 href={filePreviews.work_order_file}
                 target="_blank"
@@ -236,22 +337,88 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
                 className="text-sm text-blue-600 hover:underline flex items-center gap-1"
               >
                 <FileText className="h-4 w-4" />
-                View
+                View existing
               </a>
-              {files.work_order_file && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeFile('work_order_file')}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
+              <Button type="button" variant="outline" size="sm" onClick={() => workOrderInputRef.current?.click()}>
+                Replace
+              </Button>
             </div>
+          ) : (
+            <label htmlFor="work_order_file" className="flex flex-col items-center gap-2 cursor-pointer">
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Drag and drop or click to upload</span>
+              <span className="text-xs text-muted-foreground">PDF, CSV, Excel, Word</span>
+            </label>
           )}
         </div>
+        <p className="text-xs text-muted-foreground">
+          PDF: we’ll try to extract project details for preview. Other formats: attach only.
+        </p>
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Preview extracted from work order
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Review and edit below. Apply will fill only <strong>empty</strong> form fields.
+          </p>
+          <ScrollArea className="max-h-[55vh] pr-4">
+            <div className="grid gap-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="pf_preview_project_name">Project name</Label>
+                <Input
+                  id="pf_preview_project_name"
+                  value={extractedPreview.project_name}
+                  onChange={(e) => updatePreview('project_name', e.target.value)}
+                  placeholder="e.g. Oakwood Kalyan"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pf_preview_client_name">Client name</Label>
+                <Input
+                  id="pf_preview_client_name"
+                  value={extractedPreview.client_name}
+                  onChange={(e) => updatePreview('client_name', e.target.value)}
+                  placeholder="e.g. Golden Mile Builders"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pf_preview_product_duration">Product duration (date)</Label>
+                <Input
+                  id="pf_preview_product_duration"
+                  type="date"
+                  value={extractedPreview.product_duration}
+                  onChange={(e) => updatePreview('product_duration', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pf_preview_wo_info">Work order information</Label>
+                <Textarea
+                  id="pf_preview_wo_info"
+                  value={extractedPreview.work_order_information}
+                  onChange={(e) => updatePreview('work_order_information', e.target.value)}
+                  placeholder="WO #, description…"
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={applyPreviewToForm}>
+              Apply to form
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-2">
         <Label htmlFor="work_order_information">Work Order Information</Label>

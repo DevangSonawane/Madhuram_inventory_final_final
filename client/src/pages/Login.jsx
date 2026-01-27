@@ -15,17 +15,17 @@ export default function Login() {
   
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, user } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   
   // Enforce flow: Login -> Project Selection -> Dashboard
   // We ignore location.state.from to ensure users always land on project selection first
   const redirectPath = "/projects";
 
   React.useEffect(() => {
-    if (user) {
+    if (isAuthenticated) {
       navigate(redirectPath, { replace: true });
     }
-  }, [user, navigate]);
+  }, [isAuthenticated, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

@@ -103,9 +103,12 @@ export const ProjectProvider = ({ children }) => {
       setLoading(true);
       return new Promise((resolve) => {
           setTimeout(() => {
+              const workOrderFile = newProjectData.work_order_file;
+              const work_order_file = workOrderFile instanceof File ? workOrderFile.name : (workOrderFile ?? null);
               const newProject = {
                   id: `PRJ-${new Date().getFullYear()}-${String(projects.length + 1).padStart(3, '0')}`,
                   ...newProjectData,
+                  work_order_file,
                   status: newProjectData.status || 'Planning',
                   manager_id: user.id
               };

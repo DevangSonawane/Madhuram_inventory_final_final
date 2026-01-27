@@ -25,6 +25,7 @@ import ITR from '@/pages/ITR';
 import Billing from '@/pages/Billing';
 import Documents from '@/pages/Documents';
 import Users from '@/pages/Users';
+import Profile from '@/pages/Profile';
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ProjectProvider } from '@/contexts/ProjectContext';
@@ -77,6 +78,8 @@ function App() {
                   <Route path="billing" element={<Billing />} />
                   <Route path="documents" element={<Documents />} />
                   <Route path="users" element={<Users />} />
+                  <Route path="profile" element={<Profile />} />
+                  <Route path="settings" element={<Profile />} />
                 </Route>
               </Routes>
               <Toaster />

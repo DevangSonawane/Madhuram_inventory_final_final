@@ -40,6 +40,8 @@ export function Header() {
     logout();
     navigate('/login');
   };
+  
+  console.log(user)
 
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-background/80 backdrop-blur-md px-4 md:px-8 transition-all duration-300">
@@ -187,11 +189,17 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/settings')}>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => {
+              const projectId = selectedProject?.id || pathnames[0];
+              navigate(projectId ? `/${projectId}/profile` : '/projects');
+            }}>
               <User className="mr-2 h-4 w-4" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/settings')}>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => {
+              const projectId = selectedProject?.id || pathnames[0];
+              navigate(projectId ? `/${projectId}/settings` : '/projects');
+            }}>
               Settings
             </DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/support')}>

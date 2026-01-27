@@ -80,6 +80,7 @@ export const api = {
     if (projectData.product_duration) formData.append('product_duration', projectData.product_duration);
     if (projectData.client_name) formData.append('client_name', projectData.client_name);
     if (projectData.work_order_information) formData.append('work_order_information', projectData.work_order_information);
+    if (projectData.wo_number) formData.append('wo_number', projectData.wo_number);
     
     // Add arrays
     if (projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking)) {
@@ -140,6 +141,7 @@ export const api = {
     if (projectData.product_duration) formData.append('product_duration', projectData.product_duration);
     if (projectData.client_name) formData.append('client_name', projectData.client_name);
     if (projectData.work_order_information) formData.append('work_order_information', projectData.work_order_information);
+    if (projectData.wo_number) formData.append('wo_number', projectData.wo_number);
     
     // Add arrays
     if (projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking)) {
@@ -155,6 +157,9 @@ export const api = {
     }
     
     // Add files (only if new files are provided)
+    if (projectData.work_order_file instanceof File) {
+      formData.append('work_order_file', projectData.work_order_file);
+    }
     if (projectData.mas_file instanceof File) {
       formData.append('mas_file', projectData.mas_file);
     }
