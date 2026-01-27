@@ -68,11 +68,16 @@ export default function Samples() {
             throw new Error('PDF file is too large (max 50MB)');
           }
           
-          // Extract images from PDF
+          // Extract images from PDF (optimized: lower scale, fewer pages, parallel processing)
           setExtractionProgress({ current: 0, total: 1, message: 'Extracting diagrams...' });
           let images = [];
           try {
-            images = await extractImagesFromPdf(file, { scale: 2, maxPages: 50 });
+            images = await extractImagesFromPdf(file, { 
+              scale: 1.5, // Reduced from 2 for faster processing
+              maxPages: 30, // Reduced from 50
+              batchSize: 3, // Process 3 pages in parallel
+              quality: 0.85 // JPEG quality for smaller files
+            });
             setExtractedDiagrams(images);
             console.log(`Extracted ${images.length} diagram pages`);
           } catch (imgError) {
@@ -82,10 +87,15 @@ export default function Samples() {
           
           setExtractionProgress({ current: 1, total: 2, message: 'Extracting text and values...' });
           
-          // Extract text and parse CPVC data
+          // Extract text and parse CPVC data (optimized: limit pages, parallel processing)
           let text = '';
           try {
-            text = await extractTextFromPdf(file, { fullDocument: true, preserveLines: true });
+            text = await extractTextFromPdf(file, { 
+              fullDocument: true, 
+              preserveLines: true,
+              maxPages: 50, // Limit to 50 pages instead of 150
+              batchSize: 5 // Process 5 pages in parallel
+            });
             console.log(`Extracted ${text.length} characters of text`);
           } catch (textError) {
             console.error('Text extraction failed:', textError);
@@ -198,11 +208,16 @@ export default function Samples() {
           throw new Error('PDF file is too large (max 50MB)');
         }
         
-        // Extract images from PDF
+        // Extract images from PDF (optimized: lower scale, fewer pages, parallel processing)
         setSuspendedExtractionProgress({ current: 0, total: 1, message: 'Extracting diagrams...' });
         let images = [];
         try {
-          images = await extractImagesFromPdf(file, { scale: 2, maxPages: 50 });
+          images = await extractImagesFromPdf(file, { 
+            scale: 1.5, // Reduced from 2 for faster processing
+            maxPages: 30, // Reduced from 50
+            batchSize: 3, // Process 3 pages in parallel
+            quality: 0.85 // JPEG quality for smaller files
+          });
           setSuspendedDiagrams(images);
           console.log(`Extracted ${images.length} diagram pages from suspended work PDF`);
         } catch (imgError) {
@@ -212,10 +227,15 @@ export default function Samples() {
         
         setSuspendedExtractionProgress({ current: 1, total: 2, message: 'Extracting text and values...' });
         
-        // Extract text and parse suspended work data
+        // Extract text and parse suspended work data (optimized: limit pages, parallel processing)
         let text = '';
         try {
-          text = await extractTextFromPdf(file, { fullDocument: true, preserveLines: true });
+          text = await extractTextFromPdf(file, { 
+            fullDocument: true, 
+            preserveLines: true,
+            maxPages: 50, // Limit to 50 pages instead of 150
+            batchSize: 5 // Process 5 pages in parallel
+          });
           console.log(`Extracted ${text.length} characters of text from suspended work PDF`);
         } catch (textError) {
           console.error('Text extraction failed:', textError);

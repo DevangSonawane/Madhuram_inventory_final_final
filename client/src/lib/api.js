@@ -75,22 +75,30 @@ export const api = {
   createProject: async (projectData) => {
     const formData = new FormData();
     
-    // Add text fields - send all fields, even if empty
+    // According to API docs: POST /api/projects uses multipart form data
+    // Request fields: project_name, project_startdate, client_name, location, floor, 
+    // estimate_value, wo_number, work_order_file, pr_po_tracking[], samples[], mas_file, ml_management[]
+    
+    // Required/Text fields
     formData.append('project_name', projectData.project_name || '');
-    // API expects project_startdate in request, but returns product_duration in response
-    if (projectData.product_duration) {
-      formData.append('project_startdate', projectData.product_duration);
-    } else {
-      formData.append('project_startdate', '');
+    
+    // API expects project_startdate in CREATE request (ISO format: "2026-01-26T00:00:00.000Z")
+    // Convert date to ISO string if it's a date input value
+    let startDate = projectData.product_duration || projectData.project_startdate || '';
+    if (startDate && !startDate.includes('T')) {
+      // If it's a date input (YYYY-MM-DD), convert to ISO
+      startDate = new Date(startDate + 'T00:00:00.000Z').toISOString();
     }
+    formData.append('project_startdate', startDate);
+    
     formData.append('client_name', projectData.client_name || '');
     formData.append('location', projectData.location || '');
     formData.append('floor', projectData.floor || '');
     formData.append('estimate_value', projectData.estimate_value || '');
-    formData.append('work_order_information', projectData.work_order_information || '');
     formData.append('wo_number', projectData.wo_number || '');
+    formData.append('work_order_information', projectData.work_order_information || '');
     
-    // Add arrays - send empty array if not provided
+    // Arrays - pr_po_tracking
     const prPoTracking = projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking) 
       ? projectData.pr_po_tracking 
       : [];
@@ -98,6 +106,7 @@ export const api = {
       formData.append(`pr_po_tracking[${index}]`, item);
     });
     
+    // Arrays - samples
     const samples = projectData.samples && Array.isArray(projectData.samples) 
       ? projectData.samples 
       : [];
@@ -105,10 +114,9 @@ export const api = {
       formData.append(`samples[${index}]`, item);
     });
     
-    // Add ml_management as array (API expects array in CREATE request: ["asda"])
+    // ml_management - API expects array format in CREATE: ["asda"]
     const mlManagement = projectData.ml_management;
     if (mlManagement) {
-      // Handle both array and object formats - convert to array for create
       if (Array.isArray(mlManagement)) {
         mlManagement.forEach((item, index) => {
           formData.append(`ml_management[${index}]`, item);
@@ -119,7 +127,7 @@ export const api = {
       }
     }
     
-    // Add files
+    // Files
     if (projectData.work_order_file instanceof File) {
       formData.append('work_order_file', projectData.work_order_file);
     }
@@ -153,10 +161,22 @@ export const api = {
   updateProject: async (id, projectData) => {
     const formData = new FormData();
     
-    // Add text fields - send all fields, even if empty
+    // According to API docs: PUT /api/projects/{id} uses multipart form data
+    // Request fields: project_name, product_duration, client_name, work_order_information,
+    // pr_po_tracking[], samples[], mas_file, ml_management{ml_task}
+    
+    // Text fields
     formData.append('project_name', projectData.project_name || '');
+    
     // UPDATE uses product_duration (not project_startdate) per API docs
-    formData.append('product_duration', projectData.product_duration || '');
+    // Convert date to ISO string if needed
+    let productDuration = projectData.product_duration || '';
+    if (productDuration && !productDuration.includes('T') && productDuration.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // If it's a date input (YYYY-MM-DD), convert to ISO
+      productDuration = new Date(productDuration + 'T00:00:00.000Z').toISOString();
+    }
+    formData.append('product_duration', productDuration);
+    
     formData.append('client_name', projectData.client_name || '');
     formData.append('location', projectData.location || '');
     formData.append('floor', projectData.floor || '');
@@ -164,7 +184,7 @@ export const api = {
     formData.append('work_order_information', projectData.work_order_information || '');
     formData.append('wo_number', projectData.wo_number || '');
     
-    // Add arrays - send empty array if not provided
+    // Arrays - pr_po_tracking
     const prPoTracking = projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking) 
       ? projectData.pr_po_tracking 
       : [];
@@ -172,6 +192,7 @@ export const api = {
       formData.append(`pr_po_tracking[${index}]`, item);
     });
     
+    // Arrays - samples
     const samples = projectData.samples && Array.isArray(projectData.samples) 
       ? projectData.samples 
       : [];
@@ -179,19 +200,19 @@ export const api = {
       formData.append(`samples[${index}]`, item);
     });
     
-    // Add ml_management as object (API expects object in UPDATE: { "ml_task": "..." })
+    // ml_management - API expects object format in UPDATE: { "ml_task": "..." }
     const mlManagement = projectData.ml_management;
     if (mlManagement) {
-      if (typeof mlManagement === 'object' && mlManagement.ml_task) {
+      if (typeof mlManagement === 'object' && mlManagement.ml_task !== undefined) {
         // Send as object format for update
-        formData.append('ml_management[ml_task]', mlManagement.ml_task);
+        formData.append('ml_management[ml_task]', mlManagement.ml_task || '');
       } else if (Array.isArray(mlManagement) && mlManagement.length > 0) {
         // Convert array to object format for update
-        formData.append('ml_management[ml_task]', mlManagement[0]);
+        formData.append('ml_management[ml_task]', mlManagement[0] || '');
       }
     }
     
-    // Add files (only if new files are provided)
+    // Files (only if new files are provided)
     if (projectData.work_order_file instanceof File) {
       formData.append('work_order_file', projectData.work_order_file);
     }
@@ -248,8 +269,21 @@ const handleResponse = async (response) => {
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
-    // API returns error in format: { "error": "..." }
-    const error = (data && (data.error || data.message)) || response.statusText;
+    // Handle specific error codes with user-friendly messages
+    let error = (data && (data.error || data.message)) || response.statusText;
+    
+    if (response.status === 413) {
+      error = 'File too large. Maximum file size is 10 MB. Please compress your file or use a smaller file.';
+    } else if (response.status === 400) {
+      error = data?.error || 'Invalid request. Please check your input and try again.';
+    } else if (response.status === 401) {
+      error = 'Authentication failed. Please log in again.';
+    } else if (response.status === 404) {
+      error = data?.error || 'Resource not found.';
+    } else if (response.status === 500) {
+      error = data?.error || 'Server error. Please try again later.';
+    }
+    
     return { success: false, error, status: response.status };
   }
 

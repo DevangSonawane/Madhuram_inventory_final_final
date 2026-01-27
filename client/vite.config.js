@@ -13,4 +13,18 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  optimizeDeps: {
+    exclude: ['pdfjs-dist'],
+  },
+  worker: {
+    format: 'es',
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Ensure worker files are properly handled
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
+  },
 })

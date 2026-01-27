@@ -70,12 +70,79 @@ export default function ProjectSelection() {
   const runExtractAndPreview = async (file) => {
     setExtractError(null);
     setExtracting(true);
+    console.log('Starting PDF extraction for file:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
     try {
-      const raw = await extractTextFromPdf(file);
+      // For large files, process even fewer pages for faster results
+      // Most work order info is in first 5 pages
+      const raw = await extractTextFromPdf(file, {
+        maxHeaderPages: 5, // Reduced from 10 to 5 for faster processing
+        maxTailPages: 3, // Reduced from 5 to 3
+        batchSize: 5, // Process pages in parallel
+        preserveLines: false // Faster without line preservation
+      });
+      
+      console.log('PDF text extracted, length:', raw.length);
       const ext = extractWorkOrderFields(raw);
+      console.log('Extracted work order fields:', ext);
       const mapped = mapExtractedToProjectForm(ext);
+      console.log('Mapped to form fields:', mapped);
+      
+      // Auto-populate form fields immediately
+      setNewProject((prev) => {
+        const updated = { ...prev };
+        let fieldsFilled = [];
+        // Only fill empty fields to avoid overwriting user input
+        if (!prev.name && mapped.name) {
+          updated.name = mapped.name;
+          fieldsFilled.push('name');
+        }
+        if (!prev.client && mapped.client) {
+          updated.client = mapped.client;
+          fieldsFilled.push('client');
+        }
+        if (!prev.location && mapped.location) {
+          updated.location = mapped.location;
+          fieldsFilled.push('location');
+        }
+        if (!prev.start_date && mapped.start_date) {
+          updated.start_date = mapped.start_date;
+          fieldsFilled.push('start_date');
+        }
+        if (!prev.value && mapped.value) {
+          updated.value = mapped.value;
+          fieldsFilled.push('value');
+        }
+        if (!prev.wo_number && mapped.wo_number) {
+          updated.wo_number = mapped.wo_number;
+          fieldsFilled.push('wo_number');
+        }
+        console.log('Auto-filled fields:', fieldsFilled);
+        return updated;
+      });
+      
+      // Show success notification
+      const extractedFields = [];
+      if (mapped.name) extractedFields.push('Project Name');
+      if (mapped.client) extractedFields.push('Client');
+      if (mapped.location) extractedFields.push('Location');
+      if (mapped.start_date) extractedFields.push('Start Date');
+      if (mapped.wo_number) extractedFields.push('Work Order Number');
+      
+      if (extractedFields.length > 0) {
+        toast({
+          title: 'Fields auto-filled',
+          description: `Extracted and filled: ${extractedFields.join(', ')}. You can edit any field as needed.`,
+        });
+      } else {
+        toast({
+          title: 'Extraction complete',
+          description: "Couldn't extract specific fields, but PDF is ready. Please fill the form manually.",
+          variant: 'default',
+        });
+      }
+      
+      // Store preview for optional manual review
       setExtractedPreview({ ...mapped });
-      setPreviewOpen(true);
     } catch (err) {
       console.error(err);
       setExtractError(err?.message || 'Could not read PDF.');
@@ -92,6 +159,19 @@ export default function ProjectSelection() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    // Validate file size (max 10MB to avoid 413 errors)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'File too large',
+        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
+        variant: 'destructive',
+      });
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
     setWorkOrderFile(file);
     if (isPdf(file)) runExtractAndPreview(file);
   };
@@ -101,12 +181,25 @@ export default function ProjectSelection() {
     e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
+    
     const ext = (file.name || '').toLowerCase();
     const ok = ext.endsWith('.pdf') || ext.endsWith('.csv') || ext.endsWith('.xlsx') || ext.endsWith('.xls');
     if (!ok) {
       toast({ title: 'Invalid file', description: 'Use PDF, CSV, or Excel.', variant: 'destructive' });
       return;
     }
+    
+    // Validate file size (max 10MB to avoid 413 errors)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'File too large',
+        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setWorkOrderFile(file);
     if (isPdf(file)) runExtractAndPreview(file);
   };
@@ -117,6 +210,8 @@ export default function ProjectSelection() {
   };
 
   const removeWorkOrderFile = () => {
+    // Note: workOrderFile is a File object, not a blob URL, so no cleanup needed here
+    // Blob URLs are only created for previews, which we don't store separately
     setWorkOrderFile(null);
     setExtractError(null);
     setPreviewOpen(false);
@@ -145,11 +240,17 @@ export default function ProjectSelection() {
   const handleCreateProject = async () => {
     setIsCreating(true);
     try {
+      // Map to API format - createProject in context handles the mapping
       const projectData = {
-        ...newProject,
-        manager_id: user.id,
-        work_order_file: workOrderFile || null,
-        wo_number: newProject.wo_number || null
+        name: newProject.name,
+        client: newProject.client,
+        location: newProject.location,
+        floors: newProject.floors,
+        start_date: newProject.start_date,
+        value: newProject.value,
+        wo_number: newProject.wo_number,
+        status: newProject.status || 'Planning',
+        work_order_file: workOrderFile || null
       };
 
       const result = await createProject(projectData);
@@ -177,7 +278,7 @@ export default function ProjectSelection() {
       } else {
         toast({
           title: "Error",
-          description: result.message || "Failed to create project",
+          description: result.error || result.message || "Failed to create project",
           variant: "destructive"
         });
       }
@@ -355,7 +456,9 @@ export default function ProjectSelection() {
                               <FileText className="h-10 w-10 text-primary" />
                               <span className="font-medium">{workOrderFile.name}</span>
                               <span className="text-sm text-muted-foreground">
-                                {(workOrderFile.size / 1024).toFixed(1)} KB
+                                {workOrderFile.size > 1024 * 1024 
+                                  ? `${(workOrderFile.size / 1024 / 1024).toFixed(2)} MB`
+                                  : `${(workOrderFile.size / 1024).toFixed(1)} KB`}
                                 {isPdf(workOrderFile) && (extracting ? ' · Extracting…' : ' · PDF ready')}
                               </span>
                               {extractError && (

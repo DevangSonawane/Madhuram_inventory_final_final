@@ -100,6 +100,18 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     }
   }, [project]);
 
+  // Cleanup blob URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Revoke all blob URLs when component unmounts
+      Object.values(filePreviews).forEach(url => {
+        if (url && typeof url === 'string' && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [filePreviews]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     if (name === 'ml_task') {
@@ -122,11 +134,67 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     setExtractError(null);
     setExtracting(true);
     try {
-      const raw = await extractTextFromPdf(file);
+      // Optimized extraction: only process first 10 pages + last 5 pages for faster results
+      const raw = await extractTextFromPdf(file, {
+        maxHeaderPages: 10,
+        maxTailPages: 5,
+        batchSize: 5, // Process pages in parallel
+        preserveLines: false // Faster without line preservation
+      });
+      
       const ext = extractWorkOrderFields(raw);
       const mapped = mapExtractedToProjectFormForm(ext);
+      
+      // Auto-populate form fields immediately
+      console.log('Extracted data:', mapped); // Debug log
+      setFormData((prev) => {
+        const updated = { ...prev };
+        // Only fill empty fields to avoid overwriting user input
+        if (!prev.project_name && mapped.project_name) {
+          updated.project_name = mapped.project_name;
+          console.log('Auto-filled project_name:', mapped.project_name);
+        }
+        if (!prev.client_name && mapped.client_name) {
+          updated.client_name = mapped.client_name;
+          console.log('Auto-filled client_name:', mapped.client_name);
+        }
+        if (!prev.product_duration && mapped.product_duration) {
+          updated.product_duration = mapped.product_duration;
+          console.log('Auto-filled product_duration:', mapped.product_duration);
+        }
+        if (!prev.work_order_information && mapped.work_order_information) {
+          updated.work_order_information = mapped.work_order_information;
+          console.log('Auto-filled work_order_information');
+        }
+        if (!prev.wo_number && mapped.wo_number) {
+          updated.wo_number = mapped.wo_number;
+          console.log('Auto-filled wo_number:', mapped.wo_number);
+        }
+        return updated;
+      });
+      
+      // Show success notification
+      const extractedFields = [];
+      if (mapped.project_name) extractedFields.push('Project Name');
+      if (mapped.client_name) extractedFields.push('Client Name');
+      if (mapped.product_duration) extractedFields.push('Product Duration');
+      if (mapped.wo_number) extractedFields.push('Work Order Number');
+      
+      if (extractedFields.length > 0) {
+        toast({
+          title: 'Fields auto-filled',
+          description: `Extracted and filled: ${extractedFields.join(', ')}. You can edit any field as needed.`,
+        });
+      } else {
+        toast({
+          title: 'Extraction complete',
+          description: "Couldn't extract specific fields, but PDF is ready. Please fill the form manually.",
+          variant: 'default',
+        });
+      }
+      
+      // Store preview for optional manual review
       setExtractedPreview({ ...mapped });
-      setPreviewOpen(true);
     } catch (err) {
       console.error(err);
       setExtractError(err?.message || 'Could not read PDF.');
@@ -143,6 +211,19 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
   const handleFileChange = (e, fileType) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    // Validate file size (max 10MB to avoid 413 errors)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'File too large',
+        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
+        variant: 'destructive',
+      });
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
     setFiles(prev => ({ ...prev, [fileType]: file }));
     setFilePreviews(prev => ({ ...prev, [fileType]: URL.createObjectURL(file) }));
     if (fileType === 'work_order_file' && isPdf(file)) runExtractAndPreview(file);
@@ -153,12 +234,25 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
+    
     const ext = (file.name || '').toLowerCase();
     const ok = ['.pdf', '.csv', '.xlsx', '.xls', '.doc', '.docx'].some((x) => ext.endsWith(x));
     if (!ok) {
       toast({ title: 'Invalid file', description: 'Use PDF, CSV, Excel, or Word.', variant: 'destructive' });
       return;
     }
+    
+    // Validate file size (max 10MB to avoid 413 errors)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'File too large',
+        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setFiles(prev => ({ ...prev, work_order_file: file }));
     setFilePreviews(prev => ({ ...prev, work_order_file: URL.createObjectURL(file) }));
     if (isPdf(file)) runExtractAndPreview(file);
@@ -170,20 +264,37 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
   };
 
   const removeFile = (fileType) => {
-    setFiles(prev => ({ ...prev, [fileType]: null }));
+    // Clean up blob URL to prevent memory leaks
     setFilePreviews(prev => {
+      const currentUrl = prev[fileType];
+      if (currentUrl && currentUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(currentUrl);
+      }
       const next = { ...prev, [fileType]: null };
       if (fileType === 'work_order_file' && project?.work_order_file) {
         next.work_order_file = api.getFileUrl(project.work_order_file);
       }
       return next;
     });
+    setFiles(prev => ({ ...prev, [fileType]: null }));
     if (fileType === 'work_order_file') {
       setExtractError(null);
       setPreviewOpen(false);
       if (workOrderInputRef.current) workOrderInputRef.current.value = '';
     }
   };
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      // Revoke all blob URLs when component unmounts
+      Object.values(filePreviews).forEach(url => {
+        if (url && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, []);
 
   const applyPreviewToForm = () => {
     setFormData((prev) => {
@@ -268,8 +379,18 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
 
       if (result.success) {
         onSuccess?.(result.data);
+        toast({
+          title: 'Success',
+          description: project ? 'Project updated successfully' : 'Project created successfully',
+        });
       } else {
-        setError(result.error || 'Failed to save project');
+        const errorMsg = result.error || 'Failed to save project';
+        setError(errorMsg);
+        toast({
+          title: 'Error',
+          description: errorMsg,
+          variant: 'destructive',
+        });
       }
     } catch (err) {
       setError(err.message || 'An error occurred');
@@ -392,7 +513,9 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
               <FileText className="h-8 w-8 text-primary" />
               <span className="font-medium">{files.work_order_file.name}</span>
               <span className="text-sm text-muted-foreground">
-                {(files.work_order_file.size / 1024).toFixed(1)} KB
+                {files.work_order_file.size > 1024 * 1024 
+                  ? `${(files.work_order_file.size / 1024 / 1024).toFixed(2)} MB`
+                  : `${(files.work_order_file.size / 1024).toFixed(1)} KB`}
                 {isPdf(files.work_order_file) && (extracting ? ' · Extracting…' : ' · PDF ready')}
               </span>
               {extractError && <span className="text-sm text-destructive">{extractError}</span>}

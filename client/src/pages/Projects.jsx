@@ -106,9 +106,25 @@ export default function Projects() {
     fetchProjects();
   };
 
-  const handleEditClick = (project) => {
-    setProjectToEdit(project);
-    setIsEditProjectOpen(true);
+  const handleEditClick = async (project) => {
+    // Fetch fresh project data using getProjectById to ensure we have latest data
+    try {
+      const result = await api.getProjectById(project.project_id);
+      if (result.success) {
+        setProjectToEdit(result.data);
+        setIsEditProjectOpen(true);
+      } else {
+        // Fallback to using project from list if API call fails
+        console.warn('Failed to fetch project details, using cached data:', result.error);
+        setProjectToEdit(project);
+        setIsEditProjectOpen(true);
+      }
+    } catch (error) {
+      console.error('Error fetching project:', error);
+      // Fallback to using project from list
+      setProjectToEdit(project);
+      setIsEditProjectOpen(true);
+    }
   };
 
   const filteredProjects = projects.filter(p => 

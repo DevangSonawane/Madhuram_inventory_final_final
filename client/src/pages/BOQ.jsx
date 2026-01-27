@@ -78,7 +78,13 @@ export default function BOQ() {
     setExtractError(null);
     setExtracting(true);
     try {
-      const raw = await extractTextFromPdf(file, { fullDocument: true, preserveLines: true });
+      // Optimized extraction: limit pages and use parallel processing
+      const raw = await extractTextFromPdf(file, { 
+        fullDocument: true, 
+        preserveLines: true,
+        maxPages: 50, // Limit to 50 pages for faster processing
+        batchSize: 5 // Process 5 pages in parallel
+      });
       const { items: parsed, projectName } = extractBOQFromText(raw);
       const mapped = mapBOQItemsToTable(parsed, 0);
       setExtractedItems(mapped);
