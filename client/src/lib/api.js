@@ -75,24 +75,48 @@ export const api = {
   createProject: async (projectData) => {
     const formData = new FormData();
     
-    // Add text fields
-    if (projectData.project_name) formData.append('project_name', projectData.project_name);
-    if (projectData.product_duration) formData.append('product_duration', projectData.product_duration);
-    if (projectData.client_name) formData.append('client_name', projectData.client_name);
-    if (projectData.work_order_information) formData.append('work_order_information', projectData.work_order_information);
-    if (projectData.wo_number) formData.append('wo_number', projectData.wo_number);
-    
-    // Add arrays
-    if (projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking)) {
-      projectData.pr_po_tracking.forEach((item, index) => {
-        formData.append(`pr_po_tracking[${index}]`, item);
-      });
+    // Add text fields - send all fields, even if empty
+    formData.append('project_name', projectData.project_name || '');
+    // API expects project_startdate in request, but returns product_duration in response
+    if (projectData.product_duration) {
+      formData.append('project_startdate', projectData.product_duration);
+    } else {
+      formData.append('project_startdate', '');
     }
+    formData.append('client_name', projectData.client_name || '');
+    formData.append('location', projectData.location || '');
+    formData.append('floor', projectData.floor || '');
+    formData.append('estimate_value', projectData.estimate_value || '');
+    formData.append('work_order_information', projectData.work_order_information || '');
+    formData.append('wo_number', projectData.wo_number || '');
     
-    if (projectData.samples && Array.isArray(projectData.samples)) {
-      projectData.samples.forEach((item, index) => {
-        formData.append(`samples[${index}]`, item);
-      });
+    // Add arrays - send empty array if not provided
+    const prPoTracking = projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking) 
+      ? projectData.pr_po_tracking 
+      : [];
+    prPoTracking.forEach((item, index) => {
+      formData.append(`pr_po_tracking[${index}]`, item);
+    });
+    
+    const samples = projectData.samples && Array.isArray(projectData.samples) 
+      ? projectData.samples 
+      : [];
+    samples.forEach((item, index) => {
+      formData.append(`samples[${index}]`, item);
+    });
+    
+    // Add ml_management as array (API expects array in CREATE request: ["asda"])
+    const mlManagement = projectData.ml_management;
+    if (mlManagement) {
+      // Handle both array and object formats - convert to array for create
+      if (Array.isArray(mlManagement)) {
+        mlManagement.forEach((item, index) => {
+          formData.append(`ml_management[${index}]`, item);
+        });
+      } else if (mlManagement.ml_task && mlManagement.ml_task.trim()) {
+        // Convert object to array format for create
+        formData.append('ml_management[0]', mlManagement.ml_task);
+      }
     }
     
     // Add files
@@ -102,13 +126,6 @@ export const api = {
     
     if (projectData.mas_file instanceof File) {
       formData.append('mas_file', projectData.mas_file);
-    }
-    
-    // Add ml_management object
-    if (projectData.ml_management) {
-      if (projectData.ml_management.ml_task) {
-        formData.append('ml_management[ml_task]', projectData.ml_management.ml_task);
-      }
     }
 
     const response = await fetch(`${BASE_URL}/api/projects`, {
@@ -136,24 +153,42 @@ export const api = {
   updateProject: async (id, projectData) => {
     const formData = new FormData();
     
-    // Add text fields
-    if (projectData.project_name) formData.append('project_name', projectData.project_name);
-    if (projectData.product_duration) formData.append('product_duration', projectData.product_duration);
-    if (projectData.client_name) formData.append('client_name', projectData.client_name);
-    if (projectData.work_order_information) formData.append('work_order_information', projectData.work_order_information);
-    if (projectData.wo_number) formData.append('wo_number', projectData.wo_number);
+    // Add text fields - send all fields, even if empty
+    formData.append('project_name', projectData.project_name || '');
+    // UPDATE uses product_duration (not project_startdate) per API docs
+    formData.append('product_duration', projectData.product_duration || '');
+    formData.append('client_name', projectData.client_name || '');
+    formData.append('location', projectData.location || '');
+    formData.append('floor', projectData.floor || '');
+    formData.append('estimate_value', projectData.estimate_value || '');
+    formData.append('work_order_information', projectData.work_order_information || '');
+    formData.append('wo_number', projectData.wo_number || '');
     
-    // Add arrays
-    if (projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking)) {
-      projectData.pr_po_tracking.forEach((item, index) => {
-        formData.append(`pr_po_tracking[${index}]`, item);
-      });
-    }
+    // Add arrays - send empty array if not provided
+    const prPoTracking = projectData.pr_po_tracking && Array.isArray(projectData.pr_po_tracking) 
+      ? projectData.pr_po_tracking 
+      : [];
+    prPoTracking.forEach((item, index) => {
+      formData.append(`pr_po_tracking[${index}]`, item);
+    });
     
-    if (projectData.samples && Array.isArray(projectData.samples)) {
-      projectData.samples.forEach((item, index) => {
-        formData.append(`samples[${index}]`, item);
-      });
+    const samples = projectData.samples && Array.isArray(projectData.samples) 
+      ? projectData.samples 
+      : [];
+    samples.forEach((item, index) => {
+      formData.append(`samples[${index}]`, item);
+    });
+    
+    // Add ml_management as object (API expects object in UPDATE: { "ml_task": "..." })
+    const mlManagement = projectData.ml_management;
+    if (mlManagement) {
+      if (typeof mlManagement === 'object' && mlManagement.ml_task) {
+        // Send as object format for update
+        formData.append('ml_management[ml_task]', mlManagement.ml_task);
+      } else if (Array.isArray(mlManagement) && mlManagement.length > 0) {
+        // Convert array to object format for update
+        formData.append('ml_management[ml_task]', mlManagement[0]);
+      }
     }
     
     // Add files (only if new files are provided)
@@ -162,13 +197,6 @@ export const api = {
     }
     if (projectData.mas_file instanceof File) {
       formData.append('mas_file', projectData.mas_file);
-    }
-    
-    // Add ml_management object
-    if (projectData.ml_management) {
-      if (projectData.ml_management.ml_task) {
-        formData.append('ml_management[ml_task]', projectData.ml_management.ml_task);
-      }
     }
 
     const response = await fetch(`${BASE_URL}/api/projects/${id}`, {

@@ -16,7 +16,11 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     project_name: '',
     product_duration: '',
     client_name: '',
+    location: '',
+    floor: '',
+    estimate_value: '',
     work_order_information: '',
+    wo_number: '',
     pr_po_tracking: [],
     samples: [],
     ml_management: {
@@ -56,14 +60,28 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
 
   useEffect(() => {
     if (project) {
+      // Handle ml_management - API returns object but expects array in request
+      let mlManagement = { ml_task: '' };
+      if (project.ml_management) {
+        if (Array.isArray(project.ml_management) && project.ml_management.length > 0) {
+          mlManagement = { ml_task: project.ml_management[0] || '' };
+        } else if (typeof project.ml_management === 'object' && project.ml_management.ml_task) {
+          mlManagement = { ml_task: project.ml_management.ml_task };
+        }
+      }
+
       setFormData({
         project_name: project.project_name || '',
-        product_duration: project.product_duration || '',
+        product_duration: project.product_duration || project.project_startdate || '',
         client_name: project.client_name || '',
+        location: project.location || '',
+        floor: project.floor || '',
+        estimate_value: project.estimate_value || '',
         work_order_information: project.work_order_information || '',
+        wo_number: project.wo_number || '',
         pr_po_tracking: project.pr_po_tracking || [],
         samples: project.samples || [],
-        ml_management: project.ml_management || { ml_task: '' }
+        ml_management: mlManagement
       });
 
       // Set file previews for existing files
@@ -224,8 +242,19 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     setError(null);
 
     try {
+      // Ensure all fields are included, even if empty
       const submitData = {
-        ...formData,
+        project_name: formData.project_name || '',
+        product_duration: formData.product_duration || '',
+        client_name: formData.client_name || '',
+        location: formData.location || '',
+        floor: formData.floor || '',
+        estimate_value: formData.estimate_value || '',
+        work_order_information: formData.work_order_information || '',
+        wo_number: formData.wo_number || '',
+        pr_po_tracking: formData.pr_po_tracking || [],
+        samples: formData.samples || [],
+        ml_management: formData.ml_management || { ml_task: '' },
         work_order_file: files.work_order_file,
         mas_file: files.mas_file
       };
@@ -293,6 +322,54 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
           required
           placeholder="Enter client name"
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="location">Location</Label>
+          <Input
+            id="location"
+            name="location"
+            value={formData.location}
+            onChange={handleInputChange}
+            placeholder="Enter project location"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="floor">Floor</Label>
+          <Input
+            id="floor"
+            name="floor"
+            value={formData.floor}
+            onChange={handleInputChange}
+            placeholder="Enter floor information"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="estimate_value">Estimate Value</Label>
+          <Input
+            id="estimate_value"
+            name="estimate_value"
+            value={formData.estimate_value}
+            onChange={handleInputChange}
+            placeholder="Enter estimate value"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="wo_number">Work Order Number</Label>
+          <Input
+            id="wo_number"
+            name="wo_number"
+            value={formData.wo_number}
+            onChange={handleInputChange}
+            placeholder="Enter work order number"
+          />
+        </div>
       </div>
 
       <div className="space-y-2">
