@@ -60,8 +60,24 @@ export default function ProjectSelection() {
   });
 
   const handleSelectProject = (project) => {
+    if (!project) {
+      console.error('No project provided to handleSelectProject');
+      return;
+    }
+    
+    const projectId = project.id || project.project_id;
+    if (!projectId) {
+      console.error('Project missing id:', project);
+      toast({
+        title: 'Error',
+        description: 'Project ID is missing. Please try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
     selectProject(project);
-    navigate(`/${project.id}`);
+    navigate(`/${projectId}`);
   };
 
   const ACCEPT_WO = '.pdf,.csv,.xlsx,.xls';

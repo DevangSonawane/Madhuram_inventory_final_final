@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation, useOutlet, useParams, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -8,7 +8,6 @@ import { useProject } from '@/contexts/ProjectContext';
 
 export function MainLayout() {
   const location = useLocation();
-  const outletComponent = useOutlet();
   const { projectId } = useParams();
   const { projects, selectedProject, selectProject, loading } = useProject();
   const navigate = useNavigate();
@@ -18,41 +17,27 @@ export function MainLayout() {
     if (!loading && projects.length > 0) {
       if (projectId) {
         // If we are on a project route, ensure the project is selected in context
-        if (selectedProject?.id !== projectId) {
-          const project = projects.find(p => p.id === projectId);
+        // Handle both string and number comparisons
+        const currentProjectId = String(selectedProject?.id || selectedProject?.project_id || '');
+        const urlProjectId = String(projectId);
+        
+        if (currentProjectId !== urlProjectId) {
+          const project = projects.find(p => 
+            String(p.id) === urlProjectId || 
+            String(p.project_id) === urlProjectId
+          );
           if (project) {
             selectProject(project);
           } else {
-            // Project not found in list - might be loading or invalid
-            // Don't redirect immediately to allow for potential sync issues, 
-            // but if it persists, user will see empty state or we can handle error
+            // Project not found in list - redirect to project selection
             console.warn(`Project ${projectId} not found in available projects`);
-             navigate('/projects');
+            navigate('/projects');
           }
         }
-      } else {
-        // No project ID in URL - we are at root or a non-project route
-        // If we have a selected project, maybe we should redirect to it?
-        // Or if this layout is used for non-project pages, do nothing.
-        // Current structure implies MainLayout IS for project pages mostly.
-        
-        // If we are at /projects, we shouldn't be in MainLayout usually if MainLayout requires a project
-        // But let's check the routes in App.jsx.
-        // App.jsx has /:projectId element={<MainLayout />}
-        // So MainLayout is ONLY mounted when there is a projectId.
-        
-        // However, if we somehow get here without one (e.g. strict mode double render or something),
-        // we should probably redirect.
-        
-        // But wait, the route definition is path="/:projectId" so projectId should always be present?
-        // Unless it matches something else?
-        
-        // If we are here, we expect a project.
       }
     } else if (!loading && projects.length === 0 && projectId) {
-        // Projects loaded but list is empty?
-        // This might happen if user has no projects.
-        navigate('/projects');
+      // Projects loaded but list is empty
+      navigate('/projects');
     }
   }, [projectId, projects, selectedProject, loading, navigate, selectProject]);
 
@@ -85,7 +70,7 @@ export function MainLayout() {
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="h-full"
             >
-              {outletComponent}
+              <Outlet />
             </motion.div>
           </AnimatePresence>
         </main>
