@@ -206,4 +206,25 @@ Error Response (404): { "error": "Project not found" }
 Once the files are uploaded, they are stored in the uploads directory on your VPS. The uploaded files can be accessed publicly via the following URL:
 URL Format:
  https://api.festmate.in/uploads/{filename}
+7) Compression api
+Endpoint: POST /api/compress
 
+
+Description:Compress the uploaded file.
+Request Body:- multipart/formdata upload file 
+File String
+
+
+Response (200):
+
+
+{
+  "original_size": "string",
+  "compressed_size": "string",
+  "url": "string",
+  "message": "string"
+}
+
+
+Error Response (404):Bad Request
+Server Error (500)

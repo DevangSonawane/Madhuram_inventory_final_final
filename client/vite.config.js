@@ -12,6 +12,14 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    proxy: {
+      // Proxy uploads in dev to avoid CORS when fetching compressed file from api.festmate.in
+      '/api-uploads': {
+        target: 'https://api.festmate.in',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-uploads/, '/uploads'),
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['pdfjs-dist'],

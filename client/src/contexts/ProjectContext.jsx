@@ -39,8 +39,9 @@ export const ProjectProvider = ({ children }) => {
     try {
       const result = await api.getProjects();
       if (result.success && result.data) {
-        // Map API response to match expected format
-        const mappedProjects = result.data.map(project => ({
+        // API returns array of projects; ensure we have an array before mapping
+        const rawProjects = Array.isArray(result.data) ? result.data : [];
+        const mappedProjects = rawProjects.map(project => ({
           id: project.project_id || project.id,
           project_id: project.project_id,
           name: project.project_name || project.name,
@@ -68,7 +69,7 @@ export const ProjectProvider = ({ children }) => {
         }));
         setProjects(mappedProjects);
       } else {
-        console.error('Failed to fetch projects:', result.error);
+        if (result?.error) console.error('Failed to fetch projects:', result.error);
         toast({
           title: 'Error',
           description: result.error || 'Failed to load projects',

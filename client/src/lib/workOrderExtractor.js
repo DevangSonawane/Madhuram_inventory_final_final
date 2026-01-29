@@ -50,6 +50,28 @@ function parseValue(s) {
 }
 
 /**
+ * Find a label/value pair in lines, supporting:
+ * - "Label: value"
+ * - "Label - value"
+ * - "Label" on one line and value on next line
+ */
+function findLabeledValue(lines, labelRe) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!labelRe.test(line)) continue;
+
+    // Same-line value (after ":" or "-")
+    const m = line.match(labelRe);
+    if (m && m[1] && String(m[1]).trim()) return String(m[1]).trim();
+
+    // Next-line value (common in PDFs)
+    const next = lines[i + 1] || '';
+    if (next && next.length > 2 && !labelRe.test(next)) return next.trim();
+  }
+  return '';
+}
+
+/**
  * @param {string} rawText - Full text from extractTextFromPdf
  * @returns {ExtractedWO}
  */
@@ -62,8 +84,8 @@ export function extractWorkOrderFields(rawText) {
   const text = rawText.replace(/\s+/g, ' ').trim();
 
   // ---- WO Number ----
-  const woNum = text.match(/(?:WO\s*Number|WO\s*No\.?|Work\s*Order\s*No\.?)\s*[:\s]+\s*([A-Za-z0-9-]+)/i)
-    || text.match(/(?:WO\s*#|PO\s*Number|PO\s*#)\s*[:\s]+\s*([A-Za-z0-9-]+)/i);
+  const woNum = text.match(/(?:WO\s*Number|WO\s*No\.?|Work\s*Order\s*No\.?)\s*[:\s]+\s*([A-Za-z0-9./_-]+)/i)
+    || text.match(/(?:WO\s*#|PO\s*Number|PO\s*#)\s*[:\s]+\s*([A-Za-z0-9./_-]+)/i);
   if (woNum) out.wo_number = woNum[1].trim();
 
   // ---- WO Date ----
@@ -76,20 +98,34 @@ export function extractWorkOrderFields(rawText) {
     || text.match(/(?:Total\s*Value|Total\s*Amount|Order\s*Value)\s*[:\s]+\s*INR\s+([\d,]+(?:\.\d{2})?)/i)
     || text.match(/INR\s+([\d,]+(?:\.\d{2})?)\s*\(Rupees\s+/i)
     || text.match(/(?:Total|Value)\s*[:\s]+\s*₹?\s*([\d,]+(?:\.\d{2})?)/i);
-  if (totalVal) out.total_value = parseValue(totalVal[1]) ? totalVal[1].replace(/,/g, '') : '';
+  if (totalVal) out.total_value = parseValue(totalVal[1]);
 
-  // ---- Building (Project name) ----
-  const building = text.match(/Building\s*[:\s]+\s*([^\n]+?)(?:\s+$|\s+(?:\d|Sr\s*No|Description|Page\s*No|Corporate|GSTIN|CIN))/i)
-    || text.match(/Building\s*[:\s]+\s*([A-Za-z0-9\s-]+?)(?=\s+\d|$)/i);
-  if (building) out.building = building[1].trim();
+  // ---- Building / Project name ----
+  // Prefer labeled lines (more reliable than global text regex)
+  const projectName =
+    findLabeledValue(lines, /^(?:Building|Project\s*Name|Project|Site\s*Name|Name\s*of\s*Project)\s*[:\-]\s*(.+)$/i)
+    || findLabeledValue(lines, /^(?:Work\s*Location|Location)\s*[:\-]\s*(.+)$/i);
+  if (projectName) out.building = projectName;
+  if (!out.building) {
+    const building = text.match(/Building\s*[:\s]+\s*([^\n]+?)(?:\s+$|\s+(?:\d|Sr\s*No|Description|Page\s*No|Corporate|GSTIN|CIN))/i)
+      || text.match(/Building\s*[:\s]+\s*([A-Za-z0-9\s-]+?)(?=\s+\d|$)/i);
+    if (building) out.building = building[1].trim();
+  }
 
   // ---- Description of Work ----
   const desc = text.match(/Description\s+of\s+Work\s*[:\s]+\s*([^\n]+?)(?=\s*(?:Sr\s*No|Building|Page\s*No|Corporate|$))/is);
   if (desc) out.description = desc[1].replace(/\s+/g, ' ').trim().slice(0, 500);
 
-  // ---- Issuer (client): line before "WORK ORDER FORM" / "WORK ORDER" ----
+  // ---- Issuer (client) ----
+  // First: explicit labels commonly present
+  const issuerLabeled =
+    findLabeledValue(lines, /^(?:Client|Client\s*Name|Customer|Customer\s*Name|Issued\s*By)\s*[:\-]\s*(.+)$/i)
+    || findLabeledValue(lines, /^(?:Company|Organisation|Organization)\s*[:\-]\s*(.+)$/i);
+  if (issuerLabeled) out.issuer = issuerLabeled;
+
+  // Fallback: line before "WORK ORDER FORM" / "WORK ORDER"
   const workOrderIdx = lines.findIndex((l) => /WORK\s*ORDER\s*(?:FORM)?/i.test(l));
-  if (workOrderIdx > 0) {
+  if (!out.issuer && workOrderIdx > 0) {
     const candidate = lines[workOrderIdx - 1].trim();
     if (candidate.length > 2 && !/^\d+$/.test(candidate) && !/^(WO|Date|To|Page)/i.test(candidate)) {
       out.issuer = candidate;
@@ -107,7 +143,13 @@ export function extractWorkOrderFields(rawText) {
     if (toLine) out.vendor = toLine;
   }
 
-  // ---- Site address: block between WO Date and "To:" (multi-line) ----
+  // ---- Site address / Location ----
+  // First: explicit labels
+  const addrLabeled =
+    findLabeledValue(lines, /^(?:Site\s*Address|Address\s*of\s*Site|Work\s*Site\s*Address|Project\s*Location|Location)\s*[:\-]\s*(.+)$/i);
+  if (addrLabeled) out.site_address = addrLabeled;
+
+  // Fallback: block between WO Date and "To:" (multi-line)
   const dateIdx = lines.findIndex((l, i) => {
     if (!/\d{1,2}[./]\d{1,2}[./]\d{4}/.test(l)) return false;
     const prev = i > 0 ? lines[i - 1] : '';
@@ -116,7 +158,7 @@ export function extractWorkOrderFields(rawText) {
   const searchStart = dateIdx !== -1 ? dateIdx + 1 : 0;
   const toLineIdx = lines.findIndex((l) => /^To\s*:\s*/i.test(l));
   const endIdx = toLineIdx !== -1 ? toLineIdx : lines.length;
-  if (endIdx > searchStart) {
+  if (!out.site_address && endIdx > searchStart) {
     const block = lines
       .slice(searchStart, endIdx)
       .filter((l) => !/^(WO\s|Date\s|GSTIN\s|Phone\s)/i.test(l) && l.length > 3)

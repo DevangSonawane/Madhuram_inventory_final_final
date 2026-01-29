@@ -169,13 +169,9 @@ export const api = {
     formData.append('project_name', projectData.project_name || '');
     
     // UPDATE uses product_duration (not project_startdate) per API docs
-    // Convert date to ISO string if needed
-    let productDuration = projectData.product_duration || '';
-    if (productDuration && !productDuration.includes('T') && productDuration.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      // If it's a date input (YYYY-MM-DD), convert to ISO
-      productDuration = new Date(productDuration + 'T00:00:00.000Z').toISOString();
-    }
-    formData.append('product_duration', productDuration);
+    // API example shows: "product_duration": "2023-12-31" (date string, not ISO)
+    // So we send date as-is (YYYY-MM-DD format from date input)
+    formData.append('product_duration', projectData.product_duration || '');
     
     formData.append('client_name', projectData.client_name || '');
     formData.append('location', projectData.location || '');
@@ -241,6 +237,47 @@ export const api = {
     if (!filename) return null;
     return `${BASE_URL}/uploads/${filename}`;
   },
+
+  /**
+   * In dev (localhost), returns same-origin URL so fetch goes through Vite proxy and avoids CORS.
+   * In production, returns the given absolute URL as-is.
+   */
+  getCompressedFileFetchUrl: (absoluteUrl) => {
+    if (typeof window === 'undefined') return absoluteUrl;
+    try {
+      const u = new URL(absoluteUrl);
+      if (u.hostname === 'api.festmate.in' && u.pathname.startsWith('/uploads/')) {
+        const pathAfterUploads = u.pathname.slice('/uploads/'.length);
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          return `${window.location.origin}/api-uploads/${pathAfterUploads}`;
+        }
+      }
+    } catch (_) {}
+    return absoluteUrl;
+  },
+
+  /**
+   * Compression API: POST /api/compress
+   * Uploads a file and compresses it.
+   * - Images: iteratively reduces quality/resolution so output is under 10MB.
+   * - Other files: Gzip compression (best effort).
+   * Request body: file (required, binary). Response: original_size, compressed_size, url, message.
+   */
+  compressFile: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file); // required field per API: file * string(binary)
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+
+    const response = await fetch(`${BASE_URL}/api/compress`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
 };
 
 // Helper to get token from storage
@@ -265,15 +302,40 @@ const getAuthHeaders = () => {
 
 // Helper to handle response
 const handleResponse = async (response) => {
-  const isJson = response.headers.get('content-type')?.includes('application/json');
-  const data = isJson ? await response.json() : null;
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  const isMultipart = contentType.includes('multipart');
+  
+  let data = null;
+  try {
+    if (isJson) {
+      data = await response.json();
+    } else if (isMultipart || contentType.includes('application/octet-stream') || contentType.includes('application/pdf')) {
+      // If response is a file/blob, return it as data
+      const blob = await response.blob();
+      return { success: true, data: blob, isBlob: true };
+    } else {
+      // Try to parse as JSON anyway, might be text/json
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+  } catch (e) {
+    // Invalid JSON (e.g. HTML error page)
+    if (!response.ok) {
+      return { success: false, error: response.statusText || 'Invalid response', status: response.status };
+    }
+  }
 
   if (!response.ok) {
     // Handle specific error codes with user-friendly messages
     let error = (data && (data.error || data.message)) || response.statusText;
     
     if (response.status === 413) {
-      error = 'File too large. Maximum file size is 10 MB. Please compress your file or use a smaller file.';
+      error = 'File too large for compression API. The file exceeds the server\'s maximum request size. Please compress the file manually using a compression tool (like 7-Zip, WinRAR, or online tools) before uploading.';
     } else if (response.status === 400) {
       error = data?.error || 'Invalid request. Please check your input and try again.';
     } else if (response.status === 401) {
