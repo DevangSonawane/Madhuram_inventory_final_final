@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Building, Calendar, MapPin, Loader2, Plus, LayoutGrid, Trash2, FileText, Upload, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
+import { MAX_FILE_SIZE, MAX_COMPRESSION_API_SIZE } from "@/constants/fileLimits";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractWorkOrderFields, mapExtractedToProjectForm } from "@/lib/workOrderExtractor";
 
@@ -46,13 +48,32 @@ export default function ProjectSelection() {
     value: '',
     wo_number: ''
   });
+  const [compressingWorkOrder, setCompressingWorkOrder] = useState(false);
   const workOrderInputRef = useRef(null);
+
+  const isPdf = (f) => f && (f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
+
+  const processWorkOrderFile = async (file) => {
+    if (!file || !(file instanceof File)) return;
+
+    // Simply set the file and run extraction for PDFs.
+    setWorkOrderFile(file);
+    if (isPdf(file)) runExtractAndPreview(file);
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'Large file selected',
+        description: `Selected file is ${(file.size / 1024 / 1024).toFixed(1)} MB. If larger than ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)} MB, it will be compressed automatically when you click Create Project.`,
+      });
+    }
+  };
 
   useEffect(() => {
     fetchProjects();
   }, []);
 
-  const filteredProjects = projects.filter(project => {
+  const projectList = Array.isArray(projects) ? projects : [];
+  const filteredProjects = projectList.filter(project => {
     if (!user) return false;
     if (user.role === 'admin') return true;
     if (user.role === 'project_manager') return project.manager_id === user.id;
@@ -81,7 +102,6 @@ export default function ProjectSelection() {
   };
 
   const ACCEPT_WO = '.pdf,.csv,.xlsx,.xls';
-  const isPdf = (f) => f && (f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
 
   const runExtractAndPreview = async (file) => {
     setExtractError(null);
@@ -151,8 +171,8 @@ export default function ProjectSelection() {
         });
       } else {
         toast({
-          title: 'Extraction complete',
-          description: "Couldn't extract specific fields, but PDF is ready. Please fill the form manually.",
+          title: 'PDF ready',
+          description: "We couldn’t auto-detect fields from this PDF, but it’s attached and ready. Please fill the form manually.",
           variant: 'default',
         });
       }
@@ -172,52 +192,28 @@ export default function ProjectSelection() {
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Validate file size (max 10MB to avoid 413 errors)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: 'File too large',
-        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
-        variant: 'destructive',
-      });
-      e.target.value = ''; // Clear the input
-      return;
-    }
-    
-    setWorkOrderFile(file);
-    if (isPdf(file)) runExtractAndPreview(file);
+    e.target.value = '';
+    await processWorkOrderFile(file);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (compressingWorkOrder) return;
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    
+
     const ext = (file.name || '').toLowerCase();
     const ok = ext.endsWith('.pdf') || ext.endsWith('.csv') || ext.endsWith('.xlsx') || ext.endsWith('.xls');
     if (!ok) {
       toast({ title: 'Invalid file', description: 'Use PDF, CSV, or Excel.', variant: 'destructive' });
       return;
     }
-    
-    // Validate file size (max 10MB to avoid 413 errors)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: 'File too large',
-        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setWorkOrderFile(file);
-    if (isPdf(file)) runExtractAndPreview(file);
+
+    await processWorkOrderFile(file);
   };
 
   const handleDragOver = (e) => {
@@ -268,6 +264,73 @@ export default function ProjectSelection() {
         status: newProject.status || 'Planning',
         work_order_file: workOrderFile || null
       };
+      
+      // If work order file is larger than allowed upload size, compress it before sending
+      if (projectData.work_order_file && projectData.work_order_file.size > MAX_FILE_SIZE) {
+        const original = projectData.work_order_file;
+
+        if (original.size > MAX_COMPRESSION_API_SIZE) {
+          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression API limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
+          toast({ title: 'File too large', description: msg, variant: 'destructive' });
+          setIsCreating(false);
+          return;
+        }
+
+        setCompressingWorkOrder(true);
+        toast({ title: 'Compressing', description: 'Compressing work order before creating project…' });
+
+        try {
+          const compResult = await api.compressFile(original);
+          if (!compResult || !compResult.success || !compResult.data || !compResult.data.url) {
+            throw new Error((compResult && compResult.error) || 'Compression API failed to return a downloadable file URL');
+          }
+
+          let fileUrl = compResult.data.url;
+          if (!fileUrl.startsWith('http')) {
+            fileUrl = fileUrl.startsWith('/') ? `https://api.festmate.in${fileUrl}` : `https://api.festmate.in/uploads/${fileUrl}`;
+          } else {
+            fileUrl = fileUrl.replace(/^http:\/\//i, 'https://');
+          }
+          fileUrl = api.getCompressedFileFetchUrl(fileUrl);
+
+          // Attempt authenticated fetch if we have a stored token
+          let response;
+          const token = localStorage.getItem('inventory_user');
+          if (token) {
+            try {
+              const user = JSON.parse(token);
+              response = await fetch(fileUrl, {
+                headers: { Authorization: `Bearer ${user.token}` }
+              });
+            } catch (err) {
+              response = await fetch(fileUrl);
+            }
+          } else {
+            response = await fetch(fileUrl);
+          }
+
+          if (!response.ok) {
+            throw new Error(`Failed to download compressed file: ${response.status} ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+          if (!blob || blob.size === 0) throw new Error('Compressed file is empty');
+
+          const compressedFile = new File([blob], original.name, { type: original.type || blob.type });
+          projectData.work_order_file = compressedFile;
+          setWorkOrderFile(compressedFile);
+          toast({ title: 'File compressed', description: 'Work order compressed and attached.' });
+        } catch (err) {
+          console.error('Compression before create failed:', err);
+          const msg = err?.message || 'Compression failed before project creation.';
+          toast({ title: 'Compression failed', description: msg, variant: 'destructive' });
+          setCompressingWorkOrder(false);
+          setIsCreating(false);
+          return;
+        } finally {
+          setCompressingWorkOrder(false);
+        }
+      }
 
       const result = await createProject(projectData);
       
@@ -321,7 +384,7 @@ export default function ProjectSelection() {
   const handleDeleteProject = async () => {
     if (projectToDelete) {
       try {
-        await deleteProject(projectToDelete.id);
+        await deleteProject(projectToDelete.id ?? projectToDelete.project_id);
         toast({
           title: "Project Deleted",
           description: `Project ${projectToDelete.name} has been deleted successfully.`,
@@ -466,8 +529,15 @@ export default function ProjectSelection() {
                             accept={ACCEPT_WO}
                             onChange={handleFileChange}
                             className="sr-only"
+                            disabled={compressingWorkOrder}
                           />
-                          {workOrderFile ? (
+                          {compressingWorkOrder ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                              <span className="font-medium">Compressing file…</span>
+                              <span className="text-sm text-muted-foreground">This may take a moment for large files</span>
+                            </div>
+                          ) : workOrderFile ? (
                             <div className="flex flex-col items-center gap-2">
                               <FileText className="h-10 w-10 text-primary" />
                               <span className="font-medium">{workOrderFile.name}</span>
@@ -603,7 +673,7 @@ export default function ProjectSelection() {
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredProjects.map((project) => (
-            <Card key={project.id} className="hover:shadow-lg transition-shadow cursor-pointer border-t-4 border-t-primary relative group" onClick={() => handleSelectProject(project)}>
+            <Card key={project.id ?? project.project_id ?? project.name} className="hover:shadow-lg transition-shadow cursor-pointer border-t-4 border-t-primary relative group" onClick={() => handleSelectProject(project)}>
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div>

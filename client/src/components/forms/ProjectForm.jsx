@@ -5,9 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Upload, FileText, CheckCircle2 } from "lucide-react";
+import { X, Upload, FileText, CheckCircle2, Shrink, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { MAX_FILE_SIZE, MAX_COMPRESSION_API_SIZE } from "@/constants/fileLimits";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractWorkOrderFields, mapExtractedToProjectFormForm } from "@/lib/workOrderExtractor";
 
@@ -45,6 +46,10 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [compressing, setCompressing] = useState({
+    work_order_file: false,
+    mas_file: false
+  });
   const [extractedPreview, setExtractedPreview] = useState({
     project_name: '',
     client_name: '',
@@ -57,6 +62,34 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
 
   const ACCEPT_WO = '.pdf,.csv,.xlsx,.xls,.doc,.docx';
   const isPdf = (f) => f && (f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
+
+  // Process file: set file and preview, run extraction for PDFs.
+  // Do NOT auto-call the compression API here. Compression (if needed) will be
+  // performed just before the create-project API during form submission.
+  const processFileForUpload = async (file, fileType) => {
+    if (!file || !(file instanceof File)) return;
+
+    const setFileAndPreview = (f) => {
+      setFiles(prev => ({ ...prev, [fileType]: f }));
+      setFilePreviews(prev => {
+        const oldUrl = prev[fileType];
+        if (oldUrl && oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
+        return { ...prev, [fileType]: URL.createObjectURL(f) };
+      });
+      if (fileType === 'work_order_file' && isPdf(f)) runExtractAndPreview(f);
+    };
+
+    setFileAndPreview(file);
+
+    // Inform user if file exceeds the final upload limit so they know it will
+    // be compressed at submission time (or they'll need to compress manually).
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: 'Large file selected',
+        description: `Selected file is ${(file.size / 1024 / 1024).toFixed(1)} MB. If larger than ${ (MAX_FILE_SIZE / 1024 / 1024).toFixed(0)} MB, it will be compressed automatically before creating the project.`,
+      });
+    }
+  };
 
   useEffect(() => {
     if (project) {
@@ -187,8 +220,8 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         });
       } else {
         toast({
-          title: 'Extraction complete',
-          description: "Couldn't extract specific fields, but PDF is ready. Please fill the form manually.",
+          title: 'PDF ready',
+          description: "We couldn’t auto-detect fields from this PDF, but it’s attached and ready. Please fill the form manually.",
           variant: 'default',
         });
       }
@@ -208,54 +241,28 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
     }
   };
 
-  const handleFileChange = (e, fileType) => {
+  const handleFileChange = async (e, fileType) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Validate file size (max 10MB to avoid 413 errors)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: 'File too large',
-        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
-        variant: 'destructive',
-      });
-      e.target.value = ''; // Clear the input
-      return;
-    }
-    
-    setFiles(prev => ({ ...prev, [fileType]: file }));
-    setFilePreviews(prev => ({ ...prev, [fileType]: URL.createObjectURL(file) }));
-    if (fileType === 'work_order_file' && isPdf(file)) runExtractAndPreview(file);
+    e.target.value = ''; // Reset so same file can be selected again
+    await processFileForUpload(file, fileType);
   };
 
-  const handleWorkOrderDrop = (e) => {
+  const handleWorkOrderDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (compressing.work_order_file) return;
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    
+
     const ext = (file.name || '').toLowerCase();
     const ok = ['.pdf', '.csv', '.xlsx', '.xls', '.doc', '.docx'].some((x) => ext.endsWith(x));
     if (!ok) {
       toast({ title: 'Invalid file', description: 'Use PDF, CSV, Excel, or Word.', variant: 'destructive' });
       return;
     }
-    
-    // Validate file size (max 10MB to avoid 413 errors)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: 'File too large',
-        description: `File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds maximum allowed size of 10 MB. Please compress or use a smaller file.`,
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setFiles(prev => ({ ...prev, work_order_file: file }));
-    setFilePreviews(prev => ({ ...prev, work_order_file: URL.createObjectURL(file) }));
-    if (isPdf(file)) runExtractAndPreview(file);
+
+    await processFileForUpload(file, 'work_order_file');
   };
 
   const handleDragOver = (e) => {
@@ -281,6 +288,122 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
       setExtractError(null);
       setPreviewOpen(false);
       if (workOrderInputRef.current) workOrderInputRef.current.value = '';
+    }
+  };
+
+  const handleCompressFile = async (fileType) => {
+    const file = files[fileType];
+    if (!file || !(file instanceof File)) {
+      toast({
+        title: 'No file selected',
+        description: 'Please select a file to compress.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (file.size > MAX_COMPRESSION_API_SIZE) {
+      toast({
+        title: 'File too large to compress',
+        description: `File is ${(file.size / 1024 / 1024).toFixed(1)} MB. Maximum for compression is ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress manually.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCompressing(prev => ({ ...prev, [fileType]: true }));
+
+    try {
+      const result = await api.compressFile(file);
+      
+      if (result.success && result.data) {
+        const { url, original_size, compressed_size, message } = result.data;
+        
+        if (!url) {
+          throw new Error('Compression succeeded but no file URL returned');
+        }
+        
+        // Fetch the compressed file from the URL
+        // URL from API should be a full URL (e.g., https://api.festmate.in/uploads/filename)
+        // If it's relative, construct the full URL; if http, normalize to https to avoid 301
+        let fileUrl = url;
+        if (!url.startsWith('http')) {
+          // If relative URL, construct full URL
+          const baseUrl = 'https://api.festmate.in';
+          fileUrl = url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/uploads/${url}`;
+        } else {
+          fileUrl = url.replace(/^http:\/\//i, 'https://');
+        }
+        // In dev, use proxy URL to avoid CORS when fetching from api.festmate.in
+        fileUrl = api.getCompressedFileFetchUrl(fileUrl);
+        
+        // Fetch the compressed file (uploads are typically public, no auth needed)
+        const response = await fetch(fileUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch compressed file: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const compressedFile = new File([blob], file.name, { type: file.type || blob.type });
+        
+        // Replace the original file with compressed version
+        setFiles(prev => ({ ...prev, [fileType]: compressedFile }));
+        
+        // Update preview
+        const newPreviewUrl = URL.createObjectURL(compressedFile);
+        setFilePreviews(prev => {
+          // Clean up old blob URL
+          const oldUrl = prev[fileType];
+          if (oldUrl && oldUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(oldUrl);
+          }
+          return { ...prev, [fileType]: newPreviewUrl };
+        });
+
+        // Show success message with compression stats
+        try {
+          const originalBytes = typeof original_size === 'string' ? parseInt(original_size) : original_size;
+          const compressedBytes = typeof compressed_size === 'string' ? parseInt(compressed_size) : compressed_size;
+          
+          if (originalBytes && compressedBytes) {
+            const originalMB = (originalBytes / 1024 / 1024).toFixed(2);
+            const compressedMB = (compressedBytes / 1024 / 1024).toFixed(2);
+            const savings = ((1 - compressedBytes / originalBytes) * 100).toFixed(1);
+            
+            toast({
+              title: 'File compressed successfully',
+              description: `Reduced from ${originalMB} MB to ${compressedMB} MB (${savings}% smaller)`,
+            });
+          } else {
+            toast({
+              title: 'File compressed successfully',
+              description: message || 'File has been compressed and is ready to upload.',
+            });
+          }
+        } catch (err) {
+          // If size parsing fails, just show a simple success message
+          toast({
+            title: 'File compressed successfully',
+            description: message || 'File has been compressed and is ready to upload.',
+          });
+        }
+
+        // If it's a work order PDF, re-run extraction
+        if (fileType === 'work_order_file' && isPdf(compressedFile)) {
+          runExtractAndPreview(compressedFile);
+        }
+      } else {
+        throw new Error(result.error || 'Compression failed');
+      }
+    } catch (error) {
+      console.error('Compression error:', error);
+      toast({
+        title: 'Compression failed',
+        description: error.message || 'Failed to compress file. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCompressing(prev => ({ ...prev, [fileType]: false }));
     }
   };
 
@@ -369,6 +492,91 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         work_order_file: files.work_order_file,
         mas_file: files.mas_file
       };
+
+      // If work_order_file is larger than allowed upload size, compress it
+      if (submitData.work_order_file && submitData.work_order_file.size > MAX_FILE_SIZE) {
+        const original = submitData.work_order_file;
+
+        if (original.size > MAX_COMPRESSION_API_SIZE) {
+          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression API limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
+          toast({ title: 'File too large', description: msg, variant: 'destructive' });
+          setError(msg);
+          setLoading(false);
+          return;
+        }
+
+        setCompressing(prev => ({ ...prev, work_order_file: true }));
+        toast({ title: 'Compressing', description: 'Compressing work order before creating project…' });
+
+        try {
+          const compResult = await api.compressFile(original);
+          if (!compResult || !compResult.success || !compResult.data || !compResult.data.url) {
+            throw new Error((compResult && compResult.error) || 'Compression API failed to return a downloadable file URL');
+          }
+
+          let fileUrl = compResult.data.url;
+          if (!fileUrl.startsWith('http')) {
+            fileUrl = fileUrl.startsWith('/') ? `https://api.festmate.in${fileUrl}` : `https://api.festmate.in/uploads/${fileUrl}`;
+          } else {
+            fileUrl = fileUrl.replace(/^http:\/\//i, 'https://');
+          }
+          fileUrl = api.getCompressedFileFetchUrl(fileUrl);
+
+          // Attempt authenticated fetch if we have a stored token
+          let response;
+          const token = localStorage.getItem('inventory_user');
+          if (token) {
+            try {
+              const user = JSON.parse(token);
+              response = await fetch(fileUrl, {
+                headers: { Authorization: `Bearer ${user.token}` }
+              });
+            } catch (err) {
+              response = await fetch(fileUrl);
+            }
+          } else {
+            response = await fetch(fileUrl);
+          }
+
+          if (!response.ok) {
+            throw new Error(`Failed to download compressed file: ${response.status} ${response.statusText}`);
+          }
+
+          const blob = await response.blob();
+          if (!blob || blob.size === 0) throw new Error('Compressed file is empty');
+
+          const compressedFile = new File([blob], original.name, { type: original.type || blob.type });
+          // Replace file in submit payload and UI state
+          submitData.work_order_file = compressedFile;
+          setFiles(prev => ({ ...prev, work_order_file: compressedFile }));
+
+          // Show compression stats if provided
+          try {
+            const originalBytes = typeof compResult.data.original_size === 'string' ? parseInt(compResult.data.original_size) : compResult.data.original_size;
+            const compressedBytes = typeof compResult.data.compressed_size === 'string' ? parseInt(compResult.data.compressed_size) : compResult.data.compressed_size;
+            if (originalBytes && compressedBytes) {
+              const originalMB = (originalBytes / 1024 / 1024).toFixed(2);
+              const compressedMB = (compressedBytes / 1024 / 1024).toFixed(2);
+              const savings = ((1 - compressedBytes / originalBytes) * 100).toFixed(1);
+              toast({ title: 'File compressed', description: `Reduced from ${originalMB} MB to ${compressedMB} MB (${savings}% smaller)` });
+            } else {
+              toast({ title: 'File compressed', description: compResult.data.message || 'File compressed and attached.' });
+            }
+          } catch (err) {
+            toast({ title: 'File compressed', description: compResult.data.message || 'File compressed and attached.' });
+          }
+        } catch (err) {
+          console.error('Compression before create failed:', err);
+          const msg = err?.message || 'Compression failed before project creation.';
+          toast({ title: 'Compression failed', description: msg, variant: 'destructive' });
+          setError(msg);
+          setCompressing(prev => ({ ...prev, work_order_file: false }));
+          setLoading(false);
+          return;
+        } finally {
+          setCompressing(prev => ({ ...prev, work_order_file: false }));
+        }
+      }
 
       let result;
       if (project?.project_id) {
@@ -507,8 +715,15 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
             accept={ACCEPT_WO}
             onChange={(e) => handleFileChange(e, 'work_order_file')}
             className="sr-only"
+            disabled={compressing.work_order_file}
           />
-          {files.work_order_file ? (
+          {compressing.work_order_file && !files.work_order_file ? (
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              <span className="font-medium">Compressing file…</span>
+              <span className="text-sm text-muted-foreground">This may take a moment for large files</span>
+            </div>
+          ) : files.work_order_file ? (
             <div className="flex flex-col items-center gap-2">
               <FileText className="h-8 w-8 text-primary" />
               <span className="font-medium">{files.work_order_file.name}</span>
@@ -519,7 +734,26 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
                 {isPdf(files.work_order_file) && (extracting ? ' · Extracting…' : ' · PDF ready')}
               </span>
               {extractError && <span className="text-sm text-destructive">{extractError}</span>}
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap justify-center">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleCompressFile('work_order_file')}
+                  disabled={compressing.work_order_file}
+                >
+                  {compressing.work_order_file ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Compressing...
+                    </>
+                  ) : (
+                    <>
+                      <Shrink className="h-4 w-4 mr-1" />
+                      Compress
+                    </>
+                  )}
+                </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => workOrderInputRef.current?.click()}>
                   Replace
                 </Button>
@@ -719,10 +953,10 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
             accept=".pdf,.doc,.docx"
             onChange={(e) => handleFileChange(e, 'mas_file')}
             className="flex-1"
-            disabled={!!filePreviews.mas_file && !files.mas_file}
+            disabled={(!!filePreviews.mas_file && !files.mas_file) || compressing.mas_file}
           />
           {filePreviews.mas_file && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <a
                 href={filePreviews.mas_file}
                 target="_blank"
@@ -733,14 +967,35 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
                 View
               </a>
               {files.mas_file && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeFile('mas_file')}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCompressFile('mas_file')}
+                    disabled={compressing.mas_file}
+                  >
+                    {compressing.mas_file ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        Compressing...
+                      </>
+                    ) : (
+                      <>
+                        <Shrink className="h-4 w-4 mr-1" />
+                        Compress
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFile('mas_file')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </>
               )}
             </div>
           )}
