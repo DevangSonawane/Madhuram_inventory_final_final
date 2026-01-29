@@ -29,7 +29,14 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        // Mobile-first: make the dialog fullscreen on small screens for better usability.
+        // On larger screens (sm+), center it with constrained width/height and rounded corners.
+        // Keep internal scrolling (overlay-style) and hide native scrollbar visually.
+        // Base: fullscreen overlay on very small screens.
+        // At sm+ breakpoints unset inset and position at center using left/top + negative translate.
+        // Also include `.dialog-centered` as a CSS fallback for production builds where
+        // Tailwind responsive classes might be missing or purged.
+        "fixed inset-0 sm:inset-auto z-50 grid w-full h-full overflow-auto hide-scrollbar p-4 duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out sm:left-1/2 sm:top-1/2 sm:h-auto sm:w-full sm:max-w-lg sm:max-h-[90vh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:gap-4 sm:shadow-lg sm:p-6 sm:rounded-lg sm:border bg-background dialog-centered",
         className
       )}
       {...props}>

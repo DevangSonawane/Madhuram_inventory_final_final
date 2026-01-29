@@ -608,7 +608,7 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 px-2 sm:px-0">
       {error && (
         <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
           {error}

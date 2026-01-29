@@ -153,3 +153,25 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5); 
 }
+
+/* Utility to hide native scrollbars but keep scrolling functional */
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Fallback centering for production builds (avoids relying solely on Tailwind responsive classes
+   which can sometimes be purged or behave differently in production). This centers the dialog
+   for screens >= 640px (sm breakpoint). */
+@media (min-width: 640px) {
+  .dialog-centered {
+    inset: auto !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    max-height: 90vh;
+  }
+}

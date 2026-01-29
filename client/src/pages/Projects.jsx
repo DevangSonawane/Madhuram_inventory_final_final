@@ -151,17 +151,19 @@ export default function Projects() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" /> New Project</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
               <DialogDescription>
                 Fill in the project details below. Fields marked with * are required.
               </DialogDescription>
             </DialogHeader>
-            <ProjectForm
-              onSuccess={handleCreateSuccess}
-              onCancel={() => setIsNewProjectOpen(false)}
-            />
+            <div className="h-[70vh] overflow-y-auto pr-4">
+              <ProjectForm
+                onSuccess={handleCreateSuccess}
+                onCancel={() => setIsNewProjectOpen(false)}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -431,21 +433,23 @@ export default function Projects() {
       </Dialog>
 
       <Dialog open={isEditProjectOpen} onOpenChange={setIsEditProjectOpen}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Edit Project</DialogTitle>
             <DialogDescription>
               Update the project details below. Fields marked with * are required.
             </DialogDescription>
           </DialogHeader>
-          <ProjectForm
-            project={projectToEdit}
-            onSuccess={handleEditSuccess}
-            onCancel={() => {
-              setIsEditProjectOpen(false);
-              setProjectToEdit(null);
-            }}
-          />
+          <div className="h-[70vh] overflow-y-auto pr-4">
+            <ProjectForm
+              project={projectToEdit}
+              onSuccess={handleEditSuccess}
+              onCancel={() => {
+                setIsEditProjectOpen(false);
+                setProjectToEdit(null);
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
