@@ -278,6 +278,73 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  // BOQ (Bill of Quantities) – Base URL: https://api.festmate.in, Storage: /uploads/boq
+  createBOQ: async (data) => {
+    const formData = new FormData();
+    formData.append('category', data.category || '');
+    formData.append('project_id', data.project_id);
+    if (data.item_code != null && data.item_code !== '') formData.append('item_code', data.item_code);
+    if (data.description != null && data.description !== '') formData.append('description', data.description);
+    if (data.floor != null && data.floor !== '') formData.append('floor', data.floor);
+    if (data.unit != null && data.unit !== '') formData.append('unit', data.unit);
+    if (data.quantity != null && data.quantity !== '') formData.append('quantity', data.quantity);
+    if (data.rate != null && data.rate !== '') formData.append('rate', data.rate);
+    if (data.amount != null && data.amount !== '') formData.append('amount', data.amount);
+    if (data.boq_file instanceof File) formData.append('boq_file', data.boq_file);
+
+    const response = await fetch(`${BASE_URL}/api/boq`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  getBOQs: async () => {
+    const response = await fetch(`${BASE_URL}/api/boq`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getBOQById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/boq/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getBOQsByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/boq/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateBOQ: async (id, data) => {
+    const formData = new FormData();
+    const fields = ['category', 'item_code', 'description', 'floor', 'unit', 'quantity', 'rate', 'amount', 'project_id'];
+    fields.forEach((f) => {
+      if (data[f] != null && data[f] !== '') formData.append(f, data[f]);
+    });
+    if (data.boq_file instanceof File) formData.append('boq_file', data.boq_file);
+
+    const response = await fetch(`${BASE_URL}/api/boq/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  deleteBOQ: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/boq/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
 };
 
 // Helper to get token from storage

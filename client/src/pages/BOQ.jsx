@@ -4,54 +4,62 @@ import { useProject } from '@/contexts/ProjectContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Download, Upload, Plus, FileSpreadsheet, Save, FileText, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractBOQFromText, mapBOQItemsToTable } from "@/lib/boqExtractor";
+import { api } from "@/lib/api";
 
-const STORAGE_KEY = "boq_items_by_project";
-
-function loadStoredItems(projectId) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    return data[projectId] ?? null;
-  } catch {
-    return null;
-  }
+function normalizeBoqItem(apiItem) {
+  return {
+    id: apiItem.boq_id,
+    boq_id: apiItem.boq_id,
+    code: apiItem.item_code ?? apiItem.code,
+    item_code: apiItem.item_code,
+    category: apiItem.category,
+    description: apiItem.description,
+    floor: apiItem.floor,
+    unit: apiItem.unit,
+    quantity: apiItem.quantity,
+    rate: apiItem.rate,
+    amount: apiItem.amount,
+    boq_file: apiItem.boq_file,
+    project_id: apiItem.project_id,
+    created_at: apiItem.created_at,
+  };
 }
 
-function saveStoredItems(projectId, items) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY) || "{}";
-    const data = JSON.parse(raw);
-    data[projectId] = items;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.warn("BOQ save failed", e);
-  }
+function toApiPayload(item, projectId) {
+  return {
+    category: item.category ?? '',
+    item_code: item.code ?? item.item_code ?? '',
+    description: item.description ?? '',
+    floor: item.floor ?? '',
+    unit: item.unit ?? '',
+    quantity: item.quantity != null ? Number(item.quantity) : '',
+    rate: item.rate != null ? Number(item.rate) : '',
+    amount: item.amount != null ? Number(item.amount) : '',
+    project_id: projectId ?? item.project_id,
+    boq_file: item.boq_file instanceof File ? item.boq_file : undefined,
+  };
 }
 
-const DEFAULT_ITEMS = [
-  { id: 1, category: "Plumbing", code: "PLM-001", description: "CPVC Pipe 2 inch", unit: "Mtr", quantity: 5000, rate: 450, amount: 2250000, floor: "Typical" },
-  { id: 2, category: "Plumbing", code: "PLM-002", description: "Ball Valve 2 inch", unit: "Nos", quantity: 200, rate: 1200, amount: 240000, floor: "All" },
-  { id: 3, category: "Sanitary", code: "SAN-001", description: "Wall Mounted WC", unit: "Nos", quantity: 450, rate: 15000, amount: 6750000, floor: "Typical" },
-  { id: 4, category: "Electrical", code: "ELE-005", description: "Copper Wire 2.5mm", unit: "Coil", quantity: 1000, rate: 2500, amount: 2500000, floor: "All" },
-];
+const EMPTY_FORM = { category: '', item_code: '', description: '', floor: '', unit: '', quantity: '', rate: '', amount: '' };
 
 export default function BOQ() {
   const { toast } = useToast();
-  const { projectId } = useParams();
+  const { projectId: routeProjectId } = useParams();
   const { selectedProject } = useProject();
-  const projectKey = selectedProject?.id ?? projectId ?? 'default';
+  const projectId = selectedProject?.id ?? selectedProject?.project_id ?? routeProjectId ?? null;
 
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const [extractedItems, setExtractedItems] = useState([]);
   const [extractedProjectName, setExtractedProjectName] = useState("");
@@ -62,15 +70,38 @@ export default function BOQ() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [itemForm, setItemForm] = useState(EMPTY_FORM);
+  const [formFile, setFormFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const addFormRef = useRef(null);
+
+  const fetchItems = async () => {
+    if (!projectId) {
+      setItems([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.getBOQsByProject(projectId);
+      if (res.success && Array.isArray(res.data)) {
+        setItems(res.data.map(normalizeBoqItem));
+      } else {
+        setItems([]);
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error", description: "Failed to load BOQ items.", variant: "destructive" });
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const stored = loadStoredItems(projectKey);
-    setItems(stored ?? DEFAULT_ITEMS);
-  }, [projectKey]);
-
-  useEffect(() => {
-    saveStoredItems(projectKey, items);
-  }, [projectKey, items]);
+    fetchItems();
+  }, [projectId]);
 
   const isPdf = (f) => f && (f.type === "application/pdf" || (f.name || "").toLowerCase().endsWith(".pdf"));
 
@@ -128,23 +159,158 @@ export default function BOQ() {
     e.stopPropagation();
   };
 
-  const addExtractedToBOQ = () => {
-    const maxId = items.length ? Math.max(...items.map((i) => i.id)) : 0;
-    const withIds = extractedItems.map((it, i) => ({ ...it, id: maxId + i + 1 }));
-    setItems((prev) => [...prev, ...withIds]);
-    setImportPreviewOpen(false);
-    setBoqFile(null);
-    if (boqInputRef.current) boqInputRef.current.value = "";
-    toast({ title: "Added to BOQ", description: `${withIds.length} item(s) added.` });
+  const addExtractedToBOQ = async () => {
+    if (projectId) {
+      setSaving(true);
+      try {
+        let created = 0;
+        for (const it of extractedItems) {
+          const payload = toApiPayload({ ...it, code: it.code ?? it.item_code }, projectId);
+          const res = await api.createBOQ(payload);
+          if (res.success) created++;
+        }
+        await fetchItems();
+        setImportPreviewOpen(false);
+        setBoqFile(null);
+        if (boqInputRef.current) boqInputRef.current.value = "";
+        toast({ title: "Added to BOQ", description: `${created} item(s) added.` });
+      } catch (e) {
+        toast({ title: "Error", description: "Failed to add some items.", variant: "destructive" });
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      const maxId = items.length ? Math.max(...items.map((i) => i.id)) : 0;
+      const withIds = extractedItems.map((it, i) => ({ ...it, id: maxId + i + 1 }));
+      setItems((prev) => [...prev, ...withIds]);
+      setImportPreviewOpen(false);
+      setBoqFile(null);
+      if (boqInputRef.current) boqInputRef.current.value = "";
+      toast({ title: "Added to BOQ", description: `${withIds.length} item(s) added. Select a project to save to server.` });
+    }
   };
 
-  const replaceBOQWithExtracted = () => {
-    const withIds = extractedItems.map((it, i) => ({ ...it, id: i + 1 }));
-    setItems(withIds);
-    setImportPreviewOpen(false);
-    setBoqFile(null);
-    if (boqInputRef.current) boqInputRef.current.value = "";
-    toast({ title: "BOQ replaced", description: `${withIds.length} item(s) loaded from PDF.` });
+  const replaceBOQWithExtracted = async () => {
+    if (projectId) {
+      setSaving(true);
+      try {
+        for (const item of items) {
+          await api.deleteBOQ(item.id);
+        }
+        let created = 0;
+        for (const it of extractedItems) {
+          const payload = toApiPayload({ ...it, code: it.code ?? it.item_code }, projectId);
+          const res = await api.createBOQ(payload);
+          if (res.success) created++;
+        }
+        await fetchItems();
+        setImportPreviewOpen(false);
+        setBoqFile(null);
+        if (boqInputRef.current) boqInputRef.current.value = "";
+        toast({ title: "BOQ replaced", description: `${created} item(s) loaded from PDF.` });
+      } catch (e) {
+        toast({ title: "Error", description: "Failed to replace BOQ.", variant: "destructive" });
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      const withIds = extractedItems.map((it, i) => ({ ...it, id: i + 1 }));
+      setItems(withIds);
+      setImportPreviewOpen(false);
+      setBoqFile(null);
+      if (boqInputRef.current) boqInputRef.current.value = "";
+      toast({ title: "BOQ replaced", description: `${withIds.length} item(s) loaded from PDF. Select a project to save to server.` });
+    }
+  };
+
+  const openAddDialog = () => {
+    setItemForm(EMPTY_FORM);
+    setFormFile(null);
+    setAddDialogOpen(true);
+  };
+
+  const handleAddItem = async (e) => {
+    e?.preventDefault();
+    if (!projectId) {
+      toast({ title: "Select project", description: "Choose a project first.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = { ...itemForm, project_id: projectId };
+      if (formFile instanceof File) payload.boq_file = formFile;
+      const res = await api.createBOQ(payload);
+      if (res.success) {
+        await fetchItems();
+        setAddDialogOpen(false);
+        setItemForm(EMPTY_FORM);
+        setFormFile(null);
+        toast({ title: "Item added", description: "BOQ item created." });
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to add item.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: e.message || "Failed to add item.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditDialog = (item) => {
+    setEditItem(item);
+    setItemForm({
+      category: item.category ?? '',
+      item_code: item.code ?? item.item_code ?? '',
+      description: item.description ?? '',
+      floor: item.floor ?? '',
+      unit: item.unit ?? '',
+      quantity: item.quantity ?? '',
+      rate: item.rate ?? '',
+      amount: item.amount ?? '',
+    });
+    setFormFile(null);
+  };
+
+  const handleEditItem = async (e) => {
+    e?.preventDefault();
+    if (!editItem) return;
+    setSaving(true);
+    try {
+      const payload = { ...itemForm, item_code: itemForm.item_code || undefined };
+      if (formFile instanceof File) payload.boq_file = formFile;
+      const res = await api.updateBOQ(editItem.id, payload);
+      if (res.success) {
+        await fetchItems();
+        setEditItem(null);
+        setItemForm(EMPTY_FORM);
+        setFormFile(null);
+        toast({ title: "Item updated", description: "BOQ item saved." });
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to update item.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: e.message || "Failed to update item.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteItem = async (item) => {
+    if (!window.confirm("Delete this BOQ item?")) return;
+    setSaving(true);
+    try {
+      const res = await api.deleteBOQ(item.id);
+      if (res.success) {
+        await fetchItems();
+        toast({ title: "Item deleted", description: "BOQ item removed." });
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to delete item.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: e.message || "Failed to delete item.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filteredItems = items.filter((item) => {
@@ -167,7 +333,7 @@ export default function BOQ() {
   const endIndex = startIndex + itemsPerPage;
   const paginatedItems = filteredItems.slice(startIndex, endIndex);
 
-  const totalAmount = filteredItems.reduce((s, i) => s + (i.amount || 0), 0);
+  const totalAmount = filteredItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -181,6 +347,9 @@ export default function BOQ() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">BOQ Management</h1>
           <p className="text-muted-foreground mt-2">Manage Bill of Quantities for projects.</p>
+          {!projectId && (
+            <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">Select a project to load and save BOQ items.</p>
+          )}
         </div>
         <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2">
           <div
@@ -204,8 +373,11 @@ export default function BOQ() {
           <Button variant="outline" size="sm" className="shrink-0">
             <Download className="mr-2 h-4 w-4" /> Export
           </Button>
-          <Button size="sm" className="shrink-0">
+          <Button size="sm" className="shrink-0" onClick={openAddDialog} disabled={!projectId}>
             <Plus className="mr-2 h-4 w-4" /> Add Item
+          </Button>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={fetchItems} disabled={loading}>
+            {loading ? "Loading…" : "Refresh"}
           </Button>
         </div>
       </div>
@@ -250,10 +422,16 @@ export default function BOQ() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedItems.length === 0 ? (
+                {loading ? (
                   <TableRow>
                     <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                      {searchTerm ? "No items found matching your search." : "No BOQ items. Import a PDF or add items manually."}
+                      Loading BOQ items…
+                    </TableCell>
+                  </TableRow>
+                ) : paginatedItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                      {!projectId ? "Select a project to load BOQ items." : searchTerm ? "No items found matching your search." : "No BOQ items. Import a PDF or add items manually."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -268,9 +446,14 @@ export default function BOQ() {
                     <TableCell className="text-right">{item.rate ? `₹${Number(item.rate).toLocaleString()}` : "–"}</TableCell>
                     <TableCell className="text-right">{item.amount ? `₹${Number(item.amount).toLocaleString()}` : "–"}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon">
-                        <FileSpreadsheet className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(item)} title="Edit">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item)} title="Delete" className="text-destructive hover:text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                   ))
@@ -385,9 +568,12 @@ export default function BOQ() {
                     <span>{item.floor}</span>
                   </div>
                 </div>
-                <div className="flex justify-end pt-2">
-                  <Button variant="ghost" size="sm">
-                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Details
+                <div className="flex justify-end gap-1 pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => openEditDialog(item)}>
+                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item)} className="text-destructive hover:text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
                   </Button>
                 </div>
               </div>
@@ -470,11 +656,203 @@ export default function BOQ() {
           </div>
         </CardContent>
       </Card>
-      <div className="flex justify-end">
-        <Button>
-          <Save className="mr-2 h-4 w-4" /> Save Changes
-        </Button>
-      </div>
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add BOQ Item</DialogTitle>
+          </DialogHeader>
+          <form ref={addFormRef} onSubmit={handleAddItem} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Category *</Label>
+                <Input
+                  value={itemForm.category}
+                  onChange={(e) => setItemForm((f) => ({ ...f, category: e.target.value }))}
+                  placeholder="e.g. Civil, Plumbing"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Item Code</Label>
+                <Input
+                  value={itemForm.item_code}
+                  onChange={(e) => setItemForm((f) => ({ ...f, item_code: e.target.value }))}
+                  placeholder="e.g. C-101"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={itemForm.description}
+                onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Item description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Floor</Label>
+                <Input
+                  value={itemForm.floor}
+                  onChange={(e) => setItemForm((f) => ({ ...f, floor: e.target.value }))}
+                  placeholder="e.g. Ground"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Unit</Label>
+                <Input
+                  value={itemForm.unit}
+                  onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))}
+                  placeholder="e.g. Sq.m, Nos"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Quantity</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={itemForm.quantity}
+                  onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Rate</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={itemForm.rate}
+                  onChange={(e) => setItemForm((f) => ({ ...f, rate: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Amount</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={itemForm.amount}
+                  onChange={(e) => setItemForm((f) => ({ ...f, amount: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>BOQ File (optional)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.xlsx,.xls"
+                onChange={(e) => setFormFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Add Item"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editItem} onOpenChange={(open) => !open && setEditItem(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit BOQ Item</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditItem} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Category *</Label>
+                <Input
+                  value={itemForm.category}
+                  onChange={(e) => setItemForm((f) => ({ ...f, category: e.target.value }))}
+                  placeholder="e.g. Civil, Plumbing"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Item Code</Label>
+                <Input
+                  value={itemForm.item_code}
+                  onChange={(e) => setItemForm((f) => ({ ...f, item_code: e.target.value }))}
+                  placeholder="e.g. C-101"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={itemForm.description}
+                onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Item description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Floor</Label>
+                <Input
+                  value={itemForm.floor}
+                  onChange={(e) => setItemForm((f) => ({ ...f, floor: e.target.value }))}
+                  placeholder="e.g. Ground"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Unit</Label>
+                <Input
+                  value={itemForm.unit}
+                  onChange={(e) => setItemForm((f) => ({ ...f, unit: e.target.value }))}
+                  placeholder="e.g. Sq.m, Nos"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Quantity</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={itemForm.quantity}
+                  onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Rate</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={itemForm.rate}
+                  onChange={(e) => setItemForm((f) => ({ ...f, rate: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Amount</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={itemForm.amount}
+                  onChange={(e) => setItemForm((f) => ({ ...f, amount: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Replace BOQ File (optional)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.xlsx,.xls"
+                onChange={(e) => setFormFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditItem(null)}>Cancel</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={importPreviewOpen} onOpenChange={setImportPreviewOpen}>
         <DialogContent className="sm:max-w-[90vw] max-h-[85vh] flex flex-col">
@@ -515,14 +893,14 @@ export default function BOQ() {
             </Table>
           </ScrollArea>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setImportPreviewOpen(false); setBoqFile(null); setExtractError(null); if (boqInputRef.current) boqInputRef.current.value = ""; }}>
+            <Button variant="outline" onClick={() => { setImportPreviewOpen(false); setBoqFile(null); setExtractError(null); if (boqInputRef.current) boqInputRef.current.value = ""; }} disabled={saving}>
               Cancel
             </Button>
-            <Button variant="outline" onClick={addExtractedToBOQ}>
-              Add to BOQ
+            <Button variant="outline" onClick={addExtractedToBOQ} disabled={saving}>
+              {saving ? "Saving…" : "Add to BOQ"}
             </Button>
-            <Button onClick={replaceBOQWithExtracted}>
-              Replace BOQ
+            <Button onClick={replaceBOQWithExtracted} disabled={saving}>
+              {saving ? "Replacing…" : "Replace BOQ"}
             </Button>
           </DialogFooter>
         </DialogContent>
