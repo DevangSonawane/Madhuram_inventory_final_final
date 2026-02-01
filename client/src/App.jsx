@@ -21,6 +21,7 @@ import VendorComparison from '@/pages/VendorComparison';
 import Challans from '@/pages/Challans';
 import MER from '@/pages/MER';
 import MIR from '@/pages/MIR';
+import MIRPreview from '@/pages/MIRPreview';
 import ITR from '@/pages/ITR';
 import Billing from '@/pages/Billing';
 import Documents from '@/pages/Documents';
@@ -74,6 +75,7 @@ function App() {
                   <Route path="challans" element={<Challans />} />
                   <Route path="mer" element={<MER />} />
                   <Route path="mir" element={<MIR />} />
+                  <Route path="mir/preview" element={<MIRPreview />} />
                   <Route path="itr" element={<ITR />} />
                   <Route path="billing" element={<Billing />} />
                   <Route path="documents" element={<Documents />} />
