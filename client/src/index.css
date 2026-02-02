@@ -175,3 +175,25 @@
     max-height: 90vh;
   }
 }
+
+@layer components {
+  .content-shell {
+    @apply mx-auto w-full max-w-6xl space-y-6;
+  }
+
+  .manual-entry-panel {
+    @apply space-y-6 rounded-2xl border border-muted-foreground/20 bg-card/80 p-4 shadow-sm backdrop-blur-sm transition-colors sm:p-6;
+  }
+
+  .manual-entry-grid {
+    @apply grid gap-4;
+  }
+
+  .manual-entry-actions {
+    @apply flex flex-col gap-3 sm:flex-row sm:items-center;
+  }
+
+  .manual-section-title {
+    @apply text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground/70;
+  }
+}

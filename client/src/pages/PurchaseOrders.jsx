@@ -489,243 +489,245 @@ export default function PurchaseOrders() {
             </TabsContent>
 
             <TabsContent value="manual">
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Input
-                  placeholder="Company Name"
-                  value={poData.companyName}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, companyName: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Company Subtitle"
-                  value={poData.companySubtitle}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, companySubtitle: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Company Email"
-                  value={poData.companyEmail}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Company GST No"
-                  value={poData.companyGstNo}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Indent No"
-                  value={poData.indentNo}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Indent Date"
-                  value={poData.indentDate}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Order No"
-                  value={poData.orderNo}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="PO Date"
-                  value={poData.poDate}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value, source: "Manual" }))}
-                />
-              </div>
-
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <Input
-                  placeholder="Vendor Name"
-                  value={poData.vendor.name}
-                  onChange={(event) => updateVendor("name", event.target.value)}
-                />
-                <Input
-                  placeholder="Site"
-                  value={poData.vendor.site}
-                  onChange={(event) => updateVendor("site", event.target.value)}
-                />
-                <Input
-                  placeholder="Contact Person"
-                  value={poData.vendor.contactPerson}
-                  onChange={(event) => updateVendor("contactPerson", event.target.value)}
-                />
-                <Input
-                  placeholder="Vendor Address"
-                  value={poData.vendor.address}
-                  onChange={(event) => updateVendor("address", event.target.value)}
-                />
-              </div>
-
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Input
-                  placeholder="Primary Contact Name"
-                  value={poData.vendor.contacts.primary.name}
-                  onChange={(event) => updateVendorContact("primary", "name", event.target.value)}
-                />
-                <Input
-                  placeholder="Primary Contact Phone"
-                  value={poData.vendor.contacts.primary.phone}
-                  onChange={(event) => updateVendorContact("primary", "phone", event.target.value)}
-                />
-                <Input
-                  placeholder="Secondary Contact Name"
-                  value={poData.vendor.contacts.secondary.name}
-                  onChange={(event) => updateVendorContact("secondary", "name", event.target.value)}
-                />
-                <Input
-                  placeholder="Secondary Contact Phone"
-                  value={poData.vendor.contacts.secondary.phone}
-                  onChange={(event) => updateVendorContact("secondary", "phone", event.target.value)}
-                />
-              </div>
-
-              <div className="mt-6">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Items</div>
-                  <Button type="button" size="sm" variant="outline" onClick={addItem}>
-                    <Plus className="mr-2 h-3 w-3" /> Add Item
-                  </Button>
+              <div className="manual-entry-panel">
+                <div className="manual-entry-grid sm:grid-cols-2">
+                  <Input
+                    placeholder="Company Name"
+                    value={poData.companyName}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, companyName: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Company Subtitle"
+                    value={poData.companySubtitle}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, companySubtitle: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Company Email"
+                    value={poData.companyEmail}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Company GST No"
+                    value={poData.companyGstNo}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Indent No"
+                    value={poData.indentNo}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Indent Date"
+                    value={poData.indentDate}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Order No"
+                    value={poData.orderNo}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="PO Date"
+                    value={poData.poDate}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value, source: "Manual" }))}
+                  />
                 </div>
-                <div className="mt-3 space-y-3">
-                  {poData.items.length === 0 ? (
-                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground text-center">
-                      No items added yet.
-                    </div>
-                  ) : (
-                    poData.items.map((item, idx) => (
-                      <div key={`${item.srNo}-${idx}`} className="grid gap-2 sm:grid-cols-8 items-center">
-                        <Input
-                          className="sm:col-span-1"
-                          placeholder="Sr No"
-                          value={item.srNo}
-                          onChange={(event) => updateItem(idx, "srNo", event.target.value)}
-                        />
-                        <Input
-                          className="sm:col-span-1"
-                          placeholder="HSN"
-                          value={item.hsnCode}
-                          onChange={(event) => updateItem(idx, "hsnCode", event.target.value)}
-                        />
-                        <Input
-                          className="sm:col-span-2"
-                          placeholder="Description"
-                          value={item.description}
-                          onChange={(event) => updateItem(idx, "description", event.target.value)}
-                        />
-                        <Input
-                          className="sm:col-span-1"
-                          placeholder="Qty"
-                          value={item.qty}
-                          onChange={(event) => updateItem(idx, "qty", event.target.value)}
-                        />
-                        <Input
-                          className="sm:col-span-1"
-                          placeholder="UOM"
-                          value={item.uom}
-                          onChange={(event) => updateItem(idx, "uom", event.target.value)}
-                        />
-                        <Input
-                          className="sm:col-span-1"
-                          placeholder="Rate"
-                          value={item.rate}
-                          onChange={(event) => updateItem(idx, "rate", event.target.value)}
-                        />
-                        <div className="flex items-center gap-2 sm:col-span-1">
-                          <Input
-                            placeholder="Amount"
-                            value={item.amount}
-                            onChange={(event) => updateItem(idx, "amount", event.target.value)}
-                          />
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(idx)}>
-                            <Minus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Input
-                          className="sm:col-span-8"
-                          placeholder="Remarks"
-                          value={item.remarks}
-                          onChange={(event) => updateItem(idx, "remarks", event.target.value)}
-                        />
-                      </div>
-                    ))
-                  )}
+
+                <div className="manual-entry-grid sm:grid-cols-2">
+                  <Input
+                    placeholder="Vendor Name"
+                    value={poData.vendor.name}
+                    onChange={(event) => updateVendor("name", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Site"
+                    value={poData.vendor.site}
+                    onChange={(event) => updateVendor("site", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Contact Person"
+                    value={poData.vendor.contactPerson}
+                    onChange={(event) => updateVendor("contactPerson", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Vendor Address"
+                    value={poData.vendor.address}
+                    onChange={(event) => updateVendor("address", event.target.value)}
+                  />
                 </div>
-              </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Input
-                  placeholder="Discount %"
-                  value={poData.discount.percent}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, percent: event.target.value }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Discount Amount"
-                  value={poData.discount.amount}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, amount: event.target.value }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="After Discount Amount"
-                  value={poData.afterDiscountAmount}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, afterDiscountAmount: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="CGST %"
-                  value={poData.taxes.cgst.percent}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="CGST Amount"
-                  value={poData.taxes.cgst.amount}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="SGST %"
-                  value={poData.taxes.sgst.percent}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="SGST Amount"
-                  value={poData.taxes.sgst.amount}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Total Amount"
-                  value={poData.totalAmount}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Delivery"
-                  value={poData.summary.delivery}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value }, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Payment"
-                  value={poData.summary.payment}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, payment: event.target.value }, source: "Manual" }))}
-                />
-              </div>
+                <div className="manual-entry-grid sm:grid-cols-2">
+                  <Input
+                    placeholder="Primary Contact Name"
+                    value={poData.vendor.contacts.primary.name}
+                    onChange={(event) => updateVendorContact("primary", "name", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Primary Contact Phone"
+                    value={poData.vendor.contacts.primary.phone}
+                    onChange={(event) => updateVendorContact("primary", "phone", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Secondary Contact Name"
+                    value={poData.vendor.contacts.secondary.name}
+                    onChange={(event) => updateVendorContact("secondary", "name", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Secondary Contact Phone"
+                    value={poData.vendor.contacts.secondary.phone}
+                    onChange={(event) => updateVendorContact("secondary", "phone", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Textarea
-                  placeholder="Notes (one per line)"
-                  value={poData.notes.join("\n")}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, notes: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean), source: "Manual" }))}
-                />
-                <Textarea
-                  placeholder="Terms & Conditions (one per line)"
-                  value={poData.termsAndConditions.join("\n")}
-                  onChange={(event) => setPoData((prev) => ({ ...prev, termsAndConditions: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean), source: "Manual" }))}
-                />
-              </div>
-
-              <div className="mt-4 flex flex-col sm:flex-row gap-3">
-                <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
-                  <Eye className="mr-2 h-4 w-4" /> Preview
-                </Button>
-                {!hasPreview ? (
-                  <div className="text-xs text-muted-foreground sm:self-center">
-                    Add details to enable a richer preview.
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">Items</div>
+                    <Button type="button" size="sm" variant="outline" onClick={addItem}>
+                      <Plus className="mr-2 h-3 w-3" /> Add Item
+                    </Button>
                   </div>
-                ) : null}
+                  <div className="space-y-3">
+                    {poData.items.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground text-center">
+                        No items added yet.
+                      </div>
+                    ) : (
+                      poData.items.map((item, idx) => (
+                        <div key={`${item.srNo}-${idx}`} className="grid gap-2 sm:grid-cols-8 items-center">
+                          <Input
+                            className="sm:col-span-1"
+                            placeholder="Sr No"
+                            value={item.srNo}
+                            onChange={(event) => updateItem(idx, "srNo", event.target.value)}
+                          />
+                          <Input
+                            className="sm:col-span-1"
+                            placeholder="HSN"
+                            value={item.hsnCode}
+                            onChange={(event) => updateItem(idx, "hsnCode", event.target.value)}
+                          />
+                          <Input
+                            className="sm:col-span-2"
+                            placeholder="Description"
+                            value={item.description}
+                            onChange={(event) => updateItem(idx, "description", event.target.value)}
+                          />
+                          <Input
+                            className="sm:col-span-1"
+                            placeholder="Qty"
+                            value={item.qty}
+                            onChange={(event) => updateItem(idx, "qty", event.target.value)}
+                          />
+                          <Input
+                            className="sm:col-span-1"
+                            placeholder="UOM"
+                            value={item.uom}
+                            onChange={(event) => updateItem(idx, "uom", event.target.value)}
+                          />
+                          <Input
+                            className="sm:col-span-1"
+                            placeholder="Rate"
+                            value={item.rate}
+                            onChange={(event) => updateItem(idx, "rate", event.target.value)}
+                          />
+                          <div className="flex items-center gap-2 sm:col-span-1">
+                            <Input
+                              placeholder="Amount"
+                              value={item.amount}
+                              onChange={(event) => updateItem(idx, "amount", event.target.value)}
+                            />
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(idx)}>
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Input
+                            className="sm:col-span-8"
+                            placeholder="Remarks"
+                            value={item.remarks}
+                            onChange={(event) => updateItem(idx, "remarks", event.target.value)}
+                          />
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-3">
+                  <Input
+                    placeholder="Discount %"
+                    value={poData.discount.percent}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, percent: event.target.value }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Discount Amount"
+                    value={poData.discount.amount}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, amount: event.target.value }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="After Discount Amount"
+                    value={poData.afterDiscountAmount}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, afterDiscountAmount: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="CGST %"
+                    value={poData.taxes.cgst.percent}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="CGST Amount"
+                    value={poData.taxes.cgst.amount}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="SGST %"
+                    value={poData.taxes.sgst.percent}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="SGST Amount"
+                    value={poData.taxes.sgst.amount}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Total Amount"
+                    value={poData.totalAmount}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Delivery"
+                    value={poData.summary.delivery}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value }, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Payment"
+                    value={poData.summary.payment}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, payment: event.target.value }, source: "Manual" }))}
+                  />
+                </div>
+
+                <div className="manual-entry-grid sm:grid-cols-2">
+                  <Textarea
+                    placeholder="Notes (one per line)"
+                    value={poData.notes.join("\n")}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, notes: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean), source: "Manual" }))}
+                  />
+                  <Textarea
+                    placeholder="Terms & Conditions (one per line)"
+                    value={poData.termsAndConditions.join("\n")}
+                    onChange={(event) => setPoData((prev) => ({ ...prev, termsAndConditions: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean), source: "Manual" }))}
+                  />
+                </div>
+
+                <div className="manual-entry-actions">
+                  <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
+                    <Eye className="mr-2 h-4 w-4" /> Preview
+                  </Button>
+                  {!hasPreview ? (
+                    <div className="text-xs text-muted-foreground sm:self-center">
+                      Add details to enable a richer preview.
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

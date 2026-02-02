@@ -427,165 +427,167 @@ export default function ITR() {
             </TabsContent>
 
             <TabsContent value="manual">
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Input
-                  placeholder="Project Name"
-                  value={itrData.projectName}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, projectName: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Project Code"
-                  value={itrData.projectCode}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, projectCode: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Client / Employer"
-                  value={itrData.clientEmployer}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, clientEmployer: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="PMC / Engineer"
-                  value={itrData.pmcEngineer}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, pmcEngineer: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Contractor"
-                  value={itrData.contractor}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, contractor: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Vendor Code"
-                  value={itrData.vendorCode}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, vendorCode: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Material Code"
-                  value={itrData.materialCode}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="WIR/ITR Ref. No"
-                  value={itrData.itrRefNo}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, itrRefNo: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="WIR/ITR Submission (Date & Time)"
-                  value={itrData.wirItrSubmissionDateTime}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, wirItrSubmissionDateTime: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Inspection (Date & Time)"
-                  value={itrData.inspectionDateTime}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, inspectionDateTime: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="WIR/ITR Submitted To"
-                  value={itrData.submittedTo}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, submittedTo: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="WIR/ITR Submitted By"
-                  value={itrData.submittedBy}
-                  onChange={(event) => setItrData((prev) => ({ ...prev, submittedBy: event.target.value, source: "Manual" }))}
-                />
-              </div>
+              <div className="manual-entry-panel">
+                <div className="manual-entry-grid sm:grid-cols-2">
+                  <Input
+                    placeholder="Project Name"
+                    value={itrData.projectName}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, projectName: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Project Code"
+                    value={itrData.projectCode}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, projectCode: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Client / Employer"
+                    value={itrData.clientEmployer}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, clientEmployer: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="PMC / Engineer"
+                    value={itrData.pmcEngineer}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, pmcEngineer: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Contractor"
+                    value={itrData.contractor}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, contractor: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Vendor Code"
+                    value={itrData.vendorCode}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, vendorCode: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Material Code"
+                    value={itrData.materialCode}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="WIR/ITR Ref. No"
+                    value={itrData.itrRefNo}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, itrRefNo: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="WIR/ITR Submission (Date & Time)"
+                    value={itrData.wirItrSubmissionDateTime}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, wirItrSubmissionDateTime: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Inspection (Date & Time)"
+                    value={itrData.inspectionDateTime}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, inspectionDateTime: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="WIR/ITR Submitted To"
+                    value={itrData.submittedTo}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, submittedTo: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="WIR/ITR Submitted By"
+                    value={itrData.submittedBy}
+                    onChange={(event) => setItrData((prev) => ({ ...prev, submittedBy: event.target.value, source: "Manual" }))}
+                  />
+                </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Input
-                  placeholder="Tower / Block Ref"
-                  value={itrData.contractorPart.locationRef}
-                  onChange={(event) => setContractorPart("locationRef", event.target.value)}
-                />
-                <Input
-                  placeholder="Floor / Level"
-                  value={itrData.contractorPart.floorLevel}
-                  onChange={(event) => setContractorPart("floorLevel", event.target.value)}
-                />
-                <Input
-                  placeholder="Grid Reference"
-                  value={itrData.contractorPart.gridReference}
-                  onChange={(event) => setContractorPart("gridReference", event.target.value)}
-                />
-                <Input
-                  placeholder="Room / Area Ref"
-                  value={itrData.contractorPart.areaRef}
-                  onChange={(event) => setContractorPart("areaRef", event.target.value)}
-                />
-              </div>
+                <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-4">
+                  <Input
+                    placeholder="Tower / Block Ref"
+                    value={itrData.contractorPart.locationRef}
+                    onChange={(event) => setContractorPart("locationRef", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Floor / Level"
+                    value={itrData.contractorPart.floorLevel}
+                    onChange={(event) => setContractorPart("floorLevel", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Grid Reference"
+                    value={itrData.contractorPart.gridReference}
+                    onChange={(event) => setContractorPart("gridReference", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Room / Area Ref"
+                    value={itrData.contractorPart.areaRef}
+                    onChange={(event) => setContractorPart("areaRef", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <Input
-                  placeholder="Previous Qty"
-                  value={itrData.contractorPart.measurement.previousQty}
-                  onChange={(event) => setMeasurement("previousQty", event.target.value)}
-                />
-                <Input
-                  placeholder="Current Qty"
-                  value={itrData.contractorPart.measurement.currentQty}
-                  onChange={(event) => setMeasurement("currentQty", event.target.value)}
-                />
-                <Input
-                  placeholder="Cumulative Qty"
-                  value={itrData.contractorPart.measurement.cumulativeQty}
-                  onChange={(event) => setMeasurement("cumulativeQty", event.target.value)}
-                />
-              </div>
+                <div className="manual-entry-grid sm:grid-cols-3">
+                  <Input
+                    placeholder="Previous Qty"
+                    value={itrData.contractorPart.measurement.previousQty}
+                    onChange={(event) => setMeasurement("previousQty", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Current Qty"
+                    value={itrData.contractorPart.measurement.currentQty}
+                    onChange={(event) => setMeasurement("currentQty", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Cumulative Qty"
+                    value={itrData.contractorPart.measurement.cumulativeQty}
+                    onChange={(event) => setMeasurement("cumulativeQty", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-4">
-                <Textarea
-                  placeholder="Description of works / activity for which inspection is requested"
-                  value={itrData.contractorPart.descriptionOfWorks}
-                  onChange={(event) => setContractorPart("descriptionOfWorks", event.target.value)}
-                />
-              </div>
+                <div>
+                  <Textarea
+                    placeholder="Description of works / activity for which inspection is requested"
+                    value={itrData.contractorPart.descriptionOfWorks}
+                    onChange={(event) => setContractorPart("descriptionOfWorks", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-4">
-                <div className="text-xs font-medium text-muted-foreground">Discipline</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {DISCIPLINE_OPTIONS.map((option) => (
-                    <Button
-                      key={option}
-                      type="button"
-                      size="sm"
-                      variant={itrData.contractorPart.discipline.includes(option) ? "default" : "outline"}
-                      onClick={() => handleDisciplineToggle(option)}
-                    >
-                      {option}
-                    </Button>
+                <div>
+                  <div className="manual-section-title">Discipline</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {DISCIPLINE_OPTIONS.map((option) => (
+                      <Button
+                        key={option}
+                        type="button"
+                        size="sm"
+                        variant={itrData.contractorPart.discipline.includes(option) ? "default" : "outline"}
+                        onClick={() => handleDisciplineToggle(option)}
+                      >
+                        {option}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-3">
+                  {Object.entries(itrData.contractorPart.attachments).map(([key, value]) => (
+                    <div key={key} className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">{key.replace(/([A-Z])/g, " $1").trim()}</div>
+                      <div className="flex gap-2 flex-wrap">
+                        {YES_NO_NA_OPTIONS.map((option) => (
+                          <Button
+                            key={`${key}-${option}`}
+                            type="button"
+                            size="sm"
+                            variant={value === option ? "default" : "outline"}
+                            onClick={() => setAttachment(key, option)}
+                          >
+                            {option}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {Object.entries(itrData.contractorPart.attachments).map(([key, value]) => (
-                  <div key={key} className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">{key.replace(/([A-Z])/g, " $1").trim()}</div>
-                    <div className="flex gap-2 flex-wrap">
-                      {YES_NO_NA_OPTIONS.map((option) => (
-                        <Button
-                          key={`${key}-${option}`}
-                          type="button"
-                          size="sm"
-                          variant={value === option ? "default" : "outline"}
-                          onClick={() => setAttachment(key, option)}
-                        >
-                          {option}
-                        </Button>
-                      ))}
+                <div className="manual-entry-actions">
+                  <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
+                    <Eye className="mr-2 h-4 w-4" /> Preview
+                  </Button>
+                  {!hasPreview ? (
+                    <div className="text-xs text-muted-foreground sm:self-center">
+                      Add details to enable a richer preview.
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
-                  <Eye className="mr-2 h-4 w-4" /> Preview
-                </Button>
-                {!hasPreview ? (
-                  <div className="text-xs text-muted-foreground sm:self-center">
-                    Add details to enable a richer preview.
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

@@ -389,144 +389,146 @@ export default function MIR() {
             </TabsContent>
 
             <TabsContent value="manual">
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Input
-                  placeholder="Project Name"
-                  value={mirData.projectName}
-                  onChange={(event) => setMirData((prev) => ({ ...prev, projectName: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Project Code"
-                  value={mirData.projectCode}
-                  onChange={(event) => setMirData((prev) => ({ ...prev, projectCode: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="MIR Reference No"
-                  value={mirData.mirRefNo}
-                  onChange={(event) => setMirData((prev) => ({ ...prev, mirRefNo: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Material Code"
-                  value={mirData.materialCode}
-                  onChange={(event) => setMirData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
-                />
-                <Input
-                  placeholder="Client / Employer"
-                  value={mirData.requestSubmission.clientEmployer}
-                  onChange={(event) => setRequestSubmission("clientEmployer", event.target.value)}
-                />
-                <Input
-                  placeholder="Client Submission Date & Time"
-                  value={mirData.requestSubmission.clientSubmissionDateTime}
-                  onChange={(event) => setRequestSubmission("clientSubmissionDateTime", event.target.value)}
-                />
-                <Input
-                  placeholder="PMC"
-                  value={mirData.requestSubmission.pmc}
-                  onChange={(event) => setRequestSubmission("pmc", event.target.value)}
-                />
-                <Input
-                  placeholder="Inspection Engineer"
-                  value={mirData.requestSubmission.engineer}
-                  onChange={(event) => setRequestSubmission("engineer", event.target.value)}
-                />
-                <Input
-                  placeholder="Inspection Date & Time"
-                  value={mirData.requestSubmission.engineerInspectionDateTime}
-                  onChange={(event) => setRequestSubmission("engineerInspectionDateTime", event.target.value)}
-                />
-                <Input
-                  placeholder="Contractor"
-                  value={mirData.requestSubmission.contractor}
-                  onChange={(event) => setRequestSubmission("contractor", event.target.value)}
-                />
-                <Input
-                  placeholder="MIR Submitted To"
-                  value={mirData.requestSubmission.submittedTo}
-                  onChange={(event) => setRequestSubmission("submittedTo", event.target.value)}
-                />
-                <Input
-                  placeholder="Vendor Code"
-                  value={mirData.requestSubmission.vendorCode}
-                  onChange={(event) => setRequestSubmission("vendorCode", event.target.value)}
-                />
-                <Input
-                  placeholder="Reference Docs Attached"
-                  value={mirData.requestSubmission.refDocAttached}
-                  onChange={(event) => setRequestSubmission("refDocAttached", event.target.value)}
-                />
-              </div>
+              <div className="manual-entry-panel">
+                <div className="manual-entry-grid sm:grid-cols-2">
+                  <Input
+                    placeholder="Project Name"
+                    value={mirData.projectName}
+                    onChange={(event) => setMirData((prev) => ({ ...prev, projectName: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Project Code"
+                    value={mirData.projectCode}
+                    onChange={(event) => setMirData((prev) => ({ ...prev, projectCode: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="MIR Reference No"
+                    value={mirData.mirRefNo}
+                    onChange={(event) => setMirData((prev) => ({ ...prev, mirRefNo: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Material Code"
+                    value={mirData.materialCode}
+                    onChange={(event) => setMirData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
+                  />
+                  <Input
+                    placeholder="Client / Employer"
+                    value={mirData.requestSubmission.clientEmployer}
+                    onChange={(event) => setRequestSubmission("clientEmployer", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Client Submission Date & Time"
+                    value={mirData.requestSubmission.clientSubmissionDateTime}
+                    onChange={(event) => setRequestSubmission("clientSubmissionDateTime", event.target.value)}
+                  />
+                  <Input
+                    placeholder="PMC"
+                    value={mirData.requestSubmission.pmc}
+                    onChange={(event) => setRequestSubmission("pmc", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Inspection Engineer"
+                    value={mirData.requestSubmission.engineer}
+                    onChange={(event) => setRequestSubmission("engineer", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Inspection Date & Time"
+                    value={mirData.requestSubmission.engineerInspectionDateTime}
+                    onChange={(event) => setRequestSubmission("engineerInspectionDateTime", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Contractor"
+                    value={mirData.requestSubmission.contractor}
+                    onChange={(event) => setRequestSubmission("contractor", event.target.value)}
+                  />
+                  <Input
+                    placeholder="MIR Submitted To"
+                    value={mirData.requestSubmission.submittedTo}
+                    onChange={(event) => setRequestSubmission("submittedTo", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Vendor Code"
+                    value={mirData.requestSubmission.vendorCode}
+                    onChange={(event) => setRequestSubmission("vendorCode", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Reference Docs Attached"
+                    value={mirData.requestSubmission.refDocAttached}
+                    onChange={(event) => setRequestSubmission("refDocAttached", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-4">
-                <Textarea
-                  placeholder="Description of Supplied Materials"
-                  value={mirData.contractorPart.description}
-                  onChange={(event) => setContractorPart("description", event.target.value)}
-                />
-              </div>
+                <div>
+                  <Textarea
+                    placeholder="Description of Supplied Materials"
+                    value={mirData.contractorPart.description}
+                    onChange={(event) => setContractorPart("description", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Input
-                  placeholder="Approval Ref. No"
-                  value={mirData.contractorPart.approvalRefNo}
-                  onChange={(event) => setContractorPart("approvalRefNo", event.target.value)}
-                />
-                <Input
-                  placeholder="Previous Quantity"
-                  value={mirData.contractorPart.previousQty}
-                  onChange={(event) => setContractorPart("previousQty", event.target.value)}
-                />
-                <Input
-                  placeholder="Current Quantity"
-                  value={mirData.contractorPart.currentQty}
-                  onChange={(event) => setContractorPart("currentQty", event.target.value)}
-                />
-                <Input
-                  placeholder="Cumulative Quantity"
-                  value={mirData.contractorPart.cumulativeQty}
-                  onChange={(event) => setContractorPart("cumulativeQty", event.target.value)}
-                />
-                <Input
-                  placeholder="BOQ Reference"
-                  value={mirData.contractorPart.boqReference}
-                  onChange={(event) => setContractorPart("boqReference", event.target.value)}
-                />
-                <Input
-                  placeholder="Manufacturer - Country of Origin"
-                  value={mirData.contractorPart.manufacturerCountry}
-                  onChange={(event) => setContractorPart("manufacturerCountry", event.target.value)}
-                />
-                <Input
-                  placeholder="Supplier"
-                  value={mirData.contractorPart.supplier}
-                  onChange={(event) => setContractorPart("supplier", event.target.value)}
-                />
-                <Input
-                  placeholder="Supplied Quantity / Delivery Note No"
-                  value={mirData.contractorPart.deliveryNoteNumber}
-                  onChange={(event) => setContractorPart("deliveryNoteNumber", event.target.value)}
-                />
-                <Input
-                  placeholder="Receipt Date On Site"
-                  value={mirData.contractorPart.receiptDate}
-                  onChange={(event) => setContractorPart("receiptDate", event.target.value)}
-                />
-                <Input
-                  placeholder="Storage Location"
-                  value={mirData.contractorPart.storageLocation}
-                  onChange={(event) => setContractorPart("storageLocation", event.target.value)}
-                />
-              </div>
+                <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-3">
+                  <Input
+                    placeholder="Approval Ref. No"
+                    value={mirData.contractorPart.approvalRefNo}
+                    onChange={(event) => setContractorPart("approvalRefNo", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Previous Quantity"
+                    value={mirData.contractorPart.previousQty}
+                    onChange={(event) => setContractorPart("previousQty", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Current Quantity"
+                    value={mirData.contractorPart.currentQty}
+                    onChange={(event) => setContractorPart("currentQty", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Cumulative Quantity"
+                    value={mirData.contractorPart.cumulativeQty}
+                    onChange={(event) => setContractorPart("cumulativeQty", event.target.value)}
+                  />
+                  <Input
+                    placeholder="BOQ Reference"
+                    value={mirData.contractorPart.boqReference}
+                    onChange={(event) => setContractorPart("boqReference", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Manufacturer - Country of Origin"
+                    value={mirData.contractorPart.manufacturerCountry}
+                    onChange={(event) => setContractorPart("manufacturerCountry", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Supplier"
+                    value={mirData.contractorPart.supplier}
+                    onChange={(event) => setContractorPart("supplier", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Supplied Quantity / Delivery Note No"
+                    value={mirData.contractorPart.deliveryNoteNumber}
+                    onChange={(event) => setContractorPart("deliveryNoteNumber", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Receipt Date On Site"
+                    value={mirData.contractorPart.receiptDate}
+                    onChange={(event) => setContractorPart("receiptDate", event.target.value)}
+                  />
+                  <Input
+                    placeholder="Storage Location"
+                    value={mirData.contractorPart.storageLocation}
+                    onChange={(event) => setContractorPart("storageLocation", event.target.value)}
+                  />
+                </div>
 
-              <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
-                  <Eye className="mr-2 h-4 w-4" /> Preview
-                </Button>
-                {!hasPreview ? (
-                  <div className="text-xs text-muted-foreground sm:self-center">
-                    Add details to enable a richer preview.
-                  </div>
-                ) : null}
+                <div className="manual-entry-actions">
+                  <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
+                    <Eye className="mr-2 h-4 w-4" /> Preview
+                  </Button>
+                  {!hasPreview ? (
+                    <div className="text-xs text-muted-foreground sm:self-center">
+                      Add details to enable a richer preview.
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </TabsContent>
           </Tabs>
