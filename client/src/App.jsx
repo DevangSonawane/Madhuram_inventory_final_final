@@ -7,6 +7,7 @@ import Materials from '@/pages/Materials';
 import StockAreas from '@/pages/StockAreas';
 import PurchaseRequests from '@/pages/PurchaseRequests';
 import PurchaseOrders from '@/pages/PurchaseOrders';
+import PurchaseOrdersPreview from '@/pages/PurchaseOrdersPreview';
 import StockTransfers from '@/pages/StockTransfers';
 import Consumption from '@/pages/Consumption';
 import Returns from '@/pages/Returns';
@@ -63,6 +64,7 @@ function App() {
                   <Route path="stock-areas" element={<StockAreas />} />
                   <Route path="purchase-requests" element={<PurchaseRequests />} />
                   <Route path="purchase-orders" element={<PurchaseOrders />} />
+                  <Route path="purchase-orders/preview" element={<PurchaseOrdersPreview />} />
                   <Route path="stock-transfers" element={<StockTransfers />} />
                   <Route path="consumption" element={<Consumption />} />
                   <Route path="returns" element={<Returns />} />
