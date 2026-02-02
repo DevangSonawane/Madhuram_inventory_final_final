@@ -23,6 +23,7 @@ import MER from '@/pages/MER';
 import MIR from '@/pages/MIR';
 import MIRPreview from '@/pages/MIRPreview';
 import ITR from '@/pages/ITR';
+import ITRPreview from '@/pages/ITRPreview';
 import Billing from '@/pages/Billing';
 import Documents from '@/pages/Documents';
 import Users from '@/pages/Users';
@@ -77,6 +78,7 @@ function App() {
                   <Route path="mir" element={<MIR />} />
                   <Route path="mir/preview" element={<MIRPreview />} />
                   <Route path="itr" element={<ITR />} />
+                  <Route path="itr/preview" element={<ITRPreview />} />
                   <Route path="billing" element={<Billing />} />
                   <Route path="documents" element={<Documents />} />
                   <Route path="users" element={<Users />} />

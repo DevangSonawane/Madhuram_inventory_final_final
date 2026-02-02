@@ -7,6 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, CheckCircle } from "lucide-react";
 import { DISCIPLINE_OPTIONS, EMPTY_MIR, YES_NO_OPTIONS } from "@/pages/mirShared";
+import { useToast } from "@/hooks/use-toast";
+import { useProject } from "@/contexts/ProjectContext";
+import { api } from "@/lib/api";
 
 const STORAGE_KEY = "mirPreview";
 
@@ -15,6 +18,7 @@ function normalizeMirData(raw) {
   return {
     ...EMPTY_MIR,
     ...raw,
+    mir_id: raw.mir_id ?? raw.mirId ?? null,
     requestSubmission: {
       ...EMPTY_MIR.requestSubmission,
       ...raw.requestSubmission,
@@ -91,7 +95,11 @@ function YesNoToggle({ id, label, value, onChange }) {
 
 export default function MIRPreview() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { selectedProject } = useProject();
+  const projectId = selectedProject?.id ?? selectedProject?.project_id ?? null;
   const [mirData, setMirData] = useState(() => normalizeMirData(loadStoredMir()));
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -157,6 +165,74 @@ export default function MIRPreview() {
     });
   };
 
+  const buildDynamicField = () => {
+    const fields = [];
+    const pushField = (key, value) => {
+      if (value == null) return;
+      if (typeof value === "string" && value.trim() === "") return;
+      if (Array.isArray(value) && value.length === 0) return;
+      if (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0) return;
+      const normalized = typeof value === "string" ? value : JSON.stringify(value);
+      fields.push({ key, value: normalized });
+    };
+
+    pushField("Inspection Engineer", mirData.requestSubmission.engineer);
+    pushField("MIR Submitted To", mirData.requestSubmission.submittedTo);
+    pushField("Discipline", mirData.requestSubmission.discipline);
+    pushField("Contractor Part", mirData.contractorPart);
+    pushField("Lodha PMC", mirData.lodhaPmc);
+    pushField("Template Ref", mirData.templateRef);
+    pushField("Template Revision", mirData.templateRevision);
+    pushField("Template Date", mirData.templateDate);
+    pushField("Source", mirData.source);
+    pushField("Source File", mirData.sourceFileName);
+    pushField("Title", mirData.title);
+
+    return fields;
+  };
+
+  const handleSubmit = async () => {
+    if (!projectId) {
+      toast({ title: "Select project", description: "Choose a project before submitting a MIR.", variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        project_name: mirData.projectName || selectedProject?.project_name || selectedProject?.name || "",
+        project_code: mirData.projectCode || "",
+        client_name: mirData.requestSubmission.clientEmployer || "",
+        pmc: mirData.requestSubmission.pmc || "",
+        contractor: mirData.requestSubmission.contractor || "",
+        vendor_code: mirData.requestSubmission.vendorCode || "",
+        mir_refrence_no: mirData.mirRefNo || "",
+        material_code: mirData.materialCode || "",
+        inspection_date_time: mirData.requestSubmission.engineerInspectionDateTime || "",
+        client_submission_date: mirData.requestSubmission.clientSubmissionDateTime || "",
+        refrence_docs_attached: mirData.requestSubmission.refDocAttached || "",
+        mir_submited: true,
+        dynamic_field: buildDynamicField(),
+        project_id: projectId,
+      };
+
+      const res = mirData.mir_id ? await api.updateMir(mirData.mir_id, payload) : await api.createMir(payload);
+      if (res.success) {
+        toast({ title: "MIR saved", description: mirData.mir_id ? "Your MIR has been updated." : "Your MIR has been saved." });
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+        }
+        navigate("/mir");
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to submit MIR.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to submit MIR.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -165,6 +241,9 @@ export default function MIRPreview() {
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Review extracted fields and finalize inspection details.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving}>
+            {saving ? "Submitting..." : "Submit MIR"}
+          </Button>
           <Button
             variant="outline"
             className="w-full sm:w-auto"

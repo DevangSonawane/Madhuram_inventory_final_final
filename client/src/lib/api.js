@@ -279,6 +279,13 @@ export const api = {
     return handleResponse(response);
   },
 
+  getApiFileUrl: (path) => {
+    if (!path) return '';
+    if (typeof path === 'string' && /^https?:\/\//i.test(path)) return path;
+    const cleaned = path.startsWith('/') ? path : `/${path}`;
+    return `${BASE_URL}${cleaned}`;
+  },
+
   // BOQ (Bill of Quantities) – Base URL: https://api.festmate.in, Storage: /uploads/boq
   createBOQ: async (data) => {
     const formData = new FormData();
@@ -340,6 +347,76 @@ export const api = {
 
   deleteBOQ: async (id) => {
     const response = await fetch(`${BASE_URL}/api/boq/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  // MIR (Material Inspection Request) – Base URL: https://api.festmate.in, Storage: /uploads/mir
+  uploadMirReference: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+
+    const response = await fetch(`${BASE_URL}/api/mir/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  createMir: async (data) => {
+    const response = await fetch(`${BASE_URL}/api/mir`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getMirs: async () => {
+    const response = await fetch(`${BASE_URL}/api/mir`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getMirById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getMirsByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/mir/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateMir: async (id, data) => {
+    const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  deleteMir: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });

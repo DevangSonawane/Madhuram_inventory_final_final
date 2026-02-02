@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, FileText, FileUp, PencilLine, Eye } from "lucide-react";
+import { Upload, FileText, FileUp, PencilLine, Eye, Trash2 } from "lucide-react";
 import { EMPTY_MIR } from "@/pages/mirShared";
+import { useToast } from "@/hooks/use-toast";
+import { useProject } from "@/contexts/ProjectContext";
+import { api } from "@/lib/api";
 
 const STORAGE_KEY = "mirPreview";
 
@@ -46,13 +49,6 @@ const SAMPLE_EXTRACTED = {
   sourceFileName: "MIR-54 NANHI TRAP JALI-CH.43.pdf",
 };
 
-// Mock MIR Data
-const MOCK_MIR = [
-  { id: "MIR-SIGNET 1-ME-PL-54", date: "2025-05-10", inspector: "Mr. Tushar Sonavane", project: "Premier Signet Tower 1", material: "Nanhi Trap Jali 110mm (Supreme)", status: "Approved", doc: "MIR-54 NANHI TRAP JALI-CH.43.pdf" },
-  { id: "MIR-2026-005", date: "2026-02-18", inspector: "Rajesh K.", project: "Lodha World One", material: "CPVC Pipes Batch #44", status: "Approved", doc: "mir_scan_005.pdf" },
-  { id: "MIR-2026-006", date: "2026-02-19", inspector: "Amit S.", project: "Prestige City", material: "Ceramic Tiles", status: "Pending Review", doc: "mir_scan_006.pdf" },
-];
-
 function loadStoredMir() {
   if (typeof window === "undefined") return null;
   try {
@@ -66,8 +62,14 @@ function loadStoredMir() {
 export default function MIR() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const { toast } = useToast();
+  const { selectedProject } = useProject();
+  const projectId = selectedProject?.id ?? selectedProject?.project_id ?? null;
   const [mirData, setMirData] = useState(() => loadStoredMir() || EMPTY_MIR);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadingRefDoc, setUploadingRefDoc] = useState(false);
+  const [recentMirs, setRecentMirs] = useState([]);
+  const [loadingMirs, setLoadingMirs] = useState(false);
 
   const hasPreview = useMemo(() => {
     return mirData.projectName || mirData.mirRefNo || mirData.requestSubmission.clientEmployer || mirData.contractorPart.description;
@@ -87,11 +89,29 @@ export default function MIR() {
     }));
   };
 
-  const handleFile = (file) => {
+  const handleFile = async (file) => {
     if (!file) return;
+    let uploadedPath = "";
+    setUploadingRefDoc(true);
+    try {
+      const res = await api.uploadMirReference(file);
+      if (res.success && res.data?.filePath) {
+        uploadedPath = res.data.filePath;
+      } else if (!res.success) {
+        toast({ title: "Upload failed", description: res.error || "Could not upload MIR document.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Upload failed", description: error?.message || "Could not upload MIR document.", variant: "destructive" });
+    } finally {
+      setUploadingRefDoc(false);
+    }
     const isSample = file.name.toLowerCase().includes("mir-54");
     const next = {
       ...(isSample ? SAMPLE_EXTRACTED : { ...EMPTY_MIR, source: "Extracted", sourceFileName: file.name }),
+      requestSubmission: {
+        ...(isSample ? SAMPLE_EXTRACTED.requestSubmission : EMPTY_MIR.requestSubmission),
+        refDocAttached: uploadedPath || (isSample ? SAMPLE_EXTRACTED.requestSubmission.refDocAttached : ""),
+      },
       sourceFileName: file.name,
       source: "Extracted",
     };
@@ -123,6 +143,162 @@ export default function MIR() {
     }
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem(STORAGE_KEY);
+    }
+  };
+
+  const parseDynamicField = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const parseDynamicEntry = (dynamicField, key) => {
+    if (!Array.isArray(dynamicField)) return null;
+    const entry = dynamicField.find((item) => item?.key === key);
+    if (!entry || entry.value == null) return null;
+    const raw = entry.value;
+    if (typeof raw !== "string") return raw;
+    try {
+      return JSON.parse(raw);
+    } catch (_) {
+      return raw;
+    }
+  };
+
+  const getDynamicFieldValue = (dynamicField, key) => {
+    if (!Array.isArray(dynamicField)) return "";
+    const found = dynamicField.find((entry) => entry?.key === key);
+    return found?.value ?? "";
+  };
+
+  const mapApiMirToForm = (item) => {
+    const dynamicField = parseDynamicField(item.dynamic_field);
+    const contractorPart = parseDynamicEntry(dynamicField, "Contractor Part");
+    const lodhaPmc = parseDynamicEntry(dynamicField, "Lodha PMC");
+    const discipline = parseDynamicEntry(dynamicField, "Discipline");
+    const source = parseDynamicEntry(dynamicField, "Source");
+    const sourceFileName = parseDynamicEntry(dynamicField, "Source File");
+    const title = parseDynamicEntry(dynamicField, "Title");
+    const templateRef = parseDynamicEntry(dynamicField, "Template Ref");
+    const templateRevision = parseDynamicEntry(dynamicField, "Template Revision");
+    const templateDate = parseDynamicEntry(dynamicField, "Template Date");
+    const submittedTo = parseDynamicEntry(dynamicField, "MIR Submitted To");
+    const engineer = parseDynamicEntry(dynamicField, "Inspection Engineer");
+
+    return {
+      ...EMPTY_MIR,
+      mir_id: item.mir_id,
+      projectName: item.project_name || "",
+      projectCode: item.project_code || "",
+      mirRefNo: item.mir_refrence_no || "",
+      materialCode: item.material_code || "",
+      requestSubmission: {
+        ...EMPTY_MIR.requestSubmission,
+        clientEmployer: item.client_name || "",
+        clientSubmissionDateTime: item.client_submission_date || "",
+        pmc: item.pmc || "",
+        engineer: typeof engineer === "string" ? engineer : "",
+        engineerInspectionDateTime: item.inspection_date_time || "",
+        contractor: item.contractor || "",
+        submittedTo: typeof submittedTo === "string" ? submittedTo : "",
+        vendorCode: item.vendor_code || "",
+        refDocAttached: item.refrence_docs_attached || "",
+        discipline: Array.isArray(discipline) ? discipline : [],
+      },
+      contractorPart: typeof contractorPart === "object" && contractorPart ? { ...EMPTY_MIR.contractorPart, ...contractorPart } : EMPTY_MIR.contractorPart,
+      lodhaPmc: typeof lodhaPmc === "object" && lodhaPmc ? { ...EMPTY_MIR.lodhaPmc, ...lodhaPmc } : EMPTY_MIR.lodhaPmc,
+      templateRef: typeof templateRef === "string" ? templateRef : "",
+      templateRevision: typeof templateRevision === "string" ? templateRevision : "",
+      templateDate: typeof templateDate === "string" ? templateDate : "",
+      source: typeof source === "string" ? source : "Manual",
+      sourceFileName: typeof sourceFileName === "string" ? sourceFileName : "",
+      title: typeof title === "string" ? title : EMPTY_MIR.title,
+    };
+  };
+
+  const fetchMirs = async () => {
+    setLoadingMirs(true);
+    try {
+      const res = projectId ? await api.getMirsByProject(projectId) : await api.getMirs();
+      if (res.success && Array.isArray(res.data)) {
+        const mapped = res.data.map((item) => {
+          const dynamicField = parseDynamicField(item.dynamic_field);
+          const inspector = getDynamicFieldValue(dynamicField, "Inspection Engineer") || getDynamicFieldValue(dynamicField, "engineer");
+          return {
+            id: item.mir_refrence_no || `MIR-${item.mir_id}`,
+            mir_id: item.mir_id,
+            date: item.inspection_date_time || item.client_submission_date || item.created_at || "",
+            inspector,
+            project: item.project_name || "",
+            material: item.material_code || "",
+            status: item.mir_submited ? "Submitted" : "Draft",
+            doc: item.refrence_docs_attached || "",
+          };
+        });
+        setRecentMirs(mapped);
+      } else {
+        setRecentMirs([]);
+      }
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load MIRs.", variant: "destructive" });
+      setRecentMirs([]);
+    } finally {
+      setLoadingMirs(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMirs();
+  }, [projectId]);
+
+  const handleViewDoc = (path) => {
+    if (!path) return;
+    const url = api.getApiFileUrl(path);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleEdit = async (mirId) => {
+    if (!mirId) return;
+    try {
+      const res = await api.getMirById(mirId);
+      if (res.success && res.data) {
+        const next = mapApiMirToForm(res.data);
+        setMirData(next);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        }
+        navigate("preview");
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to load MIR.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to load MIR.", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (mirId) => {
+    if (!mirId) return;
+    const confirmed = window.confirm("Delete this MIR? This action cannot be undone.");
+    if (!confirmed) return;
+    try {
+      const res = await api.deleteMir(mirId);
+      if (res.success) {
+        toast({ title: "MIR deleted", description: "The MIR entry was removed." });
+        fetchMirs();
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to delete MIR.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to delete MIR.", variant: "destructive" });
     }
   };
 
@@ -176,17 +352,19 @@ export default function MIR() {
                   accept="application/pdf"
                   className="hidden"
                   onChange={(event) => handleFile(event.target.files?.[0])}
+                  disabled={uploadingRefDoc}
                 />
                 <Button
                   variant="outline"
                   size="sm"
                   type="button"
+                  disabled={uploadingRefDoc}
                   onClick={(event) => {
                     event.stopPropagation();
                     fileInputRef.current?.click();
                   }}
                 >
-                  Choose File
+                  {uploadingRefDoc ? "Uploading..." : "Choose File"}
                 </Button>
                 {mirData.sourceFileName ? (
                   <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
@@ -362,7 +540,7 @@ export default function MIR() {
         <CardContent>
           {/* Mobile Card View */}
           <div className="grid grid-cols-1 gap-4 md:hidden">
-            {MOCK_MIR.map((item) => (
+            {(loadingMirs ? [] : recentMirs).map((item) => (
               <div key={item.id} className="border rounded-lg p-4 space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
@@ -389,13 +567,26 @@ export default function MIR() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2 border-t mt-2">
-                  <Button variant="outline" size="sm" className="w-full">
+                <div className="flex flex-col gap-2 pt-2 border-t mt-2">
+                  <Button variant="outline" size="sm" className="w-full" onClick={() => handleViewDoc(item.doc)} disabled={!item.doc}>
                     <FileText className="mr-2 h-4 w-4" /> View PDF
                   </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(item.mir_id)}>
+                      <PencilLine className="mr-2 h-4 w-4" /> Edit
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => handleDelete(item.mir_id)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
+            {!loadingMirs && recentMirs.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                No MIRs found. Upload or submit a MIR to see it here.
+              </div>
+            ) : null}
           </div>
 
           {/* Desktop Table View */}
@@ -412,7 +603,7 @@ export default function MIR() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {MOCK_MIR.map((item) => (
+              {(loadingMirs ? [] : recentMirs).map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">{item.id}</TableCell>
                   <TableCell>{item.date}</TableCell>
@@ -420,19 +611,32 @@ export default function MIR() {
                   <TableCell>{item.material}</TableCell>
                   <TableCell>{item.inspector}</TableCell>
                   <TableCell>
-                    <Badge variant={item.status === "Approved" ? "default" : "secondary"}>
+                    <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>
                       {item.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm">
-                      <FileText className="mr-2 h-3 w-3" /> View PDF
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => handleViewDoc(item.doc)} disabled={!item.doc}>
+                        <FileText className="mr-2 h-3 w-3" /> View PDF
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleEdit(item.mir_id)}>
+                        <PencilLine className="mr-2 h-3 w-3" /> Edit
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(item.mir_id)}>
+                        <Trash2 className="mr-2 h-3 w-3" /> Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          {!loadingMirs && recentMirs.length === 0 ? (
+            <div className="hidden md:block rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+              No MIRs found. Upload or submit a MIR to see it here.
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
