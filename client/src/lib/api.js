@@ -422,6 +422,60 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  // ITR (Installation Test Report)
+  createItr: async (data) => {
+    const response = await fetch(`${BASE_URL}/api/itr`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getItrs: async () => {
+    const response = await fetch(`${BASE_URL}/api/itr`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getItrById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/itr/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getItrsByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/itr/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateItr: async (id, data) => {
+    const response = await fetch(`${BASE_URL}/api/itr/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  deleteItr: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/itr/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
 };
 
 // Helper to get token from storage

@@ -1,0 +1,68 @@
+📘 Madhuram – ITR (Installation Test Report) API Documentation
+Overview
+The ITR API helps Madhuram track Installation Test Reports (WIR) once work is inspected.
+It supports fetching lists, creating new ITRs, updating existing records, and deleting entries.
+Authentication via JWT is required for all endpoints (Authorization: Bearer <token>).
+
+Base URL: https://api.festmate.in
+
+✅ ITR Object Highlights
+- itr_id / id (integer) – unique record identifier
+- itr_ref_no (string) – generated ITR number (e.g., ITR-SIGNET-1-ME-PR-PL-047)
+- project_name, project_code, client_name (strings)
+- contractor, pmc_engineer, vendor_code, material_code (strings)
+- wir_itr_submission_date_time, inspection_date_time (datetime strings)
+- submitted_to/submitted_by (strings)
+- contractor_part (object) – nested details (location, area, discipline, attachments, measurement, clearances, comments, readiness)
+- lodha_pmc (object) – PMC comments, sign-offs, result code
+- source, source_file_name (strings) – extraction source metadata
+- dynamic_field (array) – arbitrary key/value metadata for future compatibility
+- project_id (integer) – reference to linked project
+- status / itr_submitted (string/boolean) – workflow state (Draft/Submitted)
+
+Endpoints
+1️⃣ Create ITR
+- `POST /api/itr`
+- Body: JSON
+  * Include header/project metadata plus `contractor_part`, `lodha_pmc`, and `dynamic_field`.
+  * `project_id` is required (FK) so provide a valid project.
+  * Example payload (subset):
+```
+{
+  "project_name": "Signet Tower 1",
+  "project_code": "SIGNET-1",
+  "contractor": "Madhuram Enterprises",
+  "itr_ref_no": "ITR-SIGNET-1-ME-PR-PL-047",
+  "inspection_date_time": "2026-02-02T10:00:00Z",
+  "contractor_part": {
+    "location_ref": "Signet 1 - Plumbing",
+    "description_of_works": "Pipe installation",
+    "discipline": ["Plumbing"],
+    "measurement": { "previous_qty": 0, "current_qty": 17, "cumulative_qty": 17 }
+  },
+  "project_id": 5
+}
+```
+2️⃣ List ITRs
+- `GET /api/itr`
+- Returns array of all ITR records (latest first).
+
+3️⃣ Get ITR by ID
+- `GET /api/itr/{id}`
+- Fetches a single ITR row by its `itr_id`.
+
+4️⃣ Get ITR by Project
+- `GET /api/itr/project/{projectId}`
+- Lists ITRs scoped to a specific project (use the project’s `project_id`).
+
+5️⃣ Update ITR
+- `PUT /api/itr/{id}`
+- Accepts partial payload; only provided fields are overwritten.
+- Example updates: `lodha_pmc.result_code`, `contractor_part.description_of_works`, `itr_submitted`
+
+6️⃣ Delete ITR
+- `DELETE /api/itr/{id}`
+- Removes the record; ensure no dependent workflows require the item afterwards.
+
+Untracked Notes
+- API responses mirror the payload (camelCase in frontend, snake_case in backend). The client helpers normalize between both formats.

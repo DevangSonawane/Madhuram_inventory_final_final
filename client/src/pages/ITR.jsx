@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { Upload, FileUp, PencilLine, Eye, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { DISCIPLINE_OPTIONS, EMPTY_ITR, YES_NO_NA_OPTIONS } from "@/pages/itrShared";
+import { api } from "@/lib/api";
+import { useProject } from "@/contexts/ProjectContext";
 
 const STORAGE_KEY = "itrPreview";
 const RECENT_KEY = "itrRecent";
@@ -68,6 +70,111 @@ const ATTACHMENT_LABELS = [
   { re: /checklist\s*sheet\s*att/i, path: "contractorPart.attachments.checklistAttached" },
   { re: /joint\s*measurement\s*sheet\s*att/i, path: "contractorPart.attachments.jointMeasurementAttached" },
 ];
+
+const normalizeSnakeKeys = (value) => {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return value.map((entry) => (entry && typeof entry === "object" ? normalizeSnakeKeys(entry) : entry));
+  }
+  if (typeof value === "object") {
+    return Object.entries(value).reduce((acc, [key, val]) => {
+      const camelKey = key.replace(/_([a-z])/g, (_, char) => char.toUpperCase());
+      acc[camelKey] = normalizeSnakeKeys(val);
+      return acc;
+    }, {});
+  }
+  return value;
+};
+
+const mapApiItrToForm = (rawItem = {}, normalizedItem = null) => {
+  const normalized = normalizedItem || normalizeSnakeKeys(rawItem);
+  const contractorPart = normalized.contractorPart || {};
+  const contractorClearances = contractorPart.clearances || {};
+  const disciplineField = Array.isArray(contractorPart.discipline)
+    ? contractorPart.discipline
+    : contractorPart.discipline
+    ? [contractorPart.discipline]
+    : [];
+
+  const clearances = {
+    ...EMPTY_ITR.contractorPart.clearances,
+    ...contractorClearances,
+    mep: { ...EMPTY_ITR.contractorPart.clearances.mep, ...contractorClearances.mep },
+    surveyor: { ...EMPTY_ITR.contractorPart.clearances.surveyor, ...contractorClearances.surveyor },
+    interface: { ...EMPTY_ITR.contractorPart.clearances.interface, ...contractorClearances.interface },
+  };
+
+  const contractorSection = {
+    ...EMPTY_ITR.contractorPart,
+    ...contractorPart,
+    discipline: disciplineField,
+    measurement: { ...EMPTY_ITR.contractorPart.measurement, ...contractorPart.measurement },
+    attachments: { ...EMPTY_ITR.contractorPart.attachments, ...contractorPart.attachments },
+    clearances,
+  };
+
+  const lodhaRaw = normalized.lodhaPmc || {};
+  const lodhaSignOffs = {
+    ...EMPTY_ITR.lodhaPmc.signOffs,
+    ...lodhaRaw.signOffs,
+    engineerManagerCivil: { ...EMPTY_ITR.lodhaPmc.signOffs.engineerManagerCivil, ...lodhaRaw.signOffs?.engineerManagerCivil },
+    engineerManagerMep: { ...EMPTY_ITR.lodhaPmc.signOffs.engineerManagerMep, ...lodhaRaw.signOffs?.engineerManagerMep },
+    towerIncharge: { ...EMPTY_ITR.lodhaPmc.signOffs.towerIncharge, ...lodhaRaw.signOffs?.towerIncharge },
+    qaaDepartment: { ...EMPTY_ITR.lodhaPmc.signOffs.qaaDepartment, ...lodhaRaw.signOffs?.qaaDepartment },
+  };
+
+  const lodhaSection = {
+    ...EMPTY_ITR.lodhaPmc,
+    ...lodhaRaw,
+    signOffs: lodhaSignOffs,
+  };
+
+  return {
+    ...EMPTY_ITR,
+    itr_id: normalized.itrId || normalized.id,
+    projectName: normalized.projectName || normalized.project || "",
+    projectCode: normalized.projectCode || "",
+    clientEmployer: normalized.clientEmployer || normalized.clientName || normalized.client || "",
+    pmcEngineer: normalized.pmcEngineer || normalized.pmc || "",
+    contractor: normalized.contractor || "",
+    vendorCode: normalized.vendorCode || "",
+    materialCode: normalized.materialCode || "",
+    itrRefNo: normalized.itrRefNo || normalized.itrRef || "",
+    wirItrSubmissionDateTime: normalized.wirItrSubmissionDateTime || "",
+    inspectionDateTime: normalized.inspectionDateTime || normalized.inspectionDate || "",
+    submittedTo: normalized.submittedTo || "",
+    submittedBy: normalized.submittedBy || "",
+    contractorPart: contractorSection,
+    lodhaPmc: lodhaSection,
+    source: normalized.source || "Manual",
+    sourceFileName: normalized.sourceFileName || normalized.sourceFile || "",
+    title: normalized.title || EMPTY_ITR.title,
+  };
+};
+
+const mapStatusFromApi = (normalizedItem = {}) => {
+  const status = normalizedItem.status || normalizedItem.statusCode || normalizedItem.state || normalizedItem.itrStatus;
+  if (status) return status;
+  const submitted = normalizedItem.itrSubmitted ?? normalizedItem.submitted ?? normalizedItem.itrSubmited;
+  if (submitted === true || submitted === "true") return "Submitted";
+  if (submitted === false || submitted === "false") return "Draft";
+  return "Submitted";
+};
+
+const mapApiItrToListItem = (rawItem) => {
+  const normalized = normalizeSnakeKeys(rawItem);
+  const formData = mapApiItrToForm(rawItem, normalized);
+  const id = formData.itrRefNo || formData.itr_id || `ITR-${formData.itr_id || Date.now()}`;
+  return {
+    id,
+    date: formData.inspectionDateTime || formData.wirItrSubmissionDateTime || normalized.createdAt || "",
+    project: formData.projectName || "",
+    location: formData.contractorPart.areaRef || formData.contractorPart.floorLevel || formData.contractorPart.locationRef || "",
+    status: mapStatusFromApi(normalized),
+    itr_id: formData.itr_id,
+    payload: formData,
+  };
+};
 
 function loadStoredItr() {
   if (typeof window === "undefined") return null;
@@ -203,10 +310,39 @@ export default function ITR() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [recentItrs, setRecentItrs] = useState(() => loadRecentItrs());
+  const [loadingItrs, setLoadingItrs] = useState(false);
+  const { selectedProject } = useProject();
+  const projectId = selectedProject?.id ?? selectedProject?.project_id ?? null;
 
   useEffect(() => {
     saveRecentItrs(recentItrs);
   }, [recentItrs]);
+
+  const fetchItrs = useCallback(async () => {
+    setLoadingItrs(true);
+    try {
+      const res = projectId ? await api.getItrsByProject(projectId) : await api.getItrs();
+      if (res.success && Array.isArray(res.data)) {
+        const mapped = res.data.map(mapApiItrToListItem);
+        setRecentItrs(mapped);
+      } else {
+        if (res?.error) {
+          toast({ title: "Error", description: res.error, variant: "destructive" });
+        }
+        setRecentItrs(loadRecentItrs());
+      }
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Error", description: "Failed to load ITRs.", variant: "destructive" });
+      setRecentItrs(loadRecentItrs());
+    } finally {
+      setLoadingItrs(false);
+    }
+  }, [projectId, toast]);
+
+  useEffect(() => {
+    fetchItrs();
+  }, [fetchItrs]);
 
   const hasPreview = useMemo(() => {
     return itrData.projectName || itrData.itrRefNo || itrData.contractorPart.descriptionOfWorks;
@@ -315,12 +451,38 @@ export default function ITR() {
     }
   };
 
-  const handleDeleteRecent = (id) => {
-    setRecentItrs((prev) => prev.filter((item) => item.id !== id));
+  const handleDeleteRecent = async (item) => {
+    if (!item) return;
+    const confirmed = window.confirm("Delete this ITR? This action cannot be undone.");
+    if (!confirmed) return;
+
+    if (item.itr_id) {
+      try {
+        const res = await api.deleteItr(item.itr_id);
+        if (res.success) {
+          toast({ title: "ITR deleted", description: "The ITR entry was removed." });
+          fetchItrs();
+        } else {
+          toast({ title: "Error", description: res.error || "Failed to delete ITR.", variant: "destructive" });
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to delete ITR.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      setRecentItrs((prev) => prev.filter((entry) => entry.id !== item.id));
+      toast({ title: "ITR removed", description: "The local ITR record was removed." });
+    }
   };
 
   const handleEditRecent = (item) => {
-    if (!item?.payload) return;
+    if (!item?.payload) {
+      toast({ title: "Cannot edit", description: "Saved ITR data is not available.", variant: "destructive" });
+      return;
+    }
     setItrData(item.payload);
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(item.payload));
@@ -600,36 +762,42 @@ export default function ITR() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 md:hidden">
-            {recentItrs.map((item) => (
-              <div key={item.id} className="border rounded-lg p-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-medium">{item.id}</div>
-                    <div className="text-xs text-muted-foreground">{item.date}</div>
-                  </div>
-                  <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>{item.status}</Badge>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
-                  <div className="col-span-2">
-                    <div className="text-muted-foreground text-xs">Project</div>
-                    <div>{item.project}</div>
-                  </div>
-                  <div className="col-span-2">
-                    <div className="text-muted-foreground text-xs">Location</div>
-                    <div>{item.location}</div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
-                    <PencilLine className="mr-2 h-4 w-4" /> Edit
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item.id)}>
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
-                  </Button>
-                </div>
+            {loadingItrs ? (
+              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Loading ITRs…
               </div>
-            ))}
-            {recentItrs.length === 0 ? (
+            ) : (
+              recentItrs.map((item) => (
+                <div key={item.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium">{item.id}</div>
+                      <div className="text-xs text-muted-foreground">{item.date}</div>
+                    </div>
+                    <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>{item.status}</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
+                    <div className="col-span-2">
+                      <div className="text-muted-foreground text-xs">Project</div>
+                      <div>{item.project}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-muted-foreground text-xs">Location</div>
+                      <div>{item.location}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
+                      <PencilLine className="mr-2 h-4 w-4" /> Edit
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+            {!loadingItrs && recentItrs.length === 0 ? (
               <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
                 No ITRs found. Upload or submit an ITR to see it here.
               </div>
@@ -648,30 +816,38 @@ export default function ITR() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentItrs.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.id}</TableCell>
-                  <TableCell>{item.date}</TableCell>
-                  <TableCell>{item.project}</TableCell>
-                  <TableCell>{item.location}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>{item.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
-                        <PencilLine className="mr-2 h-3 w-3" /> Edit
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item.id)}>
-                        <Trash2 className="mr-2 h-3 w-3" /> Delete
-                      </Button>
-                    </div>
+              {loadingItrs ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                    Loading ITRs…
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                recentItrs.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.id}</TableCell>
+                    <TableCell>{item.date}</TableCell>
+                    <TableCell>{item.project}</TableCell>
+                    <TableCell>{item.location}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>{item.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
+                          <PencilLine className="mr-2 h-3 w-3" /> Edit
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item)}>
+                          <Trash2 className="mr-2 h-3 w-3" /> Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
-          {recentItrs.length === 0 ? (
+          {!loadingItrs && recentItrs.length === 0 ? (
             <div className="hidden md:block rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
               No ITRs found. Upload or submit an ITR to see it here.
             </div>

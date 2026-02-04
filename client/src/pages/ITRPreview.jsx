@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft } from "lucide-react";
 import { DISCIPLINE_OPTIONS, EMPTY_ITR, RESULT_CODE_OPTIONS, YES_NO_NA_OPTIONS } from "@/pages/itrShared";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
+import { useProject } from "@/contexts/ProjectContext";
 
 const STORAGE_KEY = "itrPreview";
 const RECENT_KEY = "itrRecent";
@@ -74,6 +77,59 @@ function saveRecentItrs(items) {
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(items));
 }
 
+const convertToSnakeKeys = (value) => {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return value.map(convertToSnakeKeys);
+  }
+  if (typeof value === "object") {
+    return Object.entries(value).reduce((acc, [key, val]) => {
+      const snakeKey = key.replace(/([A-Z])/g, (_, char) => `_${char.toLowerCase()}`);
+      acc[snakeKey] = convertToSnakeKeys(val);
+      return acc;
+    }, {});
+  }
+  return value;
+};
+
+const buildDynamicField = (itrData) => {
+  const fields = [];
+  const pushField = (key, value) => {
+    if (value == null) return;
+    if (typeof value === "string" && value.trim() === "") return;
+    if (Array.isArray(value) && value.length === 0) return;
+    if (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0) return;
+    fields.push({ key, value: typeof value === "object" ? JSON.stringify(value) : value });
+  };
+
+  pushField("Contractor Part", itrData.contractorPart);
+  pushField("Lodha PMC", itrData.lodhaPmc);
+  pushField("Source", itrData.source);
+  pushField("Source File", itrData.sourceFileName);
+  return fields;
+};
+
+const buildItrPayload = (itrData, projectId) => ({
+  project_name: itrData.projectName || "",
+  project_code: itrData.projectCode || "",
+  client_name: itrData.clientEmployer || "",
+  pmc_engineer: itrData.pmcEngineer || "",
+  contractor: itrData.contractor || "",
+  vendor_code: itrData.vendorCode || "",
+  material_code: itrData.materialCode || "",
+  itr_ref_no: itrData.itrRefNo || "",
+  wir_itr_submission_date_time: itrData.wirItrSubmissionDateTime || "",
+  inspection_date_time: itrData.inspectionDateTime || "",
+  submitted_to: itrData.submittedTo || "",
+  submitted_by: itrData.submittedBy || "",
+  source: itrData.source || "Manual",
+  source_file_name: itrData.sourceFileName || "",
+  contractor_part: convertToSnakeKeys(itrData.contractorPart),
+  lodha_pmc: convertToSnakeKeys(itrData.lodhaPmc),
+  dynamic_field: buildDynamicField(itrData),
+  project_id: projectId,
+});
+
 function InfoItem({ label, value }) {
   return (
     <div className="space-y-1">
@@ -87,6 +143,9 @@ export default function ITRPreview() {
   const navigate = useNavigate();
   const [itrData, setItrData] = useState(() => normalizeItrData(loadStoredItr()));
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const { selectedProject } = useProject();
+  const projectId = selectedProject?.id ?? selectedProject?.project_id ?? null;
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -165,22 +224,50 @@ export default function ITRPreview() {
   };
 
   const handleSubmit = async () => {
+    if (!projectId) {
+      toast({
+        title: "Select project",
+        description: "Choose a project before submitting an ITR.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
+      const payload = buildItrPayload(itrData, projectId);
+      const response = itrData.itr_id ? await api.updateItr(itrData.itr_id, payload) : await api.createItr(payload);
+
+      if (!response.success) {
+        toast({ title: "Error", description: response.error || "Failed to submit ITR.", variant: "destructive" });
+        return;
+      }
+
+      toast({
+        title: "ITR saved",
+        description: itrData.itr_id ? "Your ITR has been updated." : "Your ITR has been submitted.",
+      });
+
       const recent = loadRecentItrs();
       const id = itrData.itrRefNo || `ITR-${Date.now()}`;
-      const date = itrData.inspectionDateTime || itrData.wirItrSubmissionDateTime || new Date().toISOString().split('T')[0];
+      const date = itrData.inspectionDateTime || itrData.wirItrSubmissionDateTime || new Date().toISOString().split("T")[0];
       const location = itrData.contractorPart.areaRef || itrData.contractorPart.floorLevel || itrData.contractorPart.locationRef || "";
-      const payload = { ...itrData };
       const nextRecent = [
-        { id, date, project: itrData.projectName, location, status: "Submitted", payload },
+        { id, date, project: itrData.projectName, location, status: "Submitted", payload: { ...itrData } },
         ...recent.filter((item) => item.id !== id),
       ].slice(0, 25);
       saveRecentItrs(nextRecent);
+
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(STORAGE_KEY);
       }
       navigate("/itr");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to submit ITR.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
