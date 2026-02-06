@@ -423,6 +423,69 @@ export const api = {
     return handleResponse(response);
   },
 
+  // PO (Purchase Orders) – Base URL: https://api.festmate.in, Storage: /uploads/po
+  uploadPoFile: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+
+    const response = await fetch(`${BASE_URL}/api/po/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  createPo: async (data) => {
+    const response = await fetch(`${BASE_URL}/api/po`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getPosByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/po/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getPoById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/po/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updatePo: async (id, data) => {
+    const response = await fetch(`${BASE_URL}/api/po/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  deletePo: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/po/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   // ITR (Installation Test Report)
   createItr: async (data) => {
     const response = await fetch(`${BASE_URL}/api/itr`, {

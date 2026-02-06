@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Upload, FileUp, PencilLine, Eye, Trash2, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useProject } from "@/contexts/ProjectContext";
+import { api } from "@/lib/api";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractPurchaseOrderFields } from "@/lib/purchaseOrderExtractor";
-import { EMPTY_PO } from "@/pages/poShared";
+import { EMPTY_PO, normalizePoData } from "@/pages/poShared";
 
 const STORAGE_KEY = "poPreview";
 const RECENT_KEY = "poRecent";
@@ -156,34 +158,6 @@ function setPathValue(base, path, value) {
   return next;
 }
 
-function normalizePoData(raw) {
-  if (!raw) return EMPTY_PO;
-  return {
-    ...EMPTY_PO,
-    ...raw,
-    vendor: {
-      ...EMPTY_PO.vendor,
-      ...raw.vendor,
-      contacts: {
-        ...EMPTY_PO.vendor.contacts,
-        ...raw.vendor?.contacts,
-        primary: { ...EMPTY_PO.vendor.contacts.primary, ...raw.vendor?.contacts?.primary },
-        secondary: { ...EMPTY_PO.vendor.contacts.secondary, ...raw.vendor?.contacts?.secondary },
-      },
-    },
-    itemsGroup: { ...EMPTY_PO.itemsGroup, ...raw.itemsGroup },
-    items: Array.isArray(raw.items) ? raw.items : [],
-    discount: { ...EMPTY_PO.discount, ...raw.discount },
-    taxes: {
-      cgst: { ...EMPTY_PO.taxes.cgst, ...raw.taxes?.cgst },
-      sgst: { ...EMPTY_PO.taxes.sgst, ...raw.taxes?.sgst },
-    },
-    summary: { ...EMPTY_PO.summary, ...raw.summary },
-    notes: Array.isArray(raw.notes) ? raw.notes : [],
-    termsAndConditions: Array.isArray(raw.termsAndConditions) ? raw.termsAndConditions : [],
-  };
-}
-
 function normalizeText(text) {
   return text
     .split(/\n+/)
@@ -252,14 +226,64 @@ export default function PurchaseOrders() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const { toast } = useToast();
-  const [poData, setPoData] = useState(() => normalizePoData(loadStoredPo()) || EMPTY_PO);
+  const { selectedProject } = useProject();
+  const projectId = selectedProject?.project_id ?? selectedProject?.id ?? null;
+  const [poData, setPoData] = useState(() => normalizePoData(loadStoredPo()));
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [recentPos, setRecentPos] = useState(() => loadRecentPos());
+  const [loadingPos, setLoadingPos] = useState(false);
 
   useEffect(() => {
     saveRecentPos(recentPos);
   }, [recentPos]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setLoadingPos(false);
+      setRecentPos([]);
+      return;
+    }
+
+    const fetchPos = async () => {
+      setLoadingPos(true);
+      try {
+        const result = await api.getPosByProject(projectId);
+        if (result.success && Array.isArray(result.data)) {
+          const mapped = result.data.map((record) => {
+            const normalized = normalizePoData(record);
+            const id = normalized.orderNo || `PO-${record.po_id || Date.now()}`;
+            const date = normalized.poDate || normalized.indentDate || record.created_at || "";
+            const vendorName = normalized.vendor?.name || "";
+            const totalAmount = normalized.totalAmount || record.total_amount || "";
+            const status = normalized.status || record.status || "created";
+            return {
+              id,
+              date,
+              vendor: vendorName,
+              totalAmount,
+              status,
+              payload: normalized,
+              po_id: record.po_id,
+            };
+          });
+          setRecentPos(mapped);
+        } else {
+          if (result?.error) {
+            toast({ title: "Error", description: result.error || "Failed to load purchase orders.", variant: "destructive" });
+          }
+          setRecentPos([]);
+        }
+      } catch (error) {
+        toast({ title: "Error", description: error?.message || "Failed to load purchase orders.", variant: "destructive" });
+        setRecentPos([]);
+      } finally {
+        setLoadingPos(false);
+      }
+    };
+
+    fetchPos();
+  }, [projectId, toast]);
 
   const hasPreview = useMemo(() => {
     return poData.vendor?.name || poData.orderNo || poData.poDate || poData.totalAmount;
@@ -376,8 +400,24 @@ export default function PurchaseOrders() {
     }
   };
 
-  const handleDeleteRecent = (id) => {
-    setRecentPos((prev) => prev.filter((item) => item.id !== id));
+  const handleDeleteRecent = async (item) => {
+    if (!item) return;
+    if (!item.po_id) {
+      setRecentPos((prev) => prev.filter((entry) => entry.id !== item.id));
+      return;
+    }
+
+    try {
+      const res = await api.deletePo(item.po_id);
+      if (res.success) {
+        toast({ title: "PO deleted", description: "Purchase order removed successfully." });
+        setRecentPos((prev) => prev.filter((entry) => entry.po_id !== item.po_id));
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to delete purchase order.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to delete purchase order.", variant: "destructive" });
+    }
   };
 
   const handleEditRecent = (item) => {
@@ -763,13 +803,17 @@ export default function PurchaseOrders() {
                   <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
                     <PencilLine className="mr-2 h-4 w-4" /> Edit
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item.id)}>
+                  <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item)}>
                     <Trash2 className="mr-2 h-4 w-4" /> Delete
                   </Button>
                 </div>
               </div>
             ))}
-            {recentPos.length === 0 ? (
+            {loadingPos ? (
+              <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                Loading purchase orders...
+              </div>
+            ) : recentPos.length === 0 ? (
               <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
                 No purchase orders found. Upload or submit a PO to see it here.
               </div>
@@ -802,7 +846,7 @@ export default function PurchaseOrders() {
                       <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
                         <PencilLine className="mr-2 h-3 w-3" /> Edit
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item.id)}>
+                      <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item)}>
                         <Trash2 className="mr-2 h-3 w-3" /> Delete
                       </Button>
                     </div>
@@ -811,7 +855,11 @@ export default function PurchaseOrders() {
               ))}
             </TableBody>
           </Table>
-          {recentPos.length === 0 ? (
+          {loadingPos ? (
+            <div className="hidden md:block rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+              Loading purchase orders...
+            </div>
+          ) : recentPos.length === 0 ? (
             <div className="hidden md:block rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
               No purchase orders found. Upload or submit a PO to see it here.
             </div>

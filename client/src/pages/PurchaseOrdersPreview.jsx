@@ -5,38 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Minus } from "lucide-react";
-import { EMPTY_PO } from "@/pages/poShared";
+import { useToast } from "@/hooks/use-toast";
+import { useProject } from "@/contexts/ProjectContext";
+import { api } from "@/lib/api";
+import { EMPTY_PO, normalizePoData } from "@/pages/poShared";
 
 const STORAGE_KEY = "poPreview";
 const RECENT_KEY = "poRecent";
-
-function normalizePoData(raw) {
-  if (!raw) return EMPTY_PO;
-  return {
-    ...EMPTY_PO,
-    ...raw,
-    vendor: {
-      ...EMPTY_PO.vendor,
-      ...raw.vendor,
-      contacts: {
-        ...EMPTY_PO.vendor.contacts,
-        ...raw.vendor?.contacts,
-        primary: { ...EMPTY_PO.vendor.contacts.primary, ...raw.vendor?.contacts?.primary },
-        secondary: { ...EMPTY_PO.vendor.contacts.secondary, ...raw.vendor?.contacts?.secondary },
-      },
-    },
-    itemsGroup: { ...EMPTY_PO.itemsGroup, ...raw.itemsGroup },
-    items: Array.isArray(raw.items) ? raw.items : [],
-    discount: { ...EMPTY_PO.discount, ...raw.discount },
-    taxes: {
-      cgst: { ...EMPTY_PO.taxes.cgst, ...raw.taxes?.cgst },
-      sgst: { ...EMPTY_PO.taxes.sgst, ...raw.taxes?.sgst },
-    },
-    summary: { ...EMPTY_PO.summary, ...raw.summary },
-    notes: Array.isArray(raw.notes) ? raw.notes : [],
-    termsAndConditions: Array.isArray(raw.termsAndConditions) ? raw.termsAndConditions : [],
-  };
-}
 
 function loadStoredPo() {
   if (typeof window === "undefined") return null;
@@ -72,8 +47,72 @@ function InfoItem({ label, value }) {
   );
 }
 
+const parseDecimalValue = (value) => {
+  if (value === undefined || value === null) return undefined;
+  const normalized = String(value).replace(/,/g, '').trim();
+  if (normalized === '') return undefined;
+  const parsed = Number(normalized);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
+const buildItemPayloads = (items) => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item, index) => {
+      const payload = {
+        srno: item.srNo || item.srno || index + 1,
+        hsn: item.hsnCode || item.hsn || "",
+        description: item.description || "",
+        qty: item.qty || item.quantity || "",
+        UOM: item.uom || item.UOM || "",
+        Rate: item.rate || item.Rate || "",
+        Amount: item.amount || item.Amount || "",
+        remark: item.remarks || item.remark || "",
+      };
+      const hasContent = payload.description || payload.hsn || payload.qty || payload.Rate || payload.Amount;
+      return hasContent ? payload : null;
+    })
+    .filter(Boolean);
+};
+
+const buildPoPayload = (poData, projectId) => ({
+  project_id: projectId,
+  company_name: poData.companyName || "",
+  company_subtitle: poData.companySubtitle || "",
+  company_email: poData.companyEmail || "",
+  company_gst: poData.companyGstNo || "",
+  indent_no: poData.indentNo || "",
+  indent_date: poData.indentDate || "",
+  order_no: poData.orderNo || "",
+  po_date: poData.poDate || "",
+  vendor_name: poData.vendor.name || "",
+  site: poData.vendor.site || "",
+  contact_person: poData.vendor.contactPerson || "",
+  vendor_address: poData.vendor.address || "",
+  primary_contact_name: poData.vendor.contacts.primary.name || "",
+  primary_contact_number: poData.vendor.contacts.primary.phone || "",
+  secondary_contact_name: poData.vendor.contacts.secondary.name || "",
+  secondary_contact_number: poData.vendor.contacts.secondary.phone || "",
+  items: buildItemPayloads(poData.items),
+  discount: parseDecimalValue(poData.discount.percent),
+  discount_amount: parseDecimalValue(poData.discount.amount),
+  after_discount: parseDecimalValue(poData.afterDiscountAmount),
+  cgst: parseDecimalValue(poData.taxes.cgst.percent),
+  cgst_amount: parseDecimalValue(poData.taxes.cgst.amount),
+  sgst: parseDecimalValue(poData.taxes.sgst.percent),
+  sgst_amount: parseDecimalValue(poData.taxes.sgst.amount),
+  total_amount: parseDecimalValue(poData.totalAmount),
+  delivery: poData.summary.delivery || "",
+  payment: poData.summary.payment || "",
+  notes: poData.notes.length ? poData.notes.join("\\n") : "",
+  status: "created",
+});
+
 export default function PurchaseOrdersPreview() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { selectedProject } = useProject();
+  const projectId = selectedProject?.project_id ?? selectedProject?.id ?? null;
   const [poData, setPoData] = useState(() => normalizePoData(loadStoredPo()));
   const [saving, setSaving] = useState(false);
 
@@ -133,22 +172,50 @@ export default function PurchaseOrdersPreview() {
   };
 
   const handleSubmit = async () => {
+    if (!projectId) {
+      toast({ title: "Select project", description: "Choose a project before submitting a PO.", variant: "destructive" });
+      return;
+    }
+
+    const numericProjectId = Number(projectId);
+    if (Number.isNaN(numericProjectId)) {
+      toast({ title: "Select project", description: "Invalid project selected.", variant: "destructive" });
+      return;
+    }
+
+    const payload = buildPoPayload(poData, numericProjectId);
     setSaving(true);
     try {
-      const recent = loadRecentPos();
-      const id = poData.orderNo || poData.indentNo || `PO-${Date.now()}`;
-      const date = poData.poDate || poData.indentDate || new Date().toISOString().split('T')[0];
-      const vendor = poData.vendor?.name || "";
-      const payload = { ...poData };
-      const nextRecent = [
-        { id, date, vendor, totalAmount: poData.totalAmount, status: "Submitted", payload },
-        ...recent.filter((item) => item.id !== id),
-      ].slice(0, 25);
-      saveRecentPos(nextRecent);
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(STORAGE_KEY);
+      const response = await api.createPo(payload);
+      if (response.success) {
+        const normalized = normalizePoData(response.data || {});
+        const recent = loadRecentPos();
+        const id = normalized.orderNo || `PO-${normalized.po_id || Date.now()}`;
+        const date = normalized.poDate || normalized.indentDate || new Date().toISOString().split('T')[0];
+        const vendorName = normalized.vendor?.name || "";
+        const nextRecent = [
+          {
+            id,
+            date,
+            vendor: vendorName,
+            totalAmount: normalized.totalAmount,
+            status: normalized.status || "created",
+            payload: normalized,
+            po_id: normalized.po_id,
+          },
+          ...recent.filter((item) => item.id !== id),
+        ].slice(0, 25);
+        saveRecentPos(nextRecent);
+        toast({ title: "PO submitted", description: "Purchase order saved successfully." });
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+        }
+        navigate("/purchase-orders");
+      } else {
+        toast({ title: "Error", description: response.error || "Failed to submit PO.", variant: "destructive" });
       }
-      navigate("/purchase-orders");
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to submit PO.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -162,7 +229,7 @@ export default function PurchaseOrdersPreview() {
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Review extracted fields and finalize the purchase order.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || !hasPreview}>
+          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || !hasPreview || !projectId}>
             {saving ? "Submitting..." : "Submit PO"}
           </Button>
           <Button
