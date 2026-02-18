@@ -122,6 +122,11 @@ export const MENU_CATEGORIES = [
     category: "Inventory",
     items: [
       {
+        title: "Inventory",
+        path: "/inventory",
+        icon: Warehouse,
+      },
+      {
         title: "Stock Overview",
         path: "/stock-areas",
         icon: Warehouse,

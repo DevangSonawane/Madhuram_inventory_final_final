@@ -1,0 +1,250 @@
+📘 Madhuram API Documentation – Inventory Management Module
+Overview
+The Inventory API in Madhuram manages inventory items for projects, including:
+Creating inventory items
+Fetching inventory items (all / by project / by ID)
+Updating inventory items
+Deleting inventory items
+✅ Base URL: /api/inventory
+✅ Database Table: inventories
+✅ Foreign key validation: project_id (error code 23503 → invalid project)
+
+📦 Inventory Schema
+Inventory Object
+Field
+Type
+Notes
+inventory_id
+integer
+Primary key
+project_id
+integer
+Linked project ID
+brand
+string
+Brand name
+quantity
+number
+Quantity
+name
+string
+Item name
+price
+number
+Unit price / price
+stockin
+boolean
+Stock status flag
+created_at
+datetime
+Created timestamp
+updated_at
+datetime
+Updated timestamp (on update)
+
+Example Inventory Object
+{
+  "inventory_id": 1,
+  "project_id": 10,
+  "brand": "ACC",
+  "quantity": 100,
+  "name": "Cement Bag",
+  "price": 350,
+  "stockin": true,
+  "created_at": "2026-02-18T10:00:00.000Z"
+}
+
+
+✅ Endpoints
+
+1) Create Inventory Item
+POST /api/inventory
+Creates a new inventory item.
+Content-Type: application/json
+Request Body
+Field
+Type
+Required
+project_id
+integer
+✅
+brand
+string
+✅
+quantity
+number
+✅
+name
+string
+✅
+price
+number
+✅
+stockin
+boolean
+✅
+
+Example Request
+{
+  "project_id": 10,
+  "brand": "ACC",
+  "quantity": 50,
+  "name": "Cement Bag",
+  "price": 350,
+  "stockin": true
+}
+
+Success Response (201)
+Returns the created inventory item:
+{
+  "inventory_id": 1,
+  "project_id": 10,
+  "brand": "ACC",
+  "quantity": 50,
+  "name": "Cement Bag",
+  "price": 350,
+  "stockin": true,
+  "created_at": "2026-02-18T10:00:00.000Z"
+}
+
+Error Responses
+400 – Invalid project_id (project does not exist)
+{ "error": "Invalid project_id: Project does not exist" }
+
+500 – Internal server error
+{ "error": "Internal Server Error" }
+
+
+2) Get All Inventory Items
+GET /api/inventory
+Fetches all inventory items ordered by latest created first.
+Success Response (200)
+Returns array of inventory items:
+[
+  {
+    "inventory_id": 1,
+    "project_id": 10,
+    "brand": "ACC",
+    "quantity": 50,
+    "name": "Cement Bag",
+    "price": 350,
+    "stockin": true,
+    "created_at": "2026-02-18T10:00:00.000Z"
+  }
+]
+
+Error Response (500)
+{ "error": "Internal Server Error" }
+
+
+3) Get Inventory Item by ID
+GET /api/inventory/{id}
+Fetch a single inventory item using inventory_id.
+Path Parameter
+Param
+Type
+Required
+id
+integer
+✅
+
+Success Response (200)
+Returns one inventory item object.
+Error Response (404)
+{ "error": "Inventory item not found" }
+
+
+4) Get Inventory Items by Project ID
+GET /api/inventory/project/{projectId}
+Fetch all inventory items for a specific project.
+Path Parameter
+Param
+Type
+Required
+projectId
+integer
+✅
+
+Success Response (200)
+Returns array of items for that project:
+[
+  {
+    "inventory_id": 2,
+    "project_id": 10,
+    "brand": "Ultratech",
+    "quantity": 20,
+    "name": "Concrete Mix",
+    "price": 500,
+    "stockin": false
+  }
+]
+
+Error Response (500)
+{ "error": "Internal Server Error" }
+
+
+5) Update Inventory Item
+PUT /api/inventory/{id}
+Updates inventory item details.
+Uses COALESCE, so only fields provided will be updated.
+✅ updated_at is set automatically.
+Content-Type: application/json
+Path Parameter
+Param
+Type
+Required
+id
+integer
+✅
+
+Request Body (Any optional)
+Field
+Type
+brand
+string
+quantity
+number
+name
+string
+price
+number
+stockin
+boolean
+
+Example Request
+{
+  "quantity": 80,
+  "stockin": true,
+  "price": 360
+}
+
+Success Response (200)
+Returns updated inventory item.
+Error Response (404)
+{ "error": "Inventory item not found" }
+
+
+6) Delete Inventory Item
+DELETE /api/inventory/{id}
+Deletes inventory item by ID.
+Path Parameter
+Param
+Type
+Required
+id
+integer
+✅
+
+Success Response (200)
+{ "message": "Inventory item deleted successfully" }
+
+Error Response (404)
+{ "error": "Inventory item not found" }
+
+
+✅ Notes (Based on Your Code)
+project_id is validated by DB constraint → if project doesn’t exist, PostgreSQL throws error 23503 and API returns 400
+No authentication middleware is used here (all routes are currently public)
+Inventory list is sorted by created_at DESC
+
+

@@ -539,6 +539,161 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  uploadSampleFiles: async (files) => {
+    const formData = new FormData();
+    if (Array.isArray(files)) {
+      files.forEach((file) => {
+        if (file instanceof File) formData.append('file', file);
+      });
+    } else if (files instanceof File) {
+      formData.append('file', files);
+    }
+    const response = await fetch(`${BASE_URL}/api/sample/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  getSamples: async () => {
+    const response = await fetch(`${BASE_URL}/api/sample`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getSampleById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/sample/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getSamplesByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/sample/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateSample: async (id, data) => {
+    const payload = { ...data };
+    ['location', 'item_description', 'add_fields'].forEach((k) => {
+      if (payload[k] != null && typeof payload[k] !== 'string') {
+        try {
+          payload[k] = JSON.stringify(payload[k]);
+        } catch (_) {}
+      }
+    });
+    const response = await fetch(`${BASE_URL}/api/sample/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  deleteSample: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/sample/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  createSample: async (data) => {
+    const payload = { ...data };
+    ['location', 'item_description', 'add_fields'].forEach((k) => {
+      if (payload[k] != null && typeof payload[k] !== 'string') {
+        try {
+          payload[k] = JSON.stringify(payload[k]);
+        } catch (_) {}
+      }
+    });
+    const response = await fetch(`${BASE_URL}/api/sample`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  createInventory: async (data) => {
+    const payload = {
+      project_id: data.project_id,
+      brand: data.brand,
+      quantity: Number(data.quantity),
+      name: data.name,
+      price: Number(data.price),
+      stockin: Boolean(data.stockin),
+    };
+    const response = await fetch(`${BASE_URL}/api/inventory`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  getInventories: async () => {
+    const response = await fetch(`${BASE_URL}/api/inventory`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getInventoryById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/inventory/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getInventoriesByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/inventory/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateInventory: async (id, data) => {
+    const payload = {};
+    ['brand', 'name'].forEach((k) => {
+      if (data[k] != null && String(data[k]).trim() !== '') payload[k] = data[k];
+    });
+    if (data.quantity != null && data.quantity !== '') payload.quantity = Number(data.quantity);
+    if (data.price != null && data.price !== '') payload.price = Number(data.price);
+    if (typeof data.stockin === 'boolean') payload.stockin = data.stockin;
+
+    const response = await fetch(`${BASE_URL}/api/inventory/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  deleteInventory: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/inventory/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
 };
 
 // Helper to get token from storage

@@ -4,6 +4,7 @@
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
+import Tesseract from 'tesseract.js';
 
 // Configure PDF.js worker for Vite compatibility
 if (typeof window !== 'undefined') {
@@ -114,6 +115,39 @@ export async function extractTextFromPdf(file, opts = {}) {
   }
 }
 
+export async function extractTextFromPdfWithOcr(file, opts = {}) {
+  const base = await extractTextFromPdf(file, opts);
+  const baseLen = typeof base === 'string' ? base.replace(/\s+/g, '').length : 0;
+  const needFullOcr = baseLen < 200;
+  const ocrFirstPages = 4;
+  let ocrText = '';
+  try {
+    const images = await extractImagesFromPdf(file, {
+      scale: opts.scale ?? 1.2,
+      maxPages: needFullOcr ? (typeof opts.maxPages === 'number' ? Math.min(opts.maxPages, 12) : 12) : ocrFirstPages,
+      batchSize: needFullOcr ? 2 : 2,
+      quality: 0.8,
+    });
+    for (const img of images) {
+      try {
+        const pre = await preprocessForOcr(img.imageDataUrl);
+        const result = await Tesseract.recognize(pre, 'eng', { 
+          logger: () => {}, 
+          langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+          psm: 6,
+          preserve_interword_spaces: '1',
+        });
+        if (result?.data?.text) {
+          ocrText += '\n' + result.data.text;
+        }
+        if (looksLikeBoqTable(ocrText)) break;
+      } catch (_) {}
+    }
+  } catch (_) {}
+  const combined = [base || '', ocrText || ''].join('\n').trim();
+  return combined;
+}
+
 /**
  * Extract a single PDF page as an image (canvas -> data URL).
  * @param {object} page - PDF.js page object
@@ -134,6 +168,56 @@ async function extractPageAsImage(page, scale = 2) {
   }).promise;
 
   return canvas.toDataURL('image/png');
+}
+
+async function preprocessForOcr(dataUrl) {
+  try {
+    const img = await loadImage(dataUrl);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const y = 0.299 * r + 0.587 * g + 0.114 * b;
+      const v = y > 190 ? 255 : y > 140 ? 220 : y > 100 ? 180 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+      // keep alpha
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL('image/jpeg', 0.9);
+  } catch {
+    return dataUrl;
+  }
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+function looksLikeBoqTable(text) {
+  if (!text || text.length < 200) return false;
+  const t = text.toLowerCase();
+  const hasUnit = /(unit|uom|unit of measurement)/i.test(text);
+  const hasQty = /(qty|quantity)/i.test(text);
+  const hasPrice = /(rate|price|unit price|basic rate|cost|rs|inr|₹)/i.test(text);
+  const hasAmount = /(amount|total|line total|value|extended amount|total amount)/i.test(text);
+  const lines = text.split(/\r?\n/).slice(0, 80);
+  let numericRows = 0;
+  for (const l of lines) {
+    const nums = l.match(/\d+(?:[.,]\d+)?/g);
+    if (nums && nums.length >= 2) numericRows++;
+    if (numericRows >= 6) break;
+  }
+  return (hasUnit && hasQty && (hasPrice || hasAmount)) || numericRows >= 6;
 }
 
 /**

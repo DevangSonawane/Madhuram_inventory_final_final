@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { extractTextFromPdf } from "@/lib/pdfUtils";
+import { extractTextFromPdfWithOcr } from "@/lib/pdfUtils";
 import { extractBOQFromText, mapBOQItemsToTable } from "@/lib/boqExtractor";
 import { api } from "@/lib/api";
 
@@ -110,11 +110,11 @@ export default function BOQ() {
     setExtracting(true);
     try {
       // Optimized extraction: limit pages and use parallel processing
-      const raw = await extractTextFromPdf(file, { 
+      const raw = await extractTextFromPdfWithOcr(file, { 
         fullDocument: true, 
         preserveLines: true,
-        maxPages: 50, // Limit to 50 pages for faster processing
-        batchSize: 5 // Process 5 pages in parallel
+        maxPages: 20,
+        batchSize: 4
       });
       const { items: parsed, projectName } = extractBOQFromText(raw);
       const mapped = mapBOQItemsToTable(parsed, 0);

@@ -36,6 +36,7 @@ import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import ProjectSelection from '@/pages/ProjectSelection';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import Inventory from '@/pages/Inventory';
 
 function App() {
   return (
@@ -86,6 +87,7 @@ function App() {
                   <Route path="users" element={<Users />} />
                   <Route path="profile" element={<Profile />} />
                   <Route path="settings" element={<Profile />} />
+                  <Route path="inventory" element={<Inventory />} />
                 </Route>
               </Routes>
               <Toaster />

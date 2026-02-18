@@ -12,6 +12,10 @@ import { extractImagesFromPdf, extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractCPVCData, mapCPVCItemsToSamples } from "@/lib/cpvcExtractor";
 import { extractSuspendedWorkData, mapSuspendedWorkItemsToSamples } from "@/lib/suspendedWorkExtractor";
 import DiagramViewer from "@/components/DiagramViewer";
+import { useProject } from "@/contexts/ProjectContext";
+import { api } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Mock Sample Data (Floor-wise distribution)
 const MOCK_SAMPLES = [
@@ -26,7 +30,7 @@ export default function Samples() {
   const [floorCount, setFloorCount] = useState("");
   const [floorPlanFile, setFloorPlanFile] = useState(null);
   const [suspendedWorkFile, setSuspendedWorkFile] = useState(null);
-  const [isConfigured, setIsConfigured] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(true);
   const [floorPlanPreview, setFloorPlanPreview] = useState(null);
   
   // PDF extraction state - CPVC
@@ -47,6 +51,186 @@ export default function Samples() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all"); // "all", "cpvc", "suspended"
   const { toast } = useToast();
+  const { selectedProject } = useProject();
+  const [serverSamples, setServerSamples] = useState([]);
+  const [loadingServer, setLoadingServer] = useState(false);
+  const [uploadFilePaths, setUploadFilePaths] = useState([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingSample, setEditingSample] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editForm, setEditForm] = useState({
+    building_name: "",
+    site_name: "",
+    work_done: "",
+    sample_file: "",
+    location: { floor: "", block: "", wing: "", coordinates: "" },
+    item_description: [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
+    add_fields: []
+  });
+  const [createForm, setCreateForm] = useState({
+    building_name: "",
+    site_name: "",
+    work_done: "",
+    sample_file: "",
+    location: { floor: "", block: "", wing: "", coordinates: "" },
+    item_description: [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
+    add_fields: []
+  });
+
+  useEffect(() => {
+    const load = async () => {
+      setLoadingServer(true);
+      try {
+        if (selectedProject && (selectedProject.project_id || selectedProject.id)) {
+          const pid = selectedProject.project_id || selectedProject.id;
+          const res = await api.getSamplesByProject(pid);
+          if (res.success) {
+            const arr = Array.isArray(res.data) ? res.data : [];
+            setServerSamples(arr);
+          } else {
+            setServerSamples([]);
+          }
+        } else {
+          const res = await api.getSamples();
+          if (res.success) {
+            const arr = Array.isArray(res.data) ? res.data : [];
+            setServerSamples(arr);
+          } else {
+            setServerSamples([]);
+          }
+        }
+      } catch {
+        setServerSamples([]);
+      } finally {
+        setLoadingServer(false);
+      }
+    };
+    load();
+  }, [selectedProject]);
+
+  const openEdit = (sample) => {
+    setEditingSample(sample);
+    let loc = sample.location;
+    let items = sample.item_description;
+    let adds = sample.add_fields;
+    try { if (typeof loc === 'string') loc = JSON.parse(loc); } catch {}
+    try { if (typeof items === 'string') items = JSON.parse(items); } catch {}
+    try { if (typeof adds === 'string') adds = JSON.parse(adds); } catch {}
+    setEditForm({
+      building_name: sample.building_name || "",
+      site_name: sample.site_name || "",
+      work_done: sample.work_done || "",
+      sample_file: sample.sample_file || "",
+      location: loc && typeof loc === 'object' ? { floor: loc.floor || "", block: loc.block || "", wing: loc.wing || "", coordinates: loc.coordinates || "" } : { floor: "", block: "", wing: "", coordinates: "" },
+      item_description: Array.isArray(items) && items.length ? items.map(it => ({ sr_no: it.sr_no || "", description: it.description || "", quantity: it.quantity || "", value: it.value || "", add_fields: Array.isArray(it.add_fields) ? it.add_fields.map(f => ({ key: f.key || "", value: f.value || "" })) : [] })) : [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
+      add_fields: Array.isArray(adds) ? adds.map(f => ({ key: f.key || "", value: f.value || "" })) : []
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editingSample) return;
+    const id = editingSample.sample_id || editingSample.id;
+    const res = await api.updateSample(id, {
+      building_name: editForm.building_name,
+      site_name: editForm.site_name,
+      work_done: editForm.work_done,
+      sample_file: editForm.sample_file,
+      location: editForm.location,
+      item_description: editForm.item_description,
+      add_fields: editForm.add_fields
+    });
+    if (res.success) {
+      setEditOpen(false);
+      const refreshed = await (selectedProject ? api.getSamplesByProject(selectedProject.project_id || selectedProject.id) : api.getSamples());
+      if (refreshed.success) {
+        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
+        setServerSamples(arr);
+      }
+      toast({ title: "Updated", description: "Sample updated" });
+    } else {
+      toast({ title: "Update failed", description: res.error || "Error", variant: "destructive" });
+    }
+  };
+
+  const saveCreate = async () => {
+    const pid = selectedProject?.project_id || selectedProject?.id;
+    if (!pid) {
+      toast({ title: "Select project", description: "Choose a project first.", variant: "destructive" });
+      return;
+    }
+    const res = await api.createSample({
+      project_id: pid,
+      building_name: createForm.building_name,
+      site_name: createForm.site_name,
+      work_done: createForm.work_done,
+      sample_file: createForm.sample_file,
+      location: createForm.location,
+      item_description: createForm.item_description,
+      add_fields: createForm.add_fields
+    });
+    if (res.success) {
+      const refreshed = await api.getSamplesByProject(pid);
+      if (refreshed.success) {
+        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
+        setServerSamples(arr);
+      }
+      setCreateForm({
+        building_name: "",
+        site_name: "",
+        work_done: "",
+        sample_file: "",
+        location: { floor: "", block: "", wing: "", coordinates: "" },
+        item_description: [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
+        add_fields: []
+      });
+      toast({ title: "Created", description: "Sample created" });
+    } else {
+      toast({ title: "Create failed", description: res.error || "Error", variant: "destructive" });
+    }
+  };
+
+  const removeSample = async (sample) => {
+    const id = sample.sample_id || sample.id;
+    const res = await api.deleteSample(id);
+    if (res.success) {
+      const refreshed = await (selectedProject ? api.getSamplesByProject(selectedProject.project_id || selectedProject.id) : api.getSamples());
+      if (refreshed.success) {
+        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
+        setServerSamples(arr);
+      }
+      toast({ title: "Deleted", description: "Sample deleted" });
+    } else {
+      toast({ title: "Delete failed", description: res.error || "Error", variant: "destructive" });
+    }
+  };
+
+  const handleSampleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const res = await api.uploadSampleFiles(files);
+    if (res.success && res.data && res.data.filePaths) {
+      setUploadFilePaths(res.data.filePaths);
+      toast({ title: "Uploaded", description: `${res.data.filePaths.length} file(s) uploaded` });
+    } else {
+      toast({ title: "Upload failed", description: res.error || "Error", variant: "destructive" });
+    }
+  };
+
+  const attachFileToSample = async (sample, path) => {
+    const id = sample.sample_id || sample.id;
+    const res = await api.updateSample(id, { sample_file: path });
+    if (res.success) {
+      const refreshed = await (selectedProject ? api.getSamplesByProject(selectedProject.project_id || selectedProject.id) : api.getSamples());
+      if (refreshed.success) {
+        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
+        setServerSamples(arr);
+      }
+      toast({ title: "Attached", description: "File attached to sample" });
+    } else {
+      toast({ title: "Attach failed", description: res.error || "Error", variant: "destructive" });
+    }
+  };
 
   const handleFloorPlanUpload = async (e) => {
     const file = e.target.files[0];
@@ -168,7 +352,7 @@ export default function Samples() {
             diagrams: images.length,
             items: cpvcData.items.length,
             metadata: cpvcData.metadata,
-            sampleItems: mappedSamples.length
+            sampleItems: (Array.isArray(cpvcData.items) ? cpvcData.items.length : 0)
           });
           
           setExtractionProgress({ current: 2, total: 2, message: 'Complete!' });
@@ -287,7 +471,7 @@ export default function Samples() {
           diagrams: images.length,
           items: suspendedData.items.length,
           metadata: suspendedData.metadata,
-          sampleItems: mappedSuspended.length
+          sampleItems: (Array.isArray(suspendedData.items) ? suspendedData.items.length : 0)
         });
       } catch (error) {
         console.error('Error processing suspended work PDF:', error);
@@ -719,387 +903,273 @@ export default function Samples() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sample Management</h1>
-          <p className="text-muted-foreground mt-2">Managing samples for {floorCount} floors.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Samples</h1>
+          <p className="text-muted-foreground mt-2">Manage project samples from the list below.</p>
         </div>
-        <div className="flex flex-col sm:flex-row w-full sm:w-auto space-y-2 sm:space-y-0 sm:space-x-2">
-          {(extractedDiagrams.length > 0 || suspendedDiagrams.length > 0) && (
-            <Button 
-              variant="outline" 
-              className="w-full sm:w-auto"
-              onClick={() => setShowDiagramViewer(true)}
-            >
-              <Eye className="mr-2 h-4 w-4" /> View Diagrams ({extractedDiagrams.length + suspendedDiagrams.length})
-            </Button>
-          )}
-          <Button variant="outline" onClick={loadConfiguration}>
-            Load Saved
-          </Button>
-          <Button variant="outline" onClick={handleExportToExcel}>
-            <Download className="mr-2 h-4 w-4" /> Export Excel
-          </Button>
-          <Button variant="outline" onClick={resetConfiguration}>
-            Re-configure
-          </Button>
-          <Button onClick={handleSaveConfiguration} className="w-full sm:w-auto">
-            <Save className="mr-2 h-4 w-4" /> Save Configuration
+        <div className="flex w-full sm:w-auto">
+          <Button onClick={() => setShowCreateForm((v) => !v)} className="w-full sm:w-auto">
+            <Plus className="mr-2 h-4 w-4" /> {showCreateForm ? "Hide Create" : "Create Sample"}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Summary Statistics */}
-        <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>Summary Statistics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-              <div className="text-center p-3 bg-muted/50 rounded-lg">
-                <div className="text-2xl font-bold">{summaryStats.totalItems}</div>
-                <div className="text-xs text-muted-foreground mt-1">Total Items</div>
-              </div>
-              <div className="text-center p-3 bg-blue-50 rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">{summaryStats.cpvcItems}</div>
-                <div className="text-xs text-muted-foreground mt-1">CPVC Items</div>
-              </div>
-              <div className="text-center p-3 bg-orange-50 rounded-lg">
-                <div className="text-2xl font-bold text-orange-600">{summaryStats.suspendedItems}</div>
-                <div className="text-xs text-muted-foreground mt-1">Suspended Items</div>
-              </div>
-              <div className="text-center p-3 bg-green-50 rounded-lg">
-                <div className="text-2xl font-bold text-green-600">{summaryStats.totalQuantity.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">Total Quantity</div>
-              </div>
-              <div className="text-center p-3 bg-purple-50 rounded-lg">
-                <div className="text-2xl font-bold text-purple-600">{summaryStats.lockedItems}</div>
-                <div className="text-xs text-muted-foreground mt-1">Locked</div>
-              </div>
-              <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                <div className="text-2xl font-bold text-yellow-600">{summaryStats.draftItems}</div>
-                <div className="text-xs text-muted-foreground mt-1">Draft</div>
+      {showCreateForm && (
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>Create Sample</CardTitle>
+              <CardDescription>Maps to API fields and saves to backend.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label>Project ID</Label>
+              <Input value={selectedProject ? (selectedProject.project_id || selectedProject.id) : ""} readOnly placeholder="Select a project" />
+            </div>
+            <div className="space-y-2">
+              <Label>Building Name</Label>
+              <Input value={createForm.building_name} onChange={(e) => setCreateForm({ ...createForm, building_name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Site Name</Label>
+              <Input value={createForm.site_name} onChange={(e) => setCreateForm({ ...createForm, site_name: e.target.value })} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="space-y-2">
+              <Label>Floor</Label>
+              <Input value={createForm.location.floor} onChange={(e) => setCreateForm({ ...createForm, location: { ...createForm.location, floor: e.target.value } })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Block</Label>
+              <Input value={createForm.location.block} onChange={(e) => setCreateForm({ ...createForm, location: { ...createForm.location, block: e.target.value } })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Wing</Label>
+              <Input value={createForm.location.wing} onChange={(e) => setCreateForm({ ...createForm, location: { ...createForm.location, wing: e.target.value } })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Coordinates</Label>
+              <Input value={createForm.location.coordinates} onChange={(e) => setCreateForm({ ...createForm, location: { ...createForm.location, coordinates: e.target.value } })} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Work Done</Label>
+            <Input value={createForm.work_done} onChange={(e) => setCreateForm({ ...createForm, work_done: e.target.value })} />
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Attachments</div>
+              <div className="flex gap-2">
+                <Input type="file" multiple onChange={handleSampleUpload} className="w-auto" />
+                <Select onValueChange={(val) => setCreateForm({ ...createForm, sample_file: val })}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Select uploaded file" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uploadFilePaths.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Floor Plan Visibility Section */}
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Floor Plan Reference</CardTitle>
-            <CardDescription>Visible to other modules</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {floorPlanPreview ? (
-              <div className="border rounded-lg overflow-hidden bg-muted/20 flex items-center justify-center min-h-[200px] max-h-[400px]">
-                <img 
-                  src={floorPlanPreview} 
-                  alt="Floor Plan Preview" 
-                  className="max-w-full max-h-full w-auto h-auto object-contain"
-                  onError={(e) => {
-                    console.error('Preview image failed to load:', e);
-                    setFloorPlanPreview(null);
-                  }}
-                />
-              </div>
-            ) : floorPlanFile ? (
-              <div className="border rounded-lg p-8 flex flex-col items-center justify-center bg-muted/10 text-muted-foreground min-h-[200px]">
-                {processingPdf ? (
-                  <>
-                    <Loader2 className="h-12 w-12 mb-2 animate-spin text-primary" />
-                    <span>Processing PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-12 w-12 mb-2" />
-                    <span className="text-center">{floorPlanFile.name}</span>
-                    <span className="text-xs mt-2">Click to view diagrams after extraction</span>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="border rounded-lg p-8 flex flex-col items-center justify-center bg-muted/10 text-muted-foreground min-h-[200px]">
-                <FileText className="h-12 w-12 mb-2" />
-                <span>No Plan</span>
-              </div>
-            )}
-            <div className="mt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total Floors:</span>
-                <span className="font-medium">{floorCount}</span>
-              </div>
-              {suspendedWorkFile && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Suspended Work PDF:</span>
-                  <span className="font-medium truncate max-w-[150px]">{suspendedWorkFile.name}</span>
-                </div>
-              )}
-              {(extractedDiagrams.length > 0 || suspendedDiagrams.length > 0) && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Diagrams Extracted:</span>
-                  <span className="font-medium text-green-600">
-                    CPVC: {extractedDiagrams.length} | Suspended: {suspendedDiagrams.length}
-                  </span>
-                </div>
-              )}
-              {(extractedValues.length > 0 || suspendedValues.length > 0) && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Items Extracted:</span>
-                  <span className="font-medium text-green-600">
-                    CPVC: {extractedValues.length} | Suspended: {suspendedValues.length}
-                  </span>
-                </div>
-              )}
+            <div className="space-y-2">
+              <Label>Selected File</Label>
+              <Input value={createForm.sample_file || ""} onChange={(e) => setCreateForm({ ...createForm, sample_file: e.target.value })} placeholder="/uploads/sample/..." />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <CardTitle>Floor-wise Configuration</CardTitle>
-                <CardDescription>Derived from uploaded CPVC and suspended work PDFs.</CardDescription>
-              </div>
-              <Button onClick={addNewSample} size="sm" variant="outline">
-                <Plus className="mr-2 h-4 w-4" /> Add Item
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Item Description</div>
+              <Button size="sm" variant="outline" onClick={() => setCreateForm({ ...createForm, item_description: [...createForm.item_description, { sr_no: "", description: "", quantity: "", value: "", add_fields: [] }] })}>
+                <Plus className="mr-2 h-4 w-4" /> Add Row
               </Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            {/* Search and Filter */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search items..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant={filterType === "all" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterType("all")}
-                >
-                  All ({samples.length})
-                </Button>
-                <Button
-                  variant={filterType === "cpvc" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterType("cpvc")}
-                >
-                  CPVC ({samples.filter(s => !s.workType || s.workType !== "Suspended").length})
-                </Button>
-                <Button
-                  variant={filterType === "suspended" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setFilterType("suspended")}
-                >
-                  Suspended ({samples.filter(s => s.workType === "Suspended").length})
-                </Button>
-              </div>
-            </div>
-
-            <div className="hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item Name</TableHead>
-                    <TableHead>Work Type</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead className="w-[150px]">Qty Per Floor</TableHead>
-                    <TableHead>Total Floors</TableHead>
-                    <TableHead className="text-right">Total Qty</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[100px]">Sr No</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="w-[160px]">Quantity</TableHead>
+                  <TableHead className="w-[160px]">Value</TableHead>
+                  <TableHead className="w-[200px]">Add Fields</TableHead>
+                  <TableHead className="w-[80px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {createForm.item_description.map((row, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>
+                      <Input value={row.sr_no} onChange={(e) => {
+                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], sr_no: e.target.value }; setCreateForm({ ...createForm, item_description: next });
+                      }} />
+                    </TableCell>
+                    <TableCell>
+                      <Input value={row.description} onChange={(e) => {
+                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], description: e.target.value }; setCreateForm({ ...createForm, item_description: next });
+                      }} />
+                    </TableCell>
+                    <TableCell>
+                      <Input value={row.quantity} onChange={(e) => {
+                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], quantity: e.target.value }; setCreateForm({ ...createForm, item_description: next });
+                      }} />
+                    </TableCell>
+                    <TableCell>
+                      <Input value={row.value} onChange={(e) => {
+                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], value: e.target.value }; setCreateForm({ ...createForm, item_description: next });
+                      }} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid grid-cols-2 gap-2">
+                        {row.add_fields.map((f, j) => (
+                          <div key={j} className="grid grid-cols-2 gap-2">
+                            <Input placeholder="Key" value={f.key} onChange={(e) => {
+                              const next = [...createForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], key: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setCreateForm({ ...createForm, item_description: next });
+                            }} />
+                            <Input placeholder="Value" value={f.value} onChange={(e) => {
+                              const next = [...createForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], value: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setCreateForm({ ...createForm, item_description: next });
+                            }} />
+                          </div>
+                        ))}
+                        <Button size="sm" variant="outline" onClick={() => {
+                          const next = [...createForm.item_description]; next[idx] = { ...next[idx], add_fields: [...next[idx].add_fields, { key: "", value: "" }] }; setCreateForm({ ...createForm, item_description: next });
+                        }}>
+                          <Plus className="mr-2 h-4 w-4" /> Add
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        const next = createForm.item_description.filter((_, i) => i !== idx); setCreateForm({ ...createForm, item_description: next });
+                      }}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSamples.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        No items found. {searchQuery && "Try adjusting your search."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredSamples.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                          <Input
-                            value={item.item}
-                            onChange={(e) => {
-                              setSamples(samples.map(s => 
-                                s.id === item.id ? { ...s, item: e.target.value } : s
-                              ));
-                            }}
-                            className="h-8 border-0 p-0 font-medium"
-                            disabled={item.status === "Locked"}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={item.workType === "Suspended" ? "outline" : "secondary"} className={item.workType === "Suspended" ? "bg-orange-100 text-orange-800 border-orange-300" : ""}>
-                            {item.workType || "CPVC"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={item.unit}
-                            onChange={(e) => {
-                              setSamples(samples.map(s => 
-                                s.id === item.id ? { ...s, unit: e.target.value } : s
-                              ));
-                            }}
-                            className="h-8 w-20"
-                            disabled={item.status === "Locked"}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input 
-                            type="number" 
-                            value={item.perFloorQty}
-                            onChange={(e) => updateSampleQty(item.id, e.target.value)}
-                            className="h-8 w-24"
-                            disabled={item.status === "Locked"}
-                          />
-                        </TableCell>
-                        <TableCell>{parseInt(floorCount) || item.totalFloors}</TableCell>
-                        <TableCell className="text-right font-bold">
-                          {(item.perFloorQty * (parseInt(floorCount) || item.totalFloors)).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={item.status === "Locked" ? "default" : "outline"}>
-                            {item.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteSample(item.id)}
-                            className="h-8 w-8 p-0"
-                            disabled={item.status === "Locked"}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Additional Fields</div>
+              <Button size="sm" variant="outline" onClick={() => setCreateForm({ ...createForm, add_fields: [...createForm.add_fields, { key: "", value: "" }] })}>
+                <Plus className="mr-2 h-4 w-4" /> Add
+              </Button>
             </div>
-            
-            {/* Mobile View */}
-            <div className="space-y-4 md:hidden">
-              {/* Mobile Search/Filter */}
-              <div className="space-y-2">
-                <Input
-                  placeholder="Search items..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    variant={filterType === "all" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterType("all")}
-                    className="flex-1"
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={filterType === "cpvc" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterType("cpvc")}
-                    className="flex-1"
-                  >
-                    CPVC
-                  </Button>
-                  <Button
-                    variant={filterType === "suspended" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterType("suspended")}
-                    className="flex-1"
-                  >
-                    Suspended
-                  </Button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {createForm.add_fields.map((f, idx) => (
+                <div key={idx} className="grid grid-cols-2 gap-2">
+                  <Input placeholder="Key" value={f.key} onChange={(e) => {
+                    const next = [...createForm.add_fields]; next[idx] = { ...next[idx], key: e.target.value }; setCreateForm({ ...createForm, add_fields: next });
+                  }} />
+                  <Input placeholder="Value" value={f.value} onChange={(e) => {
+                    const next = [...createForm.add_fields]; next[idx] = { ...next[idx], value: e.target.value }; setCreateForm({ ...createForm, add_fields: next });
+                  }} />
                 </div>
-              </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-end">
+          <Button onClick={saveCreate}>
+            <Save className="mr-2 h-4 w-4" /> Save
+          </Button>
+        </CardFooter>
+      </Card>
+      )}
 
-              {filteredSamples.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">
-                  No items found. {searchQuery && "Try adjusting your search."}
-                </div>
-              ) : (
-                filteredSamples.map((item) => (
-                  <div key={item.id} className="p-4 border rounded-lg space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <Input
-                          value={item.item}
-                          onChange={(e) => {
-                            setSamples(samples.map(s => 
-                              s.id === item.id ? { ...s, item: e.target.value } : s
-                            ));
-                          }}
-                          className="h-auto p-0 border-0 font-medium text-base"
-                          disabled={item.status === "Locked"}
-                        />
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant={item.workType === "Suspended" ? "outline" : "secondary"} className={item.workType === "Suspended" ? "bg-orange-100 text-orange-800 border-orange-300" : ""}>
-                            {item.workType || "CPVC"}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">{item.unit}</span>
-                        </div>
-                      </div>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>Server Samples</CardTitle>
+              <CardDescription>Fetched from API {selectedProject ? `(Project ${selectedProject.project_id || selectedProject.id})` : ''}</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Input type="file" multiple onChange={handleSampleUpload} className="w-auto" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingServer ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : serverSamples.length === 0 ? (
+            <div className="text-muted-foreground py-6">No samples found</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Building</TableHead>
+                  <TableHead>Site</TableHead>
+                  <TableHead>Work</TableHead>
+                  <TableHead>File</TableHead>
+                  <TableHead className="w-[160px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {serverSamples.map((s) => (
+                  <TableRow key={s.sample_id || s.id}>
+                    <TableCell>{s.sample_id || s.id}</TableCell>
+                    <TableCell>{s.building_name || '-'}</TableCell>
+                    <TableCell>{s.site_name || '-'}</TableCell>
+                    <TableCell>{s.work_done || '-'}</TableCell>
+                    <TableCell>
+                      {s.sample_file ? (
+                        <a href={api.getApiFileUrl(s.sample_file)} target="_blank" rel="noreferrer" className="text-blue-600">Open</a>
+                      ) : (
+                        <span className="text-muted-foreground">None</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <div className="flex gap-2">
-                        <Badge variant={item.status === "Locked" ? "default" : "outline"}>
-                          {item.status}
-                        </Badge>
-                        {item.status !== "Locked" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteSample(item.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
+                        <Button size="sm" variant="outline" onClick={() => openEdit(s)}>Edit</Button>
+                        <Button size="sm" variant="ghost" onClick={() => removeSample(s)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs text-muted-foreground block mb-1">Qty Per Floor</label>
-                        <Input 
-                          type="number" 
-                          value={item.perFloorQty}
-                          onChange={(e) => updateSampleQty(item.id, e.target.value)}
-                          className="h-9 w-full"
-                          disabled={item.status === "Locked"}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground block mb-1">Total Floors</label>
-                        <div className="h-9 flex items-center font-medium">{parseInt(floorCount) || item.totalFloors}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-sm text-muted-foreground">Total Qty</span>
-                      <span className="font-bold">{(item.perFloorQty * (parseInt(floorCount) || item.totalFloors)).toLocaleString()}</span>
-                    </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {uploadFilePaths.length > 0 && serverSamples.length > 0 && (
+            <div className="mt-4 border rounded-lg p-4 space-y-2">
+              <div className="font-medium">Uploaded file paths</div>
+              <div className="grid md:grid-cols-2 gap-2">
+                {uploadFilePaths.map((p) => (
+                  <div key={p} className="flex items-center justify-between gap-2">
+                    <span className="truncate">{p}</span>
+                    <Select onValueChange={(val) => {
+                      const target = serverSamples.find(x => String(x.sample_id || x.id) === String(val));
+                      if (target) attachFileToSample(target, p);
+                    }}>
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Attach to sample" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {serverSamples.map((s) => (
+                          <SelectItem key={s.sample_id || s.id} value={String(s.sample_id || s.id)}>
+                            {(s.sample_id || s.id) + ' • ' + (s.building_name || s.site_name || '')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Diagram Viewer Modal */}
       <DiagramViewer
@@ -1108,6 +1178,121 @@ export default function Samples() {
         diagrams={[...extractedDiagrams, ...suspendedDiagrams]}
         extractedValues={[...extractedValues, ...suspendedValues]}
       />
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Sample</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Building Name</Label>
+              <Input value={editForm.building_name} onChange={(e) => setEditForm({ ...editForm, building_name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Site Name</Label>
+              <Input value={editForm.site_name} onChange={(e) => setEditForm({ ...editForm, site_name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Work Done</Label>
+              <Input value={editForm.work_done} onChange={(e) => setEditForm({ ...editForm, work_done: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Sample File Path</Label>
+              <Input value={editForm.sample_file} onChange={(e) => setEditForm({ ...editForm, sample_file: e.target.value })} placeholder="/uploads/sample/..." />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="space-y-2">
+                <Label>Floor</Label>
+                <Input value={editForm.location.floor} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, floor: e.target.value } })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Block</Label>
+                <Input value={editForm.location.block} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, block: e.target.value } })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Wing</Label>
+                <Input value={editForm.location.wing} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, wing: e.target.value } })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Coordinates</Label>
+                <Input value={editForm.location.coordinates} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, coordinates: e.target.value } })} />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label>Item Description</Label>
+                <Button size="sm" variant="outline" onClick={() => setEditForm({ ...editForm, item_description: [...editForm.item_description, { sr_no: "", description: "", quantity: "", value: "", add_fields: [] }] })}>
+                  <Plus className="mr-2 h-4 w-4" /> Add Row
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {editForm.item_description.map((row, idx) => (
+                  <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <Input placeholder="Sr No" value={row.sr_no} onChange={(e) => {
+                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], sr_no: e.target.value }; setEditForm({ ...editForm, item_description: next });
+                    }} />
+                    <Input placeholder="Description" value={row.description} onChange={(e) => {
+                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], description: e.target.value }; setEditForm({ ...editForm, item_description: next });
+                    }} />
+                    <Input placeholder="Quantity" value={row.quantity} onChange={(e) => {
+                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], quantity: e.target.value }; setEditForm({ ...editForm, item_description: next });
+                    }} />
+                    <Input placeholder="Value" value={row.value} onChange={(e) => {
+                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], value: e.target.value }; setEditForm({ ...editForm, item_description: next });
+                    }} />
+                    <Button size="sm" variant="ghost" onClick={() => {
+                      const next = editForm.item_description.filter((_, i) => i !== idx); setEditForm({ ...editForm, item_description: next });
+                    }}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    <div className="md:col-span-5 grid grid-cols-1 md:grid-cols-3 gap-2">
+                      {row.add_fields.map((f, j) => (
+                        <div key={j} className="grid grid-cols-2 gap-2">
+                          <Input placeholder="Key" value={f.key} onChange={(e) => {
+                            const next = [...editForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], key: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setEditForm({ ...editForm, item_description: next });
+                          }} />
+                          <Input placeholder="Value" value={f.value} onChange={(e) => {
+                            const next = [...editForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], value: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setEditForm({ ...editForm, item_description: next });
+                          }} />
+                        </div>
+                      ))}
+                      <Button size="sm" variant="outline" onClick={() => {
+                        const next = [...editForm.item_description]; next[idx] = { ...next[idx], add_fields: [...next[idx].add_fields, { key: "", value: "" }] }; setEditForm({ ...editForm, item_description: next });
+                      }}>
+                        <Plus className="mr-2 h-4 w-4" /> Add Field
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <Label>Additional Fields</Label>
+                <Button size="sm" variant="outline" onClick={() => setEditForm({ ...editForm, add_fields: [...editForm.add_fields, { key: "", value: "" }] })}>
+                  <Plus className="mr-2 h-4 w-4" /> Add
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {editForm.add_fields.map((f, idx) => (
+                  <div key={idx} className="grid grid-cols-2 gap-2">
+                    <Input placeholder="Key" value={f.key} onChange={(e) => {
+                      const next = [...editForm.add_fields]; next[idx] = { ...next[idx], key: e.target.value }; setEditForm({ ...editForm, add_fields: next });
+                    }} />
+                    <Input placeholder="Value" value={f.value} onChange={(e) => {
+                      const next = [...editForm.add_fields]; next[idx] = { ...next[idx], value: e.target.value }; setEditForm({ ...editForm, add_fields: next });
+                    }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={saveEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,0 +1,250 @@
+
+📘 Madhuram API Documentation – Sample Module
+Overview
+The Sample API in Madhuram manages sample records for projects, including:
+Uploading multiple sample files
+Fetching samples (all / by project / by ID)
+Updating sample details
+Deleting sample records
+✅ Base URL: /api/sample
+✅ Upload Directory: /uploads/sample
+✅ Database Table: samples
+✅ JSON fields stored as stringified JSON:
+location
+item_description
+add_fields
+
+📦 Sample Schema (Database/Response)
+A Sample record contains:
+Field
+Type
+Notes
+sample_id
+integer
+Primary key
+project_id
+integer
+Project reference
+building_name
+string
+Building name
+site_name
+string
+Site name
+location
+object
+Address object (JSON)
+work_done
+string
+Work completed
+item_description
+array(object)
+Items list (JSON array)
+add_fields
+array(object)
+Extra key-value fields
+sample_file
+string
+File path / reference
+created_at
+datetime
+Created timestamp
+updated_at
+datetime
+Updated timestamp
+
+location object
+{
+  "address_line1": "Line 1",
+  "address_line2": "Line 2",
+  "city": "Mumbai",
+  "state": "Maharashtra",
+  "country": "India"
+}
+
+item_description object structure
+[
+  {
+    "sr_no": 1,
+    "description": "Item description",
+    "quantity": 10,
+    "value": 500,
+    "add_fields": [
+      { "key": "Brand", "value": "ABC" }
+    ]
+  }
+]
+
+add_fields structure
+[
+  { "key": "Remark", "value": "Urgent" }
+]
+
+
+✅ Endpoints
+
+1) Upload Multiple Files for Sample
+POST /api/sample/upload
+Uploads multiple files and returns an array of file paths.
+Content-Type: multipart/form-data
+Form Data
+Field
+Type
+Required
+Notes
+file
+file[]
+✅
+Multiple files allowed
+
+Success Response (200)
+{
+  "filePaths": [
+    "/uploads/sample/170687123-123456789.pdf",
+    "/uploads/sample/170687125-987654321.jpg"
+  ]
+}
+
+Error Response (400)
+{ "error": "No files uploaded" }
+
+✅ Note: This API only uploads and returns file paths. It does not create a sample record.
+
+2) Get All Samples
+GET /api/sample
+Returns all sample records ordered by latest first.
+Success Response (200)
+[
+  {
+    "sample_id": 1,
+    "project_id": 10,
+    "building_name": "Tower A",
+    "site_name": "Madhuram Site",
+    "location": { "city": "Mumbai" },
+    "created_at": "2026-02-18T10:00:00.000Z"
+  }
+]
+
+Error Response (500)
+{ "error": "Internal Server Error" }
+
+
+3) Get Sample by ID
+GET /api/sample/{id}
+Fetch a single sample record by sample_id.
+Path Parameter
+Param
+Type
+Required
+id
+integer
+✅
+
+Success Response (200)
+Returns one sample object.
+Error Response (404)
+{ "error": "Sample not found" }
+
+
+4) Get Samples by Project ID
+GET /api/sample/project/{projectId}
+Fetch all samples for a given project.
+Path Parameter
+Param
+Type
+Required
+projectId
+integer
+✅
+
+Success Response (200)
+[
+  {
+    "sample_id": 2,
+    "project_id": 10,
+    "building_name": "Tower B",
+    "created_at": "2026-02-18T12:00:00.000Z"
+  }
+]
+
+Error Response (500)
+{ "error": "Internal Server Error" }
+
+
+5) Update Sample
+PUT /api/sample/{id}
+Updates an existing sample.
+Uses COALESCE, so only provided fields are changed.
+✅ updated_at is automatically set.
+Content-Type: application/json
+Path Parameter
+Param
+Type
+Required
+id
+integer
+✅
+
+Request Body (Any fields optional)
+Field
+Type
+building_name
+string
+site_name
+string
+location
+object
+work_done
+string
+item_description
+array
+add_fields
+array
+sample_file
+string
+
+Example Request
+{
+  "building_name": "Tower A - Updated",
+  "work_done": "Painting completed",
+  "location": {
+    "address_line1": "Street 1",
+    "city": "Mumbai",
+    "state": "MH",
+    "country": "India"
+  },
+  "item_description": [
+    {
+      "sr_no": 1,
+      "description": "Paint",
+      "quantity": 20,
+      "value": 1000,
+      "add_fields": [{ "key": "Color", "value": "White" }]
+    }
+  ],
+  "add_fields": [{ "key": "Remark", "value": "Approved" }],
+  "sample_file": "/uploads/sample/170687123-123456789.pdf"
+}
+
+Success Response (200)
+Returns updated sample.
+Error Response (404)
+{ "error": "Sample not found" }
+
+
+6) Delete Sample
+DELETE /api/sample/{id}
+Deletes a sample record by ID.
+Success Response (200)
+{ "message": "Sample deleted successfully" }
+
+Error Response (404)
+{ "error": "Sample not found" }
+
+
+⚠️ Notes Based on Your Current Code
+Upload API returns multiple file paths, but the sample record only has a single field: sample_file (string).
+If you want to store multiple files per sample, change sample_file to an array in DB (JSONB) like sample_files.
+Delete does not remove uploaded files from disk.
+If needed, I can add file cleanup logic like you did for BOQ.
+
