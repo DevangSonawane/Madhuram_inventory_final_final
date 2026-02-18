@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,6 +17,17 @@ import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+const parseMaybe = (val, fallback) => {
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      return parsed;
+    } catch {
+      return fallback;
+    }
+  }
+  return val ?? fallback;
+};
 
 // Mock Sample Data (Floor-wise distribution)
 const MOCK_SAMPLES = [
@@ -26,6 +38,7 @@ const MOCK_SAMPLES = [
 ];
 
 export default function Samples() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [floorCount, setFloorCount] = useState("");
   const [floorPlanFile, setFloorPlanFile] = useState(null);
@@ -55,9 +68,12 @@ export default function Samples() {
   const [serverSamples, setServerSamples] = useState([]);
   const [loadingServer, setLoadingServer] = useState(false);
   const [uploadFilePaths, setUploadFilePaths] = useState([]);
+  const [uploadPreviewOpen, setUploadPreviewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingSample, setEditingSample] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewSample, setPreviewSample] = useState(null);
   const [editForm, setEditForm] = useState({
     building_name: "",
     site_name: "",
@@ -110,12 +126,9 @@ export default function Samples() {
 
   const openEdit = (sample) => {
     setEditingSample(sample);
-    let loc = sample.location;
-    let items = sample.item_description;
-    let adds = sample.add_fields;
-    try { if (typeof loc === 'string') loc = JSON.parse(loc); } catch {}
-    try { if (typeof items === 'string') items = JSON.parse(items); } catch {}
-    try { if (typeof adds === 'string') adds = JSON.parse(adds); } catch {}
+    const loc = parseMaybe(sample.location, {});
+    const items = parseMaybe(sample.item_description, []);
+    const adds = parseMaybe(sample.add_fields, []);
     setEditForm({
       building_name: sample.building_name || "",
       site_name: sample.site_name || "",
@@ -211,11 +224,18 @@ export default function Samples() {
     const res = await api.uploadSampleFiles(files);
     if (res.success && res.data && res.data.filePaths) {
       setUploadFilePaths(res.data.filePaths);
+      setUploadPreviewOpen(true);
       toast({ title: "Uploaded", description: `${res.data.filePaths.length} file(s) uploaded` });
     } else {
       toast({ title: "Upload failed", description: res.error || "Error", variant: "destructive" });
     }
   };
+
+  const openPreview = (sample) => {
+    const id = sample.sample_id || sample.id;
+    navigate(`preview/${id}`, { state: { sample } });
+  };
+
 
   const attachFileToSample = async (sample, path) => {
     const id = sample.sample_id || sample.id;
@@ -1130,6 +1150,9 @@ export default function Samples() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => openPreview(s)}>
+                          <Eye className="h-4 w-4 mr-1" /> Preview
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => openEdit(s)}>Edit</Button>
                         <Button size="sm" variant="ghost" onClick={() => removeSample(s)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -1290,6 +1313,137 @@ export default function Samples() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button onClick={saveEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sample Preview</DialogTitle>
+          </DialogHeader>
+          {previewSample && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <div className="text-sm text-muted-foreground">ID</div>
+                  <div className="font-medium">{previewSample.sample_id || previewSample.id}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Building</div>
+                  <div className="font-medium">{previewSample.building_name || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Site</div>
+                  <div className="font-medium">{previewSample.site_name || '-'}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-sm text-muted-foreground">Work Done</div>
+                  <div className="font-medium">{previewSample.work_done || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Project</div>
+                  <div className="font-medium">{previewSample.project_id || '-'}</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Location</div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="font-medium">{previewSample?.location?.floor || previewSample?.location?.address_line1 || '-'}</div>
+                  <div className="font-medium">{previewSample?.location?.block || previewSample?.location?.city || '-'}</div>
+                  <div className="font-medium">{previewSample?.location?.wing || previewSample?.location?.state || '-'}</div>
+                  <div className="font-medium">{previewSample?.location?.coordinates || previewSample?.location?.country || '-'}</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Item Description</div>
+                <div className="space-y-2">
+                  {(previewSample.item_description || []).map((it, i) => (
+                    <div key={i} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div className="font-medium">{it.sr_no || '-'}</div>
+                      <div className="font-medium">{it.description || '-'}</div>
+                      <div className="font-medium">{it.quantity || '-'}</div>
+                      <div className="font-medium">{it.value || '-'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Additional Fields</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  {(previewSample.add_fields || []).map((f, idx) => (
+                    <div key={idx} className="grid grid-cols-2 gap-2">
+                      <div className="font-medium">{f.key || '-'}</div>
+                      <div className="font-medium">{f.value || '-'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Attachment</div>
+                {previewSample.sample_file ? (
+                  (() => {
+                    const url = api.getApiFileUrl(previewSample.sample_file);
+                    const lower = String(previewSample.sample_file).toLowerCase();
+                    const isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp');
+                    const isPdf = lower.endsWith('.pdf');
+                    return (
+                      <div className="border rounded-md p-3">
+                        {isImage ? (
+                          <img src={url} alt="Sample File" className="max-h-64 object-contain w-full" />
+                        ) : isPdf ? (
+                          <iframe src={url} className="w-full h-80" />
+                        ) : (
+                          <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 break-all">{url}</a>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="text-muted-foreground">No attachment</div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setPreviewOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={uploadPreviewOpen} onOpenChange={setUploadPreviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Uploaded Files</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {uploadFilePaths.length === 0 ? (
+              <div className="text-muted-foreground">No files uploaded</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {uploadFilePaths.map((p) => {
+                  const url = api.getApiFileUrl(p);
+                  const lower = String(p).toLowerCase();
+                  const isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp');
+                  const isPdf = lower.endsWith('.pdf');
+                  return (
+                    <div key={p} className="border rounded-md p-3 space-y-2">
+                      <div className="text-xs break-all">{p}</div>
+                      {isImage ? (
+                        <img src={url} alt="Upload" className="max-h-48 object-contain w-full" />
+                      ) : isPdf ? (
+                        <iframe src={url} className="w-full h-48" />
+                      ) : (
+                        <a href={url} target="_blank" rel="noreferrer" className="text-blue-600">Open</a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setUploadPreviewOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

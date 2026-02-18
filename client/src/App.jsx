@@ -18,6 +18,7 @@ import Projects from '@/pages/Projects';
 import BOQ from '@/pages/BOQ';
 import MAS from '@/pages/MAS';
 import Samples from '@/pages/Samples';
+import SamplePreview from '@/pages/SamplePreview';
 import VendorComparison from '@/pages/VendorComparison';
 import Challans from '@/pages/Challans';
 import MER from '@/pages/MER';
@@ -75,6 +76,7 @@ function App() {
                   <Route path="boq" element={<BOQ />} />
                   <Route path="mas" element={<MAS />} />
                   <Route path="samples" element={<Samples />} />
+                  <Route path="samples/preview/:id" element={<SamplePreview />} />
                   <Route path="vendor-comparison" element={<VendorComparison />} />
                   <Route path="challans" element={<Challans />} />
                   <Route path="mer" element={<MER />} />

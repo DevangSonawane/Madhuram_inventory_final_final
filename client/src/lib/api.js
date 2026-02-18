@@ -615,15 +615,33 @@ export const api = {
         } catch (_) {}
       }
     });
-    const response = await fetch(`${BASE_URL}/api/sample`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-    return handleResponse(response);
+    const post = async (path) => {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      return handleResponse(response);
+    };
+    const candidates = [
+      '/api/sample',
+      '/api/sample/create',
+      '/api/sample/create-sample',
+      '/api/samples',
+      '/api/samples/create',
+      '/api/samples/create-sample',
+    ];
+    let lastError = null;
+    for (const path of candidates) {
+      const res = await post(path);
+      if (res.success) return res;
+      lastError = res;
+      if (res.status !== 404) return res;
+    }
+    return lastError || { success: false, error: 'Create endpoint not found', status: 404 };
   },
 
   createInventory: async (data) => {
