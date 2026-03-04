@@ -23,6 +23,30 @@ const safeParseNumber = (value) => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
+const normalizeDateValue = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // ISO date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dayFirstMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dayFirstMatch) {
+    const [, day, month, year] = dayFirstMatch;
+    const d = Number(day);
+    const m = Number(month);
+    const y = Number(year);
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  const parsedDate = new Date(raw);
+  if (Number.isNaN(parsedDate.getTime())) return null;
+  return parsedDate.toISOString().slice(0, 10);
+};
+
 const buildPayload = (body) => {
   const payload = {};
   const stringFields = [
@@ -73,7 +97,7 @@ const buildPayload = (body) => {
   const dateFields = ['indent_date', 'po_date'];
   dateFields.forEach((field) => {
     if (Object.prototype.hasOwnProperty.call(body, field)) {
-      payload[field] = body[field] || null;
+      payload[field] = normalizeDateValue(body[field]);
     }
   });
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,22 @@ const parseDecimalValue = (value) => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
+const normalizeDateForApi = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const dayFirstMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dayFirstMatch) {
+    const [, day, month, year] = dayFirstMatch;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  return raw;
+};
+
 const buildItemPayloads = (items) => {
   if (!Array.isArray(items)) return [];
   return items
@@ -82,9 +98,9 @@ const buildPoPayload = (poData, projectId) => ({
   company_email: poData.companyEmail || "",
   company_gst: poData.companyGstNo || "",
   indent_no: poData.indentNo || "",
-  indent_date: poData.indentDate || "",
+  indent_date: normalizeDateForApi(poData.indentDate),
   order_no: poData.orderNo || "",
-  po_date: poData.poDate || "",
+  po_date: normalizeDateForApi(poData.poDate),
   vendor_name: poData.vendor.name || "",
   site: poData.vendor.site || "",
   contact_person: poData.vendor.contactPerson || "",
@@ -110,9 +126,10 @@ const buildPoPayload = (poData, projectId) => ({
 
 export default function PurchaseOrdersPreview() {
   const navigate = useNavigate();
+  const { projectId: routeProjectId } = useParams();
   const { toast } = useToast();
   const { selectedProject } = useProject();
-  const projectId = selectedProject?.project_id ?? selectedProject?.id ?? null;
+  const projectId = selectedProject?.project_id ?? selectedProject?.id ?? routeProjectId ?? null;
   const [poData, setPoData] = useState(() => normalizePoData(loadStoredPo()));
   const [saving, setSaving] = useState(false);
 
@@ -210,7 +227,7 @@ export default function PurchaseOrdersPreview() {
         if (typeof window !== "undefined") {
           window.sessionStorage.removeItem(STORAGE_KEY);
         }
-        navigate("/purchase-orders");
+        navigate(`/${numericProjectId}/purchase-orders`);
       } else {
         toast({ title: "Error", description: response.error || "Failed to submit PO.", variant: "destructive" });
       }
@@ -262,9 +279,9 @@ export default function PurchaseOrdersPreview() {
             <Input placeholder="Company Email" value={poData.companyEmail} onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value }))} />
             <Input placeholder="Company GST No" value={poData.companyGstNo} onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value }))} />
             <Input placeholder="Indent No" value={poData.indentNo} onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value }))} />
-            <Input placeholder="Indent Date" value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value }))} />
+            <Input type="date" placeholder="Indent Date" value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value }))} />
             <Input placeholder="Order No" value={poData.orderNo} onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value }))} />
-            <Input placeholder="PO Date" value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value }))} />
+            <Input type="date" placeholder="PO Date" value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value }))} />
           </div>
         </CardContent>
       </Card>

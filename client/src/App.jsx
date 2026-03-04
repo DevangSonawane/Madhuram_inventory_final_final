@@ -21,6 +21,7 @@ import Samples from '@/pages/Samples';
 import SamplePreview from '@/pages/SamplePreview';
 import VendorComparison from '@/pages/VendorComparison';
 import Challans from '@/pages/Challans';
+import NewChallan from '@/pages/NewChallan';
 import MER from '@/pages/MER';
 import MIR from '@/pages/MIR';
 import MIRPreview from '@/pages/MIRPreview';
@@ -85,6 +86,7 @@ function App() {
                   <Route path="samples/preview/:id" element={<SamplePreview />} />
                   <Route path="vendor-comparison" element={<VendorComparison />} />
                   <Route path="challans" element={<Challans />} />
+                  <Route path="challans/new" element={<NewChallan />} />
                   <Route path="mer" element={<MER />} />
                   <Route path="mir" element={<MIR />} />
                   <Route path="mir/preview" element={<MIRPreview />} />

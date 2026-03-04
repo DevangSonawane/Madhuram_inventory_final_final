@@ -71,6 +71,29 @@ const parseStringList = (value) => {
   return [];
 };
 
+const normalizeDateString = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  // Already ISO date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dayFirstMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dayFirstMatch) {
+    const [, day, month, year] = dayFirstMatch;
+    const d = Number(day);
+    const m = Number(month);
+    const y = Number(year);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+  }
+
+  return raw;
+};
+
 const buildVendorSection = (overrides = {}) => {
   const contactsOverrides = overrides.contacts || {};
   return {
@@ -102,6 +125,8 @@ const mapClientToPoData = (raw) => ({
   termsAndConditions: Array.isArray(raw.termsAndConditions) ? raw.termsAndConditions : [],
   source: raw.source || EMPTY_PO.source,
   sourceFileName: raw.sourceFileName || raw.source_file_name || EMPTY_PO.sourceFileName,
+  indentDate: normalizeDateString(raw.indentDate ?? raw.indent_date ?? EMPTY_PO.indentDate),
+  poDate: normalizeDateString(raw.poDate ?? raw.po_date ?? EMPTY_PO.poDate),
 });
 
 const mapServerItemsToUi = (items) => {
@@ -130,9 +155,9 @@ const mapServerToPoData = (raw) => {
     companyEmail: raw.company_email || raw.companyEmail || EMPTY_PO.companyEmail,
     companyGstNo: raw.company_gst || raw.companyGstNo || EMPTY_PO.companyGstNo,
     indentNo: raw.indent_no || raw.indentNo || EMPTY_PO.indentNo,
-    indentDate: raw.indent_date || raw.indentDate || EMPTY_PO.indentDate,
+    indentDate: normalizeDateString(raw.indent_date || raw.indentDate || EMPTY_PO.indentDate),
     orderNo: raw.order_no || raw.orderNo || EMPTY_PO.orderNo,
-    poDate: raw.po_date || raw.poDate || EMPTY_PO.poDate,
+    poDate: normalizeDateString(raw.po_date || raw.poDate || EMPTY_PO.poDate),
     source: raw.source || "Imported",
     sourceFileName: raw.sourceFileName || raw.source_file_name || EMPTY_PO.sourceFileName,
     itemsGroup: { ...EMPTY_PO.itemsGroup, ...raw.itemsGroup },
