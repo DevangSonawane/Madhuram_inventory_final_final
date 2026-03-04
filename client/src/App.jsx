@@ -38,6 +38,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import ProjectSelection from '@/pages/ProjectSelection';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import Inventory from '@/pages/Inventory';
+import AddInventory from '@/pages/AddInventory';
 
 function App() {
   return (
@@ -53,6 +54,11 @@ function App() {
                 <Route path="/projects" element={
                   <ProtectedRoute>
                     <ProjectSelection />
+                  </ProtectedRoute>
+                } />
+                <Route path="/projects/inventory/add" element={
+                  <ProtectedRoute>
+                    <AddInventory />
                   </ProtectedRoute>
                 } />
                 
@@ -90,6 +96,7 @@ function App() {
                   <Route path="profile" element={<Profile />} />
                   <Route path="settings" element={<Profile />} />
                   <Route path="inventory" element={<Inventory />} />
+                  <Route path="inventory/add" element={<AddInventory />} />
                 </Route>
               </Routes>
               <Toaster />

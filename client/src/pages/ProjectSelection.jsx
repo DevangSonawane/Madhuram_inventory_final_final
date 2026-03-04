@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { Building, Calendar, MapPin, Loader2, Plus, LayoutGrid, Trash2, FileText, Upload, CheckCircle2 } from "lucide-react";
+import { Building, Calendar, MapPin, Loader2, Plus, Trash2, FileText, Upload, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { MAX_FILE_SIZE, MAX_COMPRESSION_API_SIZE } from "@/constants/fileLimits";
@@ -285,10 +285,8 @@ export default function ProjectSelection() {
             throw new Error((compResult && compResult.error) || 'Compression API failed to return a downloadable file URL');
           }
 
-          let fileUrl = compResult.data.url;
-          if (!fileUrl.startsWith('http')) {
-            fileUrl = fileUrl.startsWith('/') ? `https://api.festmate.in${fileUrl}` : `https://api.festmate.in/uploads/${fileUrl}`;
-          } else {
+          let fileUrl = api.getApiFileUrl(compResult.data.url);
+          if (fileUrl.startsWith('http://')) {
             fileUrl = fileUrl.replace(/^http:\/\//i, 'https://');
           }
           fileUrl = api.getCompressedFileFetchUrl(fileUrl);
@@ -373,12 +371,8 @@ export default function ProjectSelection() {
     }
   };
 
-  const handleViewAllData = () => {
-      // Logic for consolidated view - for now maybe just a toast or navigate to a special dashboard
-      toast({
-          title: "Consolidated View",
-          description: "This feature is coming soon!",
-      });
+  const handleOpenAddInventoryPage = () => {
+    navigate('/projects/inventory/add');
   };
 
   const handleDeleteProject = async () => {
@@ -422,12 +416,9 @@ export default function ProjectSelection() {
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-                {isAdmin && (
-                    <Button variant="outline" onClick={handleViewAllData} className="w-full sm:w-auto">
-                        <LayoutGrid className="mr-2 h-4 w-4" />
-                        View All Consolidated Data
-                    </Button>
-                )}
+                <Button variant="outline" onClick={handleOpenAddInventoryPage} className="w-full sm:w-auto">
+                    + Add inventory
+                </Button>
                 
                 {/* Only show create project if needed (e.g. Admin or Manager) */}
                 <Dialog

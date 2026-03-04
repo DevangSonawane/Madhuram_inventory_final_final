@@ -325,13 +325,9 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         // Fetch the compressed file from the URL
         // URL from API should be a full URL (e.g., https://api.festmate.in/uploads/filename)
         // If it's relative, construct the full URL; if http, normalize to https to avoid 301
-        let fileUrl = url;
-        if (!url.startsWith('http')) {
-          // If relative URL, construct full URL
-          const baseUrl = 'https://api.festmate.in';
-          fileUrl = url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/uploads/${url}`;
-        } else {
-          fileUrl = url.replace(/^http:\/\//i, 'https://');
+        let fileUrl = api.getApiFileUrl(url);
+        if (fileUrl.startsWith('http://')) {
+          fileUrl = fileUrl.replace(/^http:\/\//i, 'https://');
         }
         // In dev, use proxy URL to avoid CORS when fetching from api.festmate.in
         fileUrl = api.getCompressedFileFetchUrl(fileUrl);
@@ -514,10 +510,8 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
             throw new Error((compResult && compResult.error) || 'Compression API failed to return a downloadable file URL');
           }
 
-          let fileUrl = compResult.data.url;
-          if (!fileUrl.startsWith('http')) {
-            fileUrl = fileUrl.startsWith('/') ? `https://api.festmate.in${fileUrl}` : `https://api.festmate.in/uploads/${fileUrl}`;
-          } else {
+          let fileUrl = api.getApiFileUrl(compResult.data.url);
+          if (fileUrl.startsWith('http://')) {
             fileUrl = fileUrl.replace(/^http:\/\//i, 'https://');
           }
           fileUrl = api.getCompressedFileFetchUrl(fileUrl);

@@ -5,6 +5,13 @@ import path from 'path';
 import sequelize from './config/database.js';
 import authRoutes from './routes/authRoutes.js';
 import poRoutes from './routes/poRoutes.js';
+import dcRoutes from './routes/dcRoutes.js';
+import projectRoutes from './routes/projectRoutes.js';
+import boqRoutes from './routes/boqRoutes.js';
+import mirRoutes from './routes/mirRoutes.js';
+import itrRoutes from './routes/itrRoutes.js';
+import sampleRoutes from './routes/sampleRoutes.js';
+import inventoryRoutes from './routes/inventoryRoutes.js';
 
 dotenv.config();
 
@@ -14,6 +21,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes
@@ -21,6 +29,13 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // Endpoints are /api/auth/...
 app.use('/api/auth', authRoutes);
 app.use('/api/po', poRoutes);
+app.use('/api/dc', dcRoutes);
+app.use('/api', projectRoutes);
+app.use('/api/boq', boqRoutes);
+app.use('/api/mir', mirRoutes);
+app.use('/api/itr', itrRoutes);
+app.use('/api/sample', sampleRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {

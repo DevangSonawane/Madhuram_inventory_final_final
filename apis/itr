@@ -1,68 +1,279 @@
-📘 Madhuram – ITR (Installation Test Report) API Documentation
+
+📘 Madhuram – ITR (Inspection Test Request) API Documentation
 Overview
-The ITR API helps Madhuram track Installation Test Reports (WIR) once work is inspected.
-It supports fetching lists, creating new ITRs, updating existing records, and deleting entries.
-Authentication via JWT is required for all endpoints (Authorization: Bearer <token>).
+The ITR API in Madhuram manages Inspection Test Requests for projects.
+It supports:
+Uploading ITR attachments/files
+Creating ITR records with structured JSON sections
+Fetching ITRs by project
+Getting ITR by ID
+Updating ITR
+Deleting ITR
+✅ Base URL: /api/itr
+✅ Upload Directory: /uploads/itr
+✅ Database Table: itrs
+✅ Storage Format: Most sections are stored as JSON strings in PostgreSQL.
 
-Base URL: https://api.festmate.in
+📦 ITR Data Structure (Stored in DB)
+An ITR contains multiple structured sections:
+header_details (object)
+contractor_details (object)
+mep_clearance (object)
+surveyor_clearance (object)
+interface_clearance (object)
+contract_manager (object)
+pmc_comments (string)
+engineer_civil (object)
+engineer_mep (object)
+tower_incharge (object)
+qaa_department (object)
+result_code (string)
 
-✅ ITR Object Highlights
-- itr_id / id (integer) – unique record identifier
-- itr_ref_no (string) – generated ITR number (e.g., ITR-SIGNET-1-ME-PR-PL-047)
-- project_name, project_code, client_name (strings)
-- contractor, pmc_engineer, vendor_code, material_code (strings)
-- wir_itr_submission_date_time, inspection_date_time (datetime strings)
-- submitted_to/submitted_by (strings)
-- contractor_part (object) – nested details (location, area, discipline, attachments, measurement, clearances, comments, readiness)
-- lodha_pmc (object) – PMC comments, sign-offs, result code
-- source, source_file_name (strings) – extraction source metadata
-- dynamic_field (array) – arbitrary key/value metadata for future compatibility
-- project_id (integer) – reference to linked project
-- status / itr_submitted (string/boolean) – workflow state (Draft/Submitted)
+✅ Common Response Fields
+Field
+Type
+itr_id
+integer
+project_id
+integer
+header_details
+object (stored as JSON)
+contractor_details
+object (stored as JSON)
+mep_clearance
+object (stored as JSON)
+surveyor_clearance
+object (stored as JSON)
+interface_clearance
+object (stored as JSON)
+contract_manager
+object (stored as JSON)
+pmc_comments
+string
+engineer_civil
+object (stored as JSON)
+engineer_mep
+object (stored as JSON)
+tower_incharge
+object (stored as JSON)
+qaa_department
+object (stored as JSON)
+result_code
+string
+created_at
+datetime
+updated_at
+datetime
 
-Endpoints
-1️⃣ Create ITR
-- `POST /api/itr`
-- Body: JSON
-  * Include header/project metadata plus `contractor_part`, `lodha_pmc`, and `dynamic_field`.
-  * `project_id` is required (FK) so provide a valid project.
-  * Example payload (subset):
-```
+
+🔼 1) Upload File for ITR
+POST /api/itr/upload
+Uploads an attachment for ITR and returns a path you can store in your JSON fields (like drawingattach, attachtest, etc.)
+Request Type
+multipart/form-data
+Form Field
+Field
+Type
+Required
+file
+file
+✅
+
+Success Response (200)
 {
-  "project_name": "Signet Tower 1",
-  "project_code": "SIGNET-1",
-  "contractor": "Madhuram Enterprises",
-  "itr_ref_no": "ITR-SIGNET-1-ME-PR-PL-047",
-  "inspection_date_time": "2026-02-02T10:00:00Z",
-  "contractor_part": {
-    "location_ref": "Signet 1 - Plumbing",
-    "description_of_works": "Pipe installation",
-    "discipline": ["Plumbing"],
-    "measurement": { "previous_qty": 0, "current_qty": 17, "cumulative_qty": 17 }
-  },
-  "project_id": 5
+  "filePath": "/uploads/itr/170687123123-123456789.pdf"
 }
-```
-2️⃣ List ITRs
-- `GET /api/itr`
-- Returns array of all ITR records (latest first).
 
-3️⃣ Get ITR by ID
-- `GET /api/itr/{id}`
-- Fetches a single ITR row by its `itr_id`.
+Error Response (400)
+{
+  "error": "No file uploaded"
+}
 
-4️⃣ Get ITR by Project
-- `GET /api/itr/project/{projectId}`
-- Lists ITRs scoped to a specific project (use the project’s `project_id`).
+✅ Note: This API only returns the file path; it does not create an ITR.
 
-5️⃣ Update ITR
-- `PUT /api/itr/{id}`
-- Accepts partial payload; only provided fields are overwritten.
-- Example updates: `lodha_pmc.result_code`, `contractor_part.description_of_works`, `itr_submitted`
+🧾 2) Create a New ITR
+POST /api/itr
+Creates a new ITR record.
+Request Type
+application/json
+Request Body (Main Fields)
+Field
+Type
+Required
+project_id
+integer
+✅
+header_details
+object
+❌
+contractor_details
+object
+❌
+mep_clearance
+object
+❌
+surveyor_clearance
+object
+❌
+interface_clearance
+object
+❌
+contract_manager
+object
+❌
+pmc_comments
+string
+❌
+engineer_civil
+object
+❌
+engineer_mep
+object
+❌
+tower_incharge
+object
+❌
+qaa_department
+object
+❌
+result_code
+string
+❌
 
-6️⃣ Delete ITR
-- `DELETE /api/itr/{id}`
-- Removes the record; ensure no dependent workflows require the item afterwards.
+Example Request
+{
+  "project_id": 1,
+  "header_details": {
+    "project_name": "Madhuram Tower A",
+    "project_code": "MT-A01",
+    "client": "ABC Client",
+    "pmc": "PMC One",
+    "contractor": "XYZ Contractor",
+    "vendor_code": "V-12",
+    "material_code": "MAT-101",
+    "WIR_no": "WIR-2026-07",
+    "wirdate": "2026-02-01",
+    "inspection_date": "2026-02-02"
+  },
+  "contractor_details": {
+    "tower": "Tower A",
+    "floor": "5",
+    "grid_refrence": "G-21",
+    "room": "501",
+    "previous_qty": 10,
+    "current_qty": 5,
+    "cumulative_qty": 15,
+    "description": "RCC Column Casting",
+    "discipline": "Civil",
+    "drawingattach": "/uploads/itr/170687123.pdf",
+    "attachtest": "/uploads/itr/170687124.pdf",
+    "method_Statement": "MS-01",
+    "checklist": "CHK-05",
+    "jointMeasurement": "JM-02"
+  },
+  "mep_clearance": {
+    "name": "MEP Engineer",
+    "date": "2026-02-02",
+    "desgination": "Engineer",
+    "signature": "Signed",
+    "comments": "Ok"
+  },
+  "pmc_comments": "Proceed",
+  "result_code": "APPROVED"
+}
 
-Untracked Notes
-- API responses mirror the payload (camelCase in frontend, snake_case in backend). The client helpers normalize between both formats.
+Success Response (201)
+Returns the inserted ITR row as JSON.
+Error Response (500)
+{ "error": "error message here" }
+
+
+🏗️ 3) Get All ITRs for a Project
+GET /api/itr/project/{projectId}
+Fetches all ITRs under a specific project (latest first).
+Path Parameter
+Param
+Type
+projectId
+integer
+
+Success Response (200)
+[
+  {
+    "itr_id": 10,
+    "project_id": 1,
+    "result_code": "APPROVED",
+    "created_at": "2026-02-02T10:00:00Z"
+  }
+]
+
+
+🔎 4) Get ITR by ID
+GET /api/itr/{id}
+Fetches a single ITR record using itr_id.
+Path Parameter
+Param
+Type
+id
+integer
+
+Success Response (200)
+{
+  "itr_id": 10,
+  "project_id": 1,
+  "header_details": { "project_name": "Madhuram Tower A" }
+}
+
+Error Response (404)
+{ "error": "ITR not found" }
+
+
+
+✏️ 5) Update an Existing ITR
+PUT /api/itr/{id}
+Updates an ITR record.
+Only provided fields will be updated; missing ones remain unchanged (via COALESCE).
+✅ updated_at is always set automatically.
+Request Type
+application/json
+Updatable Fields
+header_details
+contractor_details
+mep_clearance
+surveyor_clearance
+interface_clearance
+contract_manager
+pmc_comments
+engineer_civil
+engineer_mep
+tower_incharge
+qaa_department
+result_code
+Example Request
+{
+  "pmc_comments": "Approved after re-check",
+  "result_code": "APPROVED",
+  "engineer_civil": {
+    "name": "Civil Engineer A",
+    "signature": "Signed",
+    "date": "2026-02-03"
+  }
+}
+
+Success Response (200)
+Returns the updated ITR row.
+Error Response (404)
+{ "error": "ITR not found" }
+
+
+🗑️ 6) Delete an ITR
+DELETE /api/itr/{id}
+Deletes an ITR record by ID.
+Success Response (200)
+{ "message": "ITR deleted successfully" }
+
+Error Response (404)
+{ "error": "ITR not found" }
+
+
+

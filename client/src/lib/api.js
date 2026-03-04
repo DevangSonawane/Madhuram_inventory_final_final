@@ -1,4 +1,4 @@
-const BASE_URL = 'https://api.festmate.in';
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'https://api.festmate.in').replace(/\/$/, '');
 
 export const api = {
   // Auth
@@ -480,6 +480,74 @@ export const api = {
 
   deletePo: async (id) => {
     const response = await fetch(`${BASE_URL}/api/po/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  uploadDcFile: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+    const response = await fetch(`${BASE_URL}/api/dc/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  createDc: async (data) => {
+    const response = await fetch(`${BASE_URL}/api/dc`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getDcsByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/dc/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getDcsByPo: async (poId) => {
+    const response = await fetch(`${BASE_URL}/api/dc/po/${poId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getDcById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/dc/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateDc: async (id, data) => {
+    const response = await fetch(`${BASE_URL}/api/dc/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  deleteDc: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/dc/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,12 @@ export default function Samples() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSample, setPreviewSample] = useState(null);
+  const [isAttachmentDragActive, setIsAttachmentDragActive] = useState(false);
+  const [itemFieldDialogOpen, setItemFieldDialogOpen] = useState(false);
+  const [itemFieldTarget, setItemFieldTarget] = useState("create");
+  const [itemFieldRowIndex, setItemFieldRowIndex] = useState(null);
+  const [itemFieldKey, setItemFieldKey] = useState("");
+  const [itemFieldValue, setItemFieldValue] = useState("");
   const [editForm, setEditForm] = useState({
     building_name: "",
     site_name: "",
@@ -218,17 +224,132 @@ export default function Samples() {
     }
   };
 
-  const handleSampleUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
+  const uploadSampleFiles = async (files) => {
     if (!files.length) return;
     const res = await api.uploadSampleFiles(files);
     if (res.success && res.data && res.data.filePaths) {
       setUploadFilePaths(res.data.filePaths);
       setUploadPreviewOpen(true);
+      setCreateForm((prev) => ({
+        ...prev,
+        sample_file: res.data.filePaths[0] || prev.sample_file
+      }));
       toast({ title: "Uploaded", description: `${res.data.filePaths.length} file(s) uploaded` });
     } else {
       toast({ title: "Upload failed", description: res.error || "Error", variant: "destructive" });
     }
+  };
+
+  const handleSampleUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    await uploadSampleFiles(files);
+    e.target.value = "";
+  };
+
+  const handleAttachmentDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsAttachmentDragActive(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    await uploadSampleFiles(files);
+  };
+
+  const openItemFieldDialog = (target, rowIndex) => {
+    setItemFieldTarget(target);
+    setItemFieldRowIndex(rowIndex);
+    setItemFieldKey("");
+    setItemFieldValue("");
+    setItemFieldDialogOpen(true);
+  };
+
+  const closeItemFieldDialog = () => {
+    setItemFieldDialogOpen(false);
+    setItemFieldRowIndex(null);
+    setItemFieldKey("");
+    setItemFieldValue("");
+  };
+
+  const addItemFieldToRow = () => {
+    const key = itemFieldKey.trim();
+    const value = itemFieldValue.trim();
+
+    if (!key || !value || itemFieldRowIndex === null) {
+      toast({ title: "Missing values", description: "Enter both key and value.", variant: "destructive" });
+      return;
+    }
+
+    if (itemFieldTarget === "edit") {
+      const next = [...editForm.item_description];
+      next[itemFieldRowIndex] = {
+        ...next[itemFieldRowIndex],
+        add_fields: [...(next[itemFieldRowIndex].add_fields || []), { key, value }]
+      };
+      setEditForm({ ...editForm, item_description: next });
+    } else {
+      const next = [...createForm.item_description];
+      next[itemFieldRowIndex] = {
+        ...next[itemFieldRowIndex],
+        add_fields: [...(next[itemFieldRowIndex].add_fields || []), { key, value }]
+      };
+      setCreateForm({ ...createForm, item_description: next });
+    }
+
+    closeItemFieldDialog();
+  };
+
+  const removeItemFieldFromRow = (target, rowIndex, fieldIndex) => {
+    if (target === "edit") {
+      const next = [...editForm.item_description];
+      next[rowIndex] = {
+        ...next[rowIndex],
+        add_fields: (next[rowIndex].add_fields || []).filter((_, idx) => idx !== fieldIndex)
+      };
+      setEditForm({ ...editForm, item_description: next });
+      return;
+    }
+
+    const next = [...createForm.item_description];
+    next[rowIndex] = {
+      ...next[rowIndex],
+      add_fields: (next[rowIndex].add_fields || []).filter((_, idx) => idx !== fieldIndex)
+    };
+    setCreateForm({ ...createForm, item_description: next });
+  };
+
+  const hasIncompleteAdditionalFields = (fields = []) =>
+    fields.some((field) => !(field.key || "").trim() || !(field.value || "").trim());
+
+  const addAdditionalField = (target) => {
+    if (target === "edit") {
+      if (hasIncompleteAdditionalFields(editForm.add_fields)) {
+        toast({
+          title: "Complete existing fields",
+          description: "Fill key and value before adding another additional info row.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setEditForm({ ...editForm, add_fields: [...editForm.add_fields, { key: "", value: "" }] });
+      return;
+    }
+
+    if (hasIncompleteAdditionalFields(createForm.add_fields)) {
+      toast({
+        title: "Complete existing fields",
+        description: "Fill key and value before adding another additional info row.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCreateForm({ ...createForm, add_fields: [...createForm.add_fields, { key: "", value: "" }] });
+  };
+
+  const removeAdditionalField = (target, index) => {
+    if (target === "edit") {
+      setEditForm({ ...editForm, add_fields: editForm.add_fields.filter((_, idx) => idx !== index) });
+      return;
+    }
+    setCreateForm({ ...createForm, add_fields: createForm.add_fields.filter((_, idx) => idx !== index) });
   };
 
   const openPreview = (sample) => {
@@ -686,6 +807,18 @@ export default function Samples() {
     draftItems: samples.filter(s => s.status === "Draft").length,
   };
 
+  const createItemFieldKeys = useMemo(() => (
+    Array.from(
+      new Set(
+        createForm.item_description.flatMap((row) =>
+          (row.add_fields || [])
+            .map((field) => (field.key || "").trim())
+            .filter(Boolean)
+        )
+      )
+    )
+  ), [createForm.item_description]);
+
   // Export to Excel
   const handleExportToExcel = () => {
     try {
@@ -983,23 +1116,64 @@ export default function Samples() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Attachments</div>
-              <div className="flex gap-2">
-                <Input type="file" multiple onChange={handleSampleUpload} className="w-auto" />
-                <Select onValueChange={(val) => setCreateForm({ ...createForm, sample_file: val })}>
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="Select uploaded file" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {uploadFilePaths.map((p) => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Selected File</Label>
-              <Input value={createForm.sample_file || ""} onChange={(e) => setCreateForm({ ...createForm, sample_file: e.target.value })} placeholder="/uploads/sample/..." />
+            <div
+              className={`border rounded-md p-3 transition-colors ${isAttachmentDragActive ? 'border-primary bg-primary/5' : 'border-dashed'}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsAttachmentDragActive(true);
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsAttachmentDragActive(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsAttachmentDragActive(false);
+              }}
+              onDrop={handleAttachmentDrop}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  Drag and drop files here, or select multiple files
+                </div>
+                <Label
+                  htmlFor="sample-attachments-upload"
+                  className="inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-medium cursor-pointer hover:bg-muted"
+                >
+                  Select Files
+                </Label>
+              </div>
+              <Input
+                id="sample-attachments-upload"
+                type="file"
+                multiple
+                onChange={handleSampleUpload}
+                className="hidden"
+              />
+              {uploadFilePaths.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <Label className="text-xs">Uploaded files</Label>
+                  <Select
+                    value={createForm.sample_file || ""}
+                    onValueChange={(value) => setCreateForm({ ...createForm, sample_file: value })}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select uploaded file" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uploadFilePaths.map((path) => (
+                        <SelectItem key={path} value={path}>
+                          {path.split('/').pop() || path}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
           <div className="space-y-4">
@@ -1016,6 +1190,9 @@ export default function Samples() {
                   <TableHead>Description</TableHead>
                   <TableHead className="w-[160px]">Quantity</TableHead>
                   <TableHead className="w-[160px]">Value</TableHead>
+                  {createItemFieldKeys.map((fieldKey) => (
+                    <TableHead key={fieldKey} className="w-[160px]">{fieldKey}</TableHead>
+                  ))}
                   <TableHead className="w-[200px]">Add Fields</TableHead>
                   <TableHead className="w-[80px]"></TableHead>
                 </TableRow>
@@ -1043,22 +1220,36 @@ export default function Samples() {
                         const next = [...createForm.item_description]; next[idx] = { ...next[idx], value: e.target.value }; setCreateForm({ ...createForm, item_description: next });
                       }} />
                     </TableCell>
+                    {createItemFieldKeys.map((fieldKey) => {
+                      const field = (row.add_fields || []).find((f) => (f.key || "").trim() === fieldKey);
+                      return (
+                        <TableCell key={`${idx}-${fieldKey}`} className="text-sm">
+                          {field?.value || "-"}
+                        </TableCell>
+                      );
+                    })}
                     <TableCell>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
                         {row.add_fields.map((f, j) => (
-                          <div key={j} className="grid grid-cols-2 gap-2">
-                            <Input placeholder="Key" value={f.key} onChange={(e) => {
-                              const next = [...createForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], key: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setCreateForm({ ...createForm, item_description: next });
-                            }} />
-                            <Input placeholder="Value" value={f.value} onChange={(e) => {
-                              const next = [...createForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], value: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setCreateForm({ ...createForm, item_description: next });
-                            }} />
+                          <div key={j} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium truncate">{f.key}</span>
+                              <span className="text-muted-foreground">:</span>
+                              <span className="truncate">{f.value}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2"
+                              onClick={() => removeItemFieldFromRow("create", idx, j)}
+                            >
+                              Remove
+                            </Button>
                           </div>
                         ))}
-                        <Button size="sm" variant="outline" onClick={() => {
-                          const next = [...createForm.item_description]; next[idx] = { ...next[idx], add_fields: [...next[idx].add_fields, { key: "", value: "" }] }; setCreateForm({ ...createForm, item_description: next });
-                        }}>
-                          <Plus className="mr-2 h-4 w-4" /> Add
+                        <Button size="sm" type="button" variant="outline" onClick={() => openItemFieldDialog("create", idx)}>
+                          <Plus className="mr-2 h-4 w-4" /> Add Item
                         </Button>
                       </div>
                     </TableCell>
@@ -1077,19 +1268,28 @@ export default function Samples() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Additional Fields</div>
-              <Button size="sm" variant="outline" onClick={() => setCreateForm({ ...createForm, add_fields: [...createForm.add_fields, { key: "", value: "" }] })}>
+              <Button size="sm" variant="outline" type="button" onClick={() => addAdditionalField("create")}>
                 <Plus className="mr-2 h-4 w-4" /> Add
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="space-y-2">
               {createForm.add_fields.map((f, idx) => (
-                <div key={idx} className="grid grid-cols-2 gap-2">
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
                   <Input placeholder="Key" value={f.key} onChange={(e) => {
                     const next = [...createForm.add_fields]; next[idx] = { ...next[idx], key: e.target.value }; setCreateForm({ ...createForm, add_fields: next });
                   }} />
                   <Input placeholder="Value" value={f.value} onChange={(e) => {
                     const next = [...createForm.add_fields]; next[idx] = { ...next[idx], value: e.target.value }; setCreateForm({ ...createForm, add_fields: next });
                   }} />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeAdditionalField("create", idx)}
+                    className="md:w-auto w-full"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -1268,20 +1468,26 @@ export default function Samples() {
                     }}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
-                    <div className="md:col-span-5 grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="md:col-span-5 space-y-2">
                       {row.add_fields.map((f, j) => (
-                        <div key={j} className="grid grid-cols-2 gap-2">
-                          <Input placeholder="Key" value={f.key} onChange={(e) => {
-                            const next = [...editForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], key: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setEditForm({ ...editForm, item_description: next });
-                          }} />
-                          <Input placeholder="Value" value={f.value} onChange={(e) => {
-                            const next = [...editForm.item_description]; const af = [...next[idx].add_fields]; af[j] = { ...af[j], value: e.target.value }; next[idx] = { ...next[idx], add_fields: af }; setEditForm({ ...editForm, item_description: next });
-                          }} />
+                        <div key={j} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium truncate">{f.key}</span>
+                            <span className="text-muted-foreground">:</span>
+                            <span className="truncate">{f.value}</span>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2"
+                            onClick={() => removeItemFieldFromRow("edit", idx, j)}
+                          >
+                            Remove
+                          </Button>
                         </div>
                       ))}
-                      <Button size="sm" variant="outline" onClick={() => {
-                        const next = [...editForm.item_description]; next[idx] = { ...next[idx], add_fields: [...next[idx].add_fields, { key: "", value: "" }] }; setEditForm({ ...editForm, item_description: next });
-                      }}>
+                      <Button size="sm" type="button" variant="outline" onClick={() => openItemFieldDialog("edit", idx)}>
                         <Plus className="mr-2 h-4 w-4" /> Add Field
                       </Button>
                     </div>
@@ -1292,19 +1498,28 @@ export default function Samples() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <Label>Additional Fields</Label>
-                <Button size="sm" variant="outline" onClick={() => setEditForm({ ...editForm, add_fields: [...editForm.add_fields, { key: "", value: "" }] })}>
+                <Button size="sm" variant="outline" type="button" onClick={() => addAdditionalField("edit")}>
                   <Plus className="mr-2 h-4 w-4" /> Add
                 </Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="space-y-2">
                 {editForm.add_fields.map((f, idx) => (
-                  <div key={idx} className="grid grid-cols-2 gap-2">
+                  <div key={idx} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
                     <Input placeholder="Key" value={f.key} onChange={(e) => {
                       const next = [...editForm.add_fields]; next[idx] = { ...next[idx], key: e.target.value }; setEditForm({ ...editForm, add_fields: next });
                     }} />
                     <Input placeholder="Value" value={f.value} onChange={(e) => {
                       const next = [...editForm.add_fields]; next[idx] = { ...next[idx], value: e.target.value }; setEditForm({ ...editForm, add_fields: next });
                     }} />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeAdditionalField("edit", idx)}
+                      className="md:w-auto w-full"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -1313,6 +1528,33 @@ export default function Samples() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button onClick={saveEdit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={itemFieldDialogOpen} onOpenChange={(open) => {
+        if (open) {
+          setItemFieldDialogOpen(true);
+        } else {
+          closeItemFieldDialog();
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Item Field</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Key</Label>
+              <Input value={itemFieldKey} onChange={(e) => setItemFieldKey(e.target.value)} placeholder="Enter key" />
+            </div>
+            <div className="space-y-2">
+              <Label>Value</Label>
+              <Input value={itemFieldValue} onChange={(e) => setItemFieldValue(e.target.value)} placeholder="Enter value" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeItemFieldDialog}>Cancel</Button>
+            <Button onClick={addItemFieldToRow}>Add</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
