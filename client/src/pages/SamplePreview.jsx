@@ -215,7 +215,7 @@ export default function SamplePreview() {
 
               <div className="lg:col-span-4">
                 <div className="sticky top-4 space-y-3 rounded-2xl border bg-card p-4 shadow-sm">
-                  <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="flex items-center gap-2 text-sm font-medium" >
                     {isImage ? <ImageIcon className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
                     Attachment
                   </div>
@@ -223,7 +223,7 @@ export default function SamplePreview() {
                     <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No attachment found</div>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      <Button onClick={() => setAttachmentOpen(true)} className="w-full">
+                      <Button onClick={() => setAttachmentOpen(true)} className="w-full mt-2">
                         <Eye className="mr-2 h-4 w-4" />
                         Preview Attachment
                       </Button>

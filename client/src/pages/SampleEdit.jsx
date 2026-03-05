@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Eye } from "lucide-react";
 
 export default function SampleEdit() {
   const { id, projectId } = useParams();
@@ -23,6 +24,7 @@ export default function SampleEdit() {
     item_description: [{ sr_no: "", description: "", quantity: "", value: "" }],
     add_fields: []
   });
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
 
   const parseMaybe = (val, fallback) => {
     if (typeof val === 'string') {
@@ -104,6 +106,11 @@ export default function SampleEdit() {
     }
   };
 
+  const fileUrl = form?.sample_file ? api.getApiFileUrl(form.sample_file) : null;
+  const lower = String(form?.sample_file || "").toLowerCase();
+  const isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp');
+  const isPdf = lower.endsWith('.pdf');
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 px-4 pb-8 sm:px-6 lg:px-10">
       <div className="flex items-center justify-between pt-2">
@@ -141,8 +148,14 @@ export default function SampleEdit() {
                 <Input value={form.work_done} onChange={(e) => setForm({ ...form, work_done: e.target.value })} />
               </div>
               <div className="space-y-2">
-                <Label>Sample File Path</Label>
-                <Input value={form.sample_file} onChange={(e) => setForm({ ...form, sample_file: e.target.value })} placeholder="/uploads/sample/..." />
+                <Label>Attachment</Label>
+                {fileUrl ? (
+                  <Button type="button" variant="outline" onClick={() => setAttachmentOpen(true)} className="mt-1">
+                    <Eye className="mr-2 h-4 w-4" /> Preview Attachment
+                  </Button>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No attachment found</div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -237,6 +250,31 @@ export default function SampleEdit() {
           )}
         </CardContent>
       </Card>
+      {fileUrl && (
+        <Dialog open={attachmentOpen} onOpenChange={setAttachmentOpen}>
+          <DialogContent className="h-[98vh] w-[99vw] max-w-[99vw]">
+            <DialogHeader>
+              <DialogTitle>Attachment Preview</DialogTitle>
+            </DialogHeader>
+            <div className="rounded-xl border bg-muted/10 p-3">
+              {isImage ? (
+                <img src={fileUrl} alt="Sample File" className="max-h-[92vh] object-contain w-full rounded-md" />
+              ) : isPdf ? (
+                <iframe src={fileUrl} className="h-[92vh] w-full rounded-md" title="Sample Attachment Preview" />
+              ) : (
+                <div className="flex justify-center">
+                  <Button asChild>
+                    <a href={fileUrl} target="_blank" rel="noreferrer">Open Attachment</a>
+                  </Button>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setAttachmentOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

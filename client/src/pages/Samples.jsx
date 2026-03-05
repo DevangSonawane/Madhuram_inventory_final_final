@@ -17,17 +17,6 @@ import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-const parseMaybe = (val, fallback) => {
-  if (typeof val === 'string') {
-    try {
-      const parsed = JSON.parse(val);
-      return parsed;
-    } catch {
-      return fallback;
-    }
-  }
-  return val ?? fallback;
-};
 
 // Mock Sample Data (Floor-wise distribution)
 const MOCK_SAMPLES = [
@@ -69,27 +58,13 @@ export default function Samples() {
   const [loadingServer, setLoadingServer] = useState(false);
   const [uploadFilePaths, setUploadFilePaths] = useState([]);
   const [uploadPreviewOpen, setUploadPreviewOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingSample, setEditingSample] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewSample, setPreviewSample] = useState(null);
   const [selectedUploadedFile, setSelectedUploadedFile] = useState("");
   const [isAttachmentDragActive, setIsAttachmentDragActive] = useState(false);
   const [itemFieldDialogOpen, setItemFieldDialogOpen] = useState(false);
-  const [itemFieldTarget, setItemFieldTarget] = useState("create");
   const [itemFieldRowIndex, setItemFieldRowIndex] = useState(null);
   const [itemFieldKey, setItemFieldKey] = useState("");
   const [itemFieldValue, setItemFieldValue] = useState("");
-  const [editForm, setEditForm] = useState({
-    building_name: "",
-    site_name: "",
-    work_done: "",
-    sample_file: "",
-    location: { floor: "", block: "", wing: "", coordinates: "" },
-    item_description: [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
-    add_fields: []
-  });
   const [createForm, setCreateForm] = useState({
     building_name: "",
     site_name: "",
@@ -132,57 +107,6 @@ export default function Samples() {
     load();
   }, [selectedProject]);
 
-  const openEdit = async (sample) => {
-    const pid = getSelectedProjectId();
-    if (!pid) {
-      toast({ title: "Select project", description: "Choose a project first.", variant: "destructive" });
-      return;
-    }
-
-    const targetId = String(sample.sample_id || sample.id);
-    const list = await refreshProjectSamples();
-    const latest = list.find((item) => String(item.sample_id || item.id) === targetId);
-    if (!latest) {
-      toast({ title: "Sample not found", description: "Could not load latest sample details.", variant: "destructive" });
-      return;
-    }
-
-    setEditingSample(latest);
-    const loc = parseMaybe(latest.location, {});
-    const items = parseMaybe(latest.item_description, []);
-    const adds = parseMaybe(latest.add_fields, []);
-    setEditForm({
-      building_name: latest.building_name || "",
-      site_name: latest.site_name || "",
-      work_done: latest.work_done || "",
-      sample_file: latest.sample_file || "",
-      location: loc && typeof loc === 'object' ? { floor: loc.floor || "", block: loc.block || "", wing: loc.wing || "", coordinates: loc.coordinates || "" } : { floor: "", block: "", wing: "", coordinates: "" },
-      item_description: Array.isArray(items) && items.length ? items.map(it => ({ sr_no: it.sr_no || "", description: it.description || "", quantity: it.quantity || "", value: it.value || "", add_fields: Array.isArray(it.add_fields) ? it.add_fields.map(f => ({ key: f.key || "", value: f.value || "" })) : [] })) : [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
-      add_fields: Array.isArray(adds) ? adds.map(f => ({ key: f.key || "", value: f.value || "" })) : []
-    });
-    setEditOpen(true);
-  };
-
-  const saveEdit = async () => {
-    if (!editingSample) return;
-    const id = editingSample.sample_id || editingSample.id;
-    const res = await api.updateSample(id, {
-      building_name: editForm.building_name,
-      site_name: editForm.site_name,
-      work_done: editForm.work_done,
-      sample_file: editForm.sample_file,
-      location: editForm.location,
-      item_description: editForm.item_description,
-      add_fields: editForm.add_fields
-    });
-    if (res.success) {
-      setEditOpen(false);
-      await refreshProjectSamples();
-      toast({ title: "Updated", description: "Sample updated" });
-    } else {
-      toast({ title: "Update failed", description: res.error || "Error", variant: "destructive" });
-    }
-  };
 
   const saveCreate = async () => {
     const pid = selectedProject?.project_id || selectedProject?.id;
@@ -258,8 +182,7 @@ export default function Samples() {
     await uploadSampleFiles(files);
   };
 
-  const openItemFieldDialog = (target, rowIndex) => {
-    setItemFieldTarget(target);
+  const openItemFieldDialog = (_target, rowIndex) => {
     setItemFieldRowIndex(rowIndex);
     setItemFieldKey("");
     setItemFieldValue("");
@@ -282,36 +205,17 @@ export default function Samples() {
       return;
     }
 
-    if (itemFieldTarget === "edit") {
-      const next = [...editForm.item_description];
-      next[itemFieldRowIndex] = {
-        ...next[itemFieldRowIndex],
-        add_fields: [...(next[itemFieldRowIndex].add_fields || []), { key, value }]
-      };
-      setEditForm({ ...editForm, item_description: next });
-    } else {
-      const next = [...createForm.item_description];
-      next[itemFieldRowIndex] = {
-        ...next[itemFieldRowIndex],
-        add_fields: [...(next[itemFieldRowIndex].add_fields || []), { key, value }]
-      };
-      setCreateForm({ ...createForm, item_description: next });
-    }
+    const next = [...createForm.item_description];
+    next[itemFieldRowIndex] = {
+      ...next[itemFieldRowIndex],
+      add_fields: [...(next[itemFieldRowIndex].add_fields || []), { key, value }]
+    };
+    setCreateForm({ ...createForm, item_description: next });
 
     closeItemFieldDialog();
   };
 
-  const removeItemFieldFromRow = (target, rowIndex, fieldIndex) => {
-    if (target === "edit") {
-      const next = [...editForm.item_description];
-      next[rowIndex] = {
-        ...next[rowIndex],
-        add_fields: (next[rowIndex].add_fields || []).filter((_, idx) => idx !== fieldIndex)
-      };
-      setEditForm({ ...editForm, item_description: next });
-      return;
-    }
-
+  const removeItemFieldFromRow = (_target, rowIndex, fieldIndex) => {
     const next = [...createForm.item_description];
     next[rowIndex] = {
       ...next[rowIndex],
@@ -323,20 +227,7 @@ export default function Samples() {
   const hasIncompleteAdditionalFields = (fields = []) =>
     fields.some((field) => !(field.key || "").trim() || !(field.value || "").trim());
 
-  const addAdditionalField = (target) => {
-    if (target === "edit") {
-      if (hasIncompleteAdditionalFields(editForm.add_fields)) {
-        toast({
-          title: "Complete existing fields",
-          description: "Fill key and value before adding another additional info row.",
-          variant: "destructive",
-        });
-        return;
-      }
-      setEditForm({ ...editForm, add_fields: [...editForm.add_fields, { key: "", value: "" }] });
-      return;
-    }
-
+  const addAdditionalField = (_target) => {
     if (hasIncompleteAdditionalFields(createForm.add_fields)) {
       toast({
         title: "Complete existing fields",
@@ -348,11 +239,7 @@ export default function Samples() {
     setCreateForm({ ...createForm, add_fields: [...createForm.add_fields, { key: "", value: "" }] });
   };
 
-  const removeAdditionalField = (target, index) => {
-    if (target === "edit") {
-      setEditForm({ ...editForm, add_fields: editForm.add_fields.filter((_, idx) => idx !== index) });
-      return;
-    }
+  const removeAdditionalField = (_target, index) => {
     setCreateForm({ ...createForm, add_fields: createForm.add_fields.filter((_, idx) => idx !== index) });
   };
 
@@ -1333,136 +1220,6 @@ export default function Samples() {
         diagrams={[...extractedDiagrams, ...suspendedDiagrams]}
         extractedValues={[...extractedValues, ...suspendedValues]}
       />
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Sample</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Building Name</Label>
-              <Input value={editForm.building_name} onChange={(e) => setEditForm({ ...editForm, building_name: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Site Name</Label>
-              <Input value={editForm.site_name} onChange={(e) => setEditForm({ ...editForm, site_name: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Work Done</Label>
-              <Input value={editForm.work_done} onChange={(e) => setEditForm({ ...editForm, work_done: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Sample File Path</Label>
-              <Input value={editForm.sample_file} onChange={(e) => setEditForm({ ...editForm, sample_file: e.target.value })} placeholder="/uploads/sample/..." />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="space-y-2">
-                <Label>Floor</Label>
-                <Input value={editForm.location.floor} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, floor: e.target.value } })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Block</Label>
-                <Input value={editForm.location.block} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, block: e.target.value } })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Wing</Label>
-                <Input value={editForm.location.wing} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, wing: e.target.value } })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Coordinates</Label>
-                <Input value={editForm.location.coordinates} onChange={(e) => setEditForm({ ...editForm, location: { ...editForm.location, coordinates: e.target.value } })} />
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Label>Item Description</Label>
-                <Button size="sm" variant="outline" onClick={() => setEditForm({ ...editForm, item_description: [...editForm.item_description, { sr_no: "", description: "", quantity: "", value: "", add_fields: [] }] })}>
-                  <Plus className="mr-2 h-4 w-4" /> Add Row
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {editForm.item_description.map((row, idx) => (
-                  <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                    <Input placeholder="Sr No" value={row.sr_no} onChange={(e) => {
-                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], sr_no: e.target.value }; setEditForm({ ...editForm, item_description: next });
-                    }} />
-                    <Input placeholder="Description" value={row.description} onChange={(e) => {
-                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], description: e.target.value }; setEditForm({ ...editForm, item_description: next });
-                    }} />
-                    <Input placeholder="Quantity" value={row.quantity} onChange={(e) => {
-                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], quantity: e.target.value }; setEditForm({ ...editForm, item_description: next });
-                    }} />
-                    <Input placeholder="Value" value={row.value} onChange={(e) => {
-                      const next = [...editForm.item_description]; next[idx] = { ...next[idx], value: e.target.value }; setEditForm({ ...editForm, item_description: next });
-                    }} />
-                    <Button size="sm" variant="ghost" onClick={() => {
-                      const next = editForm.item_description.filter((_, i) => i !== idx); setEditForm({ ...editForm, item_description: next });
-                    }}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                    <div className="md:col-span-5 space-y-2">
-                      {row.add_fields.map((f, j) => (
-                        <div key={j} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-medium truncate">{f.key}</span>
-                            <span className="text-muted-foreground">:</span>
-                            <span className="truncate">{f.value}</span>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 px-2"
-                            onClick={() => removeItemFieldFromRow("edit", idx, j)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-                      <Button size="sm" type="button" variant="outline" onClick={() => openItemFieldDialog("edit", idx)}>
-                        <Plus className="mr-2 h-4 w-4" /> Add Field
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <Label>Additional Fields</Label>
-                <Button size="sm" variant="outline" type="button" onClick={() => addAdditionalField("edit")}>
-                  <Plus className="mr-2 h-4 w-4" /> Add
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {editForm.add_fields.map((f, idx) => (
-                  <div key={idx} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2">
-                    <Input placeholder="Key" value={f.key} onChange={(e) => {
-                      const next = [...editForm.add_fields]; next[idx] = { ...next[idx], key: e.target.value }; setEditForm({ ...editForm, add_fields: next });
-                    }} />
-                    <Input placeholder="Value" value={f.value} onChange={(e) => {
-                      const next = [...editForm.add_fields]; next[idx] = { ...next[idx], value: e.target.value }; setEditForm({ ...editForm, add_fields: next });
-                    }} />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => removeAdditionalField("edit", idx)}
-                      className="md:w-auto w-full"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={saveEdit}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <Dialog open={itemFieldDialogOpen} onOpenChange={(open) => {
         if (open) {
           setItemFieldDialogOpen(true);
@@ -1487,101 +1244,6 @@ export default function Samples() {
           <DialogFooter>
             <Button variant="outline" onClick={closeItemFieldDialog}>Cancel</Button>
             <Button onClick={addItemFieldToRow}>Add</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Sample Preview</DialogTitle>
-          </DialogHeader>
-          {previewSample && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <div className="text-sm text-muted-foreground">ID</div>
-                  <div className="font-medium">{previewSample.sample_id || previewSample.id}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Building</div>
-                  <div className="font-medium">{previewSample.building_name || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Site</div>
-                  <div className="font-medium">{previewSample.site_name || '-'}</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <div className="text-sm text-muted-foreground">Work Done</div>
-                  <div className="font-medium">{previewSample.work_done || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Project</div>
-                  <div className="font-medium">{previewSample.project_id || '-'}</div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Location</div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <div className="font-medium">{previewSample?.location?.floor || previewSample?.location?.address_line1 || '-'}</div>
-                  <div className="font-medium">{previewSample?.location?.block || previewSample?.location?.city || '-'}</div>
-                  <div className="font-medium">{previewSample?.location?.wing || previewSample?.location?.state || '-'}</div>
-                  <div className="font-medium">{previewSample?.location?.coordinates || previewSample?.location?.country || '-'}</div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Item Description</div>
-                <div className="space-y-2">
-                  {(previewSample.item_description || []).map((it, i) => (
-                    <div key={i} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div className="font-medium">{it.sr_no || '-'}</div>
-                      <div className="font-medium">{it.description || '-'}</div>
-                      <div className="font-medium">{it.quantity || '-'}</div>
-                      <div className="font-medium">{it.value || '-'}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Additional Fields</div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  {(previewSample.add_fields || []).map((f, idx) => (
-                    <div key={idx} className="grid grid-cols-2 gap-2">
-                      <div className="font-medium">{f.key || '-'}</div>
-                      <div className="font-medium">{f.value || '-'}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Attachment</div>
-                {previewSample.sample_file ? (
-                  (() => {
-                    const url = api.getApiFileUrl(previewSample.sample_file);
-                    const lower = String(previewSample.sample_file).toLowerCase();
-                    const isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp');
-                    const isPdf = lower.endsWith('.pdf');
-                    return (
-                      <div className="border rounded-md p-3">
-                        {isImage ? (
-                          <img src={url} alt="Sample File" className="max-h-64 object-contain w-full" />
-                        ) : isPdf ? (
-                          <iframe src={url} className="w-full h-80" />
-                        ) : (
-                          <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 break-all">{url}</a>
-                        )}
-                      </div>
-                    );
-                  })()
-                ) : (
-                  <div className="text-muted-foreground">No attachment</div>
-                )}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={() => setPreviewOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
