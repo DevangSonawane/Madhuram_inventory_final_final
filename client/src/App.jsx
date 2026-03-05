@@ -19,6 +19,7 @@ import BOQ from '@/pages/BOQ';
 import MAS from '@/pages/MAS';
 import Samples from '@/pages/Samples';
 import SamplePreview from '@/pages/SamplePreview';
+import SampleEdit from '@/pages/SampleEdit';
 import VendorComparison from '@/pages/VendorComparison';
 import Challans from '@/pages/Challans';
 import NewChallan from '@/pages/NewChallan';
@@ -84,6 +85,7 @@ function App() {
                   <Route path="mas" element={<MAS />} />
                   <Route path="samples" element={<Samples />} />
                   <Route path="samples/preview/:id" element={<SamplePreview />} />
+                  <Route path="samples/edit/:id" element={<SampleEdit />} />
                   <Route path="vendor-comparison" element={<VendorComparison />} />
                   <Route path="challans" element={<Challans />} />
                   <Route path="challans/new" element={<NewChallan />} />

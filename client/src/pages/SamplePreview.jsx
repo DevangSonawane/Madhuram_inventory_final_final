@@ -6,28 +6,36 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
-import { useProject } from "@/contexts/ProjectContext";
-import { Loader2, ArrowLeft, Eye, FileText, Image as ImageIcon } from "lucide-react";
+import { Loader2, ArrowLeft, Eye, FileText, Image as ImageIcon, Pencil } from "lucide-react";
 
 export default function SamplePreview() {
   const { id, projectId } = useParams();
   const navigate = useNavigate();
-  const { selectedProject } = useProject();
   const [loading, setLoading] = useState(true);
   const [sample, setSample] = useState(null);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
+
+  const parseMaybe = (val, fallback) => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return fallback;
+      }
+    }
+    return val ?? fallback;
+  };
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const pid = projectId || selectedProject?.project_id || selectedProject?.id;
-        if (!pid) {
+        if (!projectId) {
           setSample(null);
           return;
         }
 
-        const res = await api.getSamplesByProject(pid);
+        const res = await api.getSamplesByProject(projectId);
         if (!res.success) {
           setSample(null);
           return;
@@ -40,17 +48,6 @@ export default function SamplePreview() {
           return;
         }
 
-        const parseMaybe = (val, fallback) => {
-          if (typeof val === 'string') {
-            try {
-              const parsed = JSON.parse(val);
-              return parsed;
-            } catch {
-              return fallback;
-            }
-          }
-          return val ?? fallback;
-        };
         const loc = parseMaybe(s.location, {});
         const items = parseMaybe(s.item_description, []);
         const adds = parseMaybe(s.add_fields, []);
@@ -75,7 +72,7 @@ export default function SamplePreview() {
       }
     };
     load();
-  }, [id, projectId, selectedProject]);
+  }, [id, projectId]);
 
   const fileUrl = sample?.sample_file ? api.getApiFileUrl(sample.sample_file) : null;
   const lower = String(sample?.sample_file || "").toLowerCase();
@@ -97,9 +94,14 @@ export default function SamplePreview() {
             <h1 className="text-3xl font-bold tracking-tight">Sample Preview</h1>
             <p className="text-muted-foreground mt-2">Detailed view and attachment inspection</p>
           </div>
-          <Button variant="outline" onClick={() => navigate(-1)} className="w-full sm:w-auto">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back
-          </Button>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Button variant="outline" onClick={() => navigate(-1)} className="w-full sm:w-auto">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+            </Button>
+            <Button onClick={() => navigate(`/${projectId}/samples/edit/${id}`)} className="w-full sm:w-auto" disabled={!sample}>
+              <Pencil className="mr-2 h-4 w-4" /> Edit
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -220,14 +222,12 @@ export default function SamplePreview() {
                   {!fileUrl ? (
                     <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No attachment found</div>
                   ) : (
-                    <>
-                      <div className="flex flex-col gap-2">
-                        <Button onClick={() => setAttachmentOpen(true)} className="w-full">
-                          <Eye className="mr-2 h-4 w-4" />
-                          Preview Attachment
-                        </Button>
-                      </div>
-                    </>
+                    <div className="flex flex-col gap-2">
+                      <Button onClick={() => setAttachmentOpen(true)} className="w-full">
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview Attachment
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -235,6 +235,7 @@ export default function SamplePreview() {
           )}
         </CardContent>
       </Card>
+
       <Dialog open={attachmentOpen} onOpenChange={setAttachmentOpen}>
         <DialogContent className="h-[98vh] w-[99vw] max-w-[99vw]">
           <DialogHeader>

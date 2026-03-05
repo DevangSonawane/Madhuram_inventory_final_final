@@ -115,6 +115,7 @@ export const MENU_CATEGORIES = [
         title: "Billing & Invoices",
         path: "/billing",
         icon: Receipt,
+        hidden: true,
       },
     ]
   },
@@ -125,31 +126,37 @@ export const MENU_CATEGORIES = [
         title: "Inventory",
         path: "/inventory",
         icon: Warehouse,
+        hidden: true,
       },
       {
         title: "Stock Overview",
         path: "/stock-areas",
         icon: Warehouse,
+        hidden: true,
       },
       {
         title: "Product Master",
         path: "/materials",
         icon: Package,
+        hidden: true,
       },
       {
         title: "Stock Transfers",
         path: "/stock-transfers",
         icon: ArrowRightLeft,
+        hidden: true,
       },
       {
         title: "Consumption",
         path: "/consumption",
         icon: TrendingDown,
+        hidden: true,
       },
       {
         title: "Returns",
         path: "/returns",
         icon: Undo2,
+        hidden: true,
       },
     ]
   },
@@ -160,6 +167,7 @@ export const MENU_CATEGORIES = [
         title: "Repository",
         path: "/documents",
         icon: FolderOpen,
+        hidden: true,
       },
     ]
   },
@@ -170,11 +178,13 @@ export const MENU_CATEGORIES = [
         title: "Reports",
         path: "/reports",
         icon: BarChart3,
+        hidden: true,
       },
       {
         title: "Audit Logs",
         path: "/audit-logs",
         icon: History,
+        hidden: true,
       },
     ]
   },

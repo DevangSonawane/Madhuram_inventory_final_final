@@ -13,6 +13,12 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
   
   const collapsed = isCollapsed === undefined ? false : isCollapsed;
   const { projectId } = useParams();
+  const visibleCategories = MENU_CATEGORIES
+    .map((category) => ({
+      ...category,
+      items: category.items.filter((item) => !item.hidden),
+    }))
+    .filter((category) => category.items.length > 0);
 
   const getPath = (path) => {
     if (path === '/projects') return '/projects';
@@ -52,7 +58,7 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
       
       <ScrollArea className="flex-1 py-4 px-3">
         <div className="space-y-6">
-          {MENU_CATEGORIES.map((category, index) => (
+          {visibleCategories.map((category, index) => (
             <div key={index} className="space-y-1">
               {!collapsed && (
                 <h3 className="px-4 text-[10px] font-bold text-sidebar-foreground/40 uppercase tracking-widest mb-2 font-mono">

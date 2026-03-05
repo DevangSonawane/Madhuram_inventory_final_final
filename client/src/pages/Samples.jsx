@@ -1313,7 +1313,6 @@ export default function Samples() {
                         <Button size="sm" variant="secondary" onClick={() => openPreview(s)}>
                           <Eye className="h-4 w-4 mr-1" /> Preview
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => openEdit(s)}>Edit</Button>
                         <Button size="sm" variant="ghost" onClick={() => removeSample(s)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
