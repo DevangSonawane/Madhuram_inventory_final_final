@@ -313,4 +313,41 @@ Success Response (200)
 Error Response (404)
 { "error": "PO not found" }
 
+7) Parse PO PDF and return structured JSON
+POST /api/po-parser/parse
+Summary: Upload a PO PDF, parse it, and get back a JSON object with all the fields required for POST /api/po.
+Request:
+Content-Type: multipart/form-data
+
+
+Field: file (PDF)
+
+
+Success Response (200):
+{
+  "success": true,
+  "filename": "PO-123.pdf",
+  "data": {
+    "company_name": "Madhuram Industries",
+    "order_no": "PO-123",
+    "po_date": "2026-02-01",
+    "vendor_name": "Vendor ABC",
+    "items": [
+      { "srno": 1, "hsn": "1234", "description": "Item 1", "qty": 10, "rate": 200, "amount": 2000 }
+    ],
+    "total_amount": 2000,
+    "status": "created"
+  }
+}
+400: No file uploaded
+
+ { "error": "No PDF file uploaded. Use field name 'file'." }
+
+
+500: Parsing failed
+
+ { "error": "Parsing failed" }
+
+
+
 

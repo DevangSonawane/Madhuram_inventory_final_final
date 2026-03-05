@@ -18,9 +18,9 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const mapPoItemsToChallanItems = (po) => {
+const mapPoItemsForPreview = (po) => {
   if (!Array.isArray(po?.items) || po.items.length === 0) {
-    return [{ ...EMPTY_ITEM }];
+    return [];
   }
 
   return po.items.map((item, index) => ({
@@ -42,6 +42,7 @@ export default function NewChallan() {
   const targetProjectId = projectId != null ? String(projectId) : String(routeProjectId || "");
 
   const [projectPos, setProjectPos] = useState([]);
+  const [selectedPoItems, setSelectedPoItems] = useState([]);
   const [loadingPos, setLoadingPos] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -85,8 +86,8 @@ export default function NewChallan() {
         ...prev,
         po_id: "",
         po_number: "",
-        items: [{ ...EMPTY_ITEM }]
       }));
+      setSelectedPoItems([]);
       return;
     }
 
@@ -94,8 +95,8 @@ export default function NewChallan() {
       ...prev,
       po_id: selected.po_id != null ? String(selected.po_id) : "",
       po_number: selected.order_no || "",
-      items: mapPoItemsToChallanItems(selected)
     }));
+    setSelectedPoItems(mapPoItemsForPreview(selected));
   };
 
   const handlePoIdSelect = (value) => {
@@ -191,7 +192,7 @@ export default function NewChallan() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">New Delivery Challan</h1>
-          <p className="text-muted-foreground mt-2">Select PO, review PO items, and save the challan.</p>
+          <p className="text-muted-foreground mt-2">Select PO, review PO items (view only), then add challan items.</p>
         </div>
         <Button variant="outline" onClick={goToChallans}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Challans
@@ -261,11 +262,53 @@ export default function NewChallan() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Items</CardTitle>
+          <CardTitle>PO Items (View Only)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {selectedPoItems.length > 0 ? (
+            <div className="hidden md:grid md:grid-cols-7 gap-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div>Name</div>
+              <div className="md:col-span-2">Description</div>
+              <div>Width</div>
+              <div>Length</div>
+              <div>Quantity</div>
+              <div>Price</div>
+            </div>
+          ) : null}
+          {selectedPoItems.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Select a PO to view linked PO items.
+            </div>
+          ) : (
+            selectedPoItems.map((item, index) => (
+              <div key={`po-item-${index}`} className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-7">
+                <div className="text-sm font-medium">{item.name || "-"}</div>
+                <div className="text-sm text-muted-foreground md:col-span-2">{item.description || "-"}</div>
+                <div className="text-sm">{item.width || "-"}</div>
+                <div className="text-sm">{item.length || "-"}</div>
+                <div className="text-sm">{item.quantity || "-"}</div>
+                <div className="text-sm">{item.price || "-"}</div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Challan Items</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="hidden md:grid md:grid-cols-7 gap-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <div>Name</div>
+            <div className="md:col-span-2">Description</div>
+            <div>Width</div>
+            <div>Length</div>
+            <div>Quantity</div>
+            <div>Price</div>
+          </div>
           {form.items.map((item, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <div key={index} className="grid grid-cols-1 md:grid-cols-7 gap-2">
               <Input className="h-11 text-base" placeholder="Name" value={item.name} onChange={(e) => updateItem(index, 'name', e.target.value)} />
               <Textarea className="md:col-span-2 text-base" rows={2} placeholder="Description" value={item.description} onChange={(e) => updateItem(index, 'description', e.target.value)} />
               <Input className="h-11 text-base" placeholder="Width" value={item.width} onChange={(e) => updateItem(index, 'width', e.target.value)} />

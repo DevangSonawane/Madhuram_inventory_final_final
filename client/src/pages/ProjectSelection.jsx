@@ -270,7 +270,7 @@ export default function ProjectSelection() {
         const original = projectData.work_order_file;
 
         if (original.size > MAX_COMPRESSION_API_SIZE) {
-          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression API limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
+          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
           toast({ title: 'File too large', description: msg, variant: 'destructive' });
           setIsCreating(false);
           return;
@@ -282,7 +282,7 @@ export default function ProjectSelection() {
         try {
           const compResult = await api.compressFile(original);
           if (!compResult || !compResult.success || !compResult.data || !compResult.data.url) {
-            throw new Error((compResult && compResult.error) || 'Compression API failed to return a downloadable file URL');
+            throw new Error((compResult && compResult.error) || 'Compression failed to return a downloadable file URL');
           }
 
           let fileUrl = api.getApiFileUrl(compResult.data.url);
@@ -700,15 +700,10 @@ export default function ProjectSelection() {
                   <Calendar className="mr-2 h-4 w-4" />
                   Started: {project.start_date || 'N/A'}
                 </div>
-                {project.value && (
-                  <div className="text-lg font-semibold text-gray-900">
-                    {project.value}
-                  </div>
-                )}
                 {project.work_order_file && (
-                    <div className="flex items-center text-sm text-blue-600 mt-2">
+                    <div className="flex items-center text-sm text-muted-foreground mt-2">
                         <FileText className="mr-2 h-4 w-4" />
-                        <span className="truncate max-w-[200px]">{project.work_order_file}</span>
+                        <span>Work order attached</span>
                     </div>
                 )}
               </CardContent>

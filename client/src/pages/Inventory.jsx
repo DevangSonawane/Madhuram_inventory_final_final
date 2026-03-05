@@ -196,7 +196,7 @@ export default function Inventory() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>Create Inventory</CardTitle>
-              <CardDescription>Directly maps to API: project_id, brand, quantity, name, price, stockin.</CardDescription>
+              <CardDescription>Uses project, brand, quantity, name, price, and stock status fields.</CardDescription>
             </div>
           </div>
         </CardHeader>

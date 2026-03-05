@@ -16,9 +16,6 @@ import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractPurchaseOrderFields } from "@/lib/purchaseOrderExtractor";
 import { EMPTY_PO, normalizePoData } from "@/pages/poShared";
 
-const STORAGE_KEY = "poPreview";
-const RECENT_KEY = "poRecent";
-
 const SAMPLE_EXTRACTED = {
   ...EMPTY_PO,
   title: "PURCHASE ORDER",
@@ -120,31 +117,6 @@ const LABEL_MAP = [
   { re: /authorised\s*signatory/i, path: "authorisedSignatory" },
 ];
 
-function loadStoredPo() {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function loadRecentPos() {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (_) {
-    return [];
-  }
-}
-
-function saveRecentPos(items) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(RECENT_KEY, JSON.stringify(items));
-}
-
 function setPathValue(base, path, value) {
   const parts = path.split('.');
   const next = { ...base };
@@ -228,15 +200,11 @@ export default function PurchaseOrders() {
   const { toast } = useToast();
   const { selectedProject } = useProject();
   const projectId = selectedProject?.project_id ?? selectedProject?.id ?? null;
-  const [poData, setPoData] = useState(() => normalizePoData(loadStoredPo()));
+  const [poData, setPoData] = useState(EMPTY_PO);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [recentPos, setRecentPos] = useState(() => loadRecentPos());
+  const [recentPos, setRecentPos] = useState([]);
   const [loadingPos, setLoadingPos] = useState(false);
-
-  useEffect(() => {
-    saveRecentPos(recentPos);
-  }, [recentPos]);
 
   useEffect(() => {
     if (!projectId) {
@@ -365,10 +333,7 @@ export default function PurchaseOrders() {
       };
 
       setPoData(next);
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      }
-      navigate("preview");
+      navigate("preview", { state: { poData: next, mode: "create" } });
     } catch (error) {
       toast({ title: "Upload failed", description: error?.message || "Could not extract PO document.", variant: "destructive" });
     } finally {
@@ -384,19 +349,19 @@ export default function PurchaseOrders() {
   };
 
   const handlePreview = () => {
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(poData));
-    }
-    navigate("preview");
+    navigate("preview", {
+      state: {
+        poData,
+        poId: poData?.po_id ?? null,
+        mode: poData?.po_id ? "edit" : "create",
+      },
+    });
   };
 
   const handleClear = () => {
     setPoData(EMPTY_PO);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
-    }
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem(STORAGE_KEY);
     }
   };
 
@@ -424,23 +389,14 @@ export default function PurchaseOrders() {
     if (!item?.payload) return;
     const normalized = normalizePoData(item.payload);
     setPoData(normalized);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-    }
-    navigate("preview");
+    navigate("preview", {
+      state: {
+        poData: normalized,
+        poId: item.po_id ?? normalized.po_id ?? null,
+        mode: "edit",
+      },
+    });
   };
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        setPoData(normalizePoData(JSON.parse(raw)));
-      } catch (_) {
-        setPoData(EMPTY_PO);
-      }
-    }
-  }, []);
 
   return (
     <div className="space-y-6">

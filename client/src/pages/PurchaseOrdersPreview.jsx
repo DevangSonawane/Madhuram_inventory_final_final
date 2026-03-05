@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,34 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
 import { EMPTY_PO, normalizePoData } from "@/pages/poShared";
-
-const STORAGE_KEY = "poPreview";
-const RECENT_KEY = "poRecent";
-
-function loadStoredPo() {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function loadRecentPos() {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (_) {
-    return [];
-  }
-}
-
-function saveRecentPos(items) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(RECENT_KEY, JSON.stringify(items));
-}
 
 function InfoItem({ label, value }) {
   return (
@@ -126,18 +98,23 @@ const buildPoPayload = (poData, projectId) => ({
 
 export default function PurchaseOrdersPreview() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { projectId: routeProjectId } = useParams();
   const { toast } = useToast();
   const { selectedProject } = useProject();
   const projectId = selectedProject?.project_id ?? selectedProject?.id ?? routeProjectId ?? null;
-  const [poData, setPoData] = useState(() => normalizePoData(loadStoredPo()));
+  const [poData, setPoData] = useState(() => normalizePoData(location.state?.poData));
+  const [editingPoId, setEditingPoId] = useState(() => location.state?.poId ?? location.state?.poData?.po_id ?? null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(poData));
+    if (!location.state) return;
+    if (location.state.poData) {
+      const normalized = normalizePoData(location.state.poData);
+      setPoData(normalized);
+      setEditingPoId(location.state.poId ?? normalized.po_id ?? null);
     }
-  }, [poData]);
+  }, [location.state]);
 
   const hasPreview = useMemo(() => {
     return poData.vendor?.name || poData.orderNo || poData.poDate || poData.totalAmount;
@@ -203,36 +180,32 @@ export default function PurchaseOrdersPreview() {
     const payload = buildPoPayload(poData, numericProjectId);
     setSaving(true);
     try {
-      const response = await api.createPo(payload);
+      const response = editingPoId
+        ? await api.updatePo(editingPoId, payload)
+        : await api.createPo(payload);
       if (response.success) {
         const normalized = normalizePoData(response.data || {});
-        const recent = loadRecentPos();
-        const id = normalized.orderNo || `PO-${normalized.po_id || Date.now()}`;
-        const date = normalized.poDate || normalized.indentDate || new Date().toISOString().split('T')[0];
-        const vendorName = normalized.vendor?.name || "";
-        const nextRecent = [
-          {
-            id,
-            date,
-            vendor: vendorName,
-            totalAmount: normalized.totalAmount,
-            status: normalized.status || "created",
-            payload: normalized,
-            po_id: normalized.po_id,
-          },
-          ...recent.filter((item) => item.id !== id),
-        ].slice(0, 25);
-        saveRecentPos(nextRecent);
-        toast({ title: "PO submitted", description: "Purchase order saved successfully." });
-        if (typeof window !== "undefined") {
-          window.sessionStorage.removeItem(STORAGE_KEY);
-        }
+        toast({
+          title: editingPoId ? "PO updated" : "PO submitted",
+          description: editingPoId
+            ? "Purchase order updated successfully."
+            : "Purchase order saved successfully.",
+        });
+        setEditingPoId(normalized.po_id ?? editingPoId ?? null);
         navigate(`/${numericProjectId}/purchase-orders`);
       } else {
-        toast({ title: "Error", description: response.error || "Failed to submit PO.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: response.error || (editingPoId ? "Failed to update PO." : "Failed to submit PO."),
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      toast({ title: "Error", description: error?.message || "Failed to submit PO.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: error?.message || (editingPoId ? "Failed to update PO." : "Failed to submit PO."),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -247,15 +220,14 @@ export default function PurchaseOrdersPreview() {
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || !hasPreview || !projectId}>
-            {saving ? "Submitting..." : "Submit PO"}
+            {saving ? (editingPoId ? "Updating..." : "Submitting...") : (editingPoId ? "Update PO" : "Submit PO")}
           </Button>
           <Button
             variant="outline"
             className="w-full sm:w-auto"
             onClick={() => {
-              if (typeof window !== "undefined") {
-                window.sessionStorage.removeItem(STORAGE_KEY);
-              }
+              setPoData(EMPTY_PO);
+              setEditingPoId(null);
               navigate(-1);
             }}
           >

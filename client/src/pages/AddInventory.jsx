@@ -175,11 +175,11 @@ export default function AddInventory() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-r from-slate-50 to-white p-6 shadow-sm dark:from-slate-950 dark:to-slate-900">
+    <div className="mx-auto w-full max-w-7xl space-y-8 px-4 pb-8 pt-2 sm:px-6 lg:px-10">
+      <div className="rounded-3xl border border-border/60 bg-gradient-to-r from-background via-background to-muted/40 p-6 shadow-sm sm:p-7">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <Badge variant="outline" className="mb-3">Inventory Workspace</Badge>
+            <Badge variant="outline" className="mb-3 border-primary/30 bg-primary/5 text-primary">Inventory Workspace</Badge>
             <h1 className="text-3xl font-bold tracking-tight">Add Inventory</h1>
             <p className="text-muted-foreground mt-1">Create inventory entries for {projectLabel}.</p>
           </div>
@@ -192,7 +192,7 @@ export default function AddInventory() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60 bg-card/80 shadow-sm">
           <CardHeader className="pb-2">
             <CardDescription>Total Items</CardDescription>
             <CardTitle className="text-2xl">{filteredItems.length}</CardTitle>
@@ -201,7 +201,7 @@ export default function AddInventory() {
             Matching current filters
           </CardContent>
         </Card>
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60 bg-card/80 shadow-sm">
           <CardHeader className="pb-2">
             <CardDescription>Total Quantity</CardDescription>
             <CardTitle className="text-2xl">{totalQuantity}</CardTitle>
@@ -210,7 +210,7 @@ export default function AddInventory() {
             Units across visible rows
           </CardContent>
         </Card>
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60 bg-card/80 shadow-sm">
           <CardHeader className="pb-2">
             <CardDescription>Inventory Value</CardDescription>
             <CardTitle className="text-2xl">₹{totalValue.toLocaleString('en-IN')}</CardTitle>
@@ -219,7 +219,7 @@ export default function AddInventory() {
             Quantity x price
           </CardContent>
         </Card>
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60 bg-card/80 shadow-sm">
           <CardHeader className="pb-2">
             <CardDescription>In Stock</CardDescription>
             <CardTitle className="text-2xl">{filteredItems.filter((it) => it.stockin).length}</CardTitle>
@@ -231,7 +231,7 @@ export default function AddInventory() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="border-border/60 shadow-sm lg:col-span-1">
+        <Card className="border-border/60 bg-card/90 shadow-sm lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PackagePlus className="h-5 w-5 text-primary" />
@@ -328,7 +328,7 @@ export default function AddInventory() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 shadow-sm lg:col-span-2">
+        <Card className="border-border/60 bg-card/90 shadow-sm lg:col-span-2">
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -336,7 +336,7 @@ export default function AddInventory() {
                   <Boxes className="h-5 w-5 text-primary" />
                   Project Inventory
                 </CardTitle>
-                <CardDescription>Current items fetched from GET /api/inventory/project/:projectId.</CardDescription>
+                <CardDescription>Current items for the selected project.</CardDescription>
               </div>
               <div className="flex gap-2">
                 <div className="relative w-full sm:w-52">
@@ -365,7 +365,8 @@ export default function AddInventory() {
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
+            <div className="overflow-x-auto rounded-xl border border-border/50">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[90px]">ID</TableHead>
@@ -377,7 +378,7 @@ export default function AddInventory() {
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+                <TableBody>
                 {filteredItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
@@ -401,8 +402,9 @@ export default function AddInventory() {
                     </TableRow>
                   ))
                 )}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

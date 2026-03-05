@@ -173,9 +173,9 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      <div className="grid gap-8 grid-cols-1 lg:grid-cols-7">
+      <div className="grid items-start gap-8 grid-cols-1 lg:grid-cols-7">
         <motion.div className="col-span-1 lg:col-span-4" variants={itemVariants}>
-          <Card className="h-full shadow-lg border-none ring-1 ring-black/5">
+          <Card className="shadow-lg border-none ring-1 ring-black/5">
             <CardHeader>
               <CardTitle>Overview</CardTitle>
               <CardDescription>Monthly consumption trends.</CardDescription>
@@ -220,7 +220,7 @@ export default function Dashboard() {
         </motion.div>
         
         <motion.div className="col-span-1 lg:col-span-3" variants={itemVariants}>
-          <Card className="h-full shadow-lg border-none ring-1 ring-black/5">
+          <Card className="shadow-lg border-none ring-1 ring-black/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                   <div className="p-2 bg-primary/10 rounded-lg">

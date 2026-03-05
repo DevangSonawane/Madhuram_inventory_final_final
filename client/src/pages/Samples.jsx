@@ -74,6 +74,7 @@ export default function Samples() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSample, setPreviewSample] = useState(null);
+  const [selectedUploadedFile, setSelectedUploadedFile] = useState("");
   const [isAttachmentDragActive, setIsAttachmentDragActive] = useState(false);
   const [itemFieldDialogOpen, setItemFieldDialogOpen] = useState(false);
   const [itemFieldTarget, setItemFieldTarget] = useState("create");
@@ -99,28 +100,29 @@ export default function Samples() {
     add_fields: []
   });
 
+  const getSelectedProjectId = () => selectedProject?.project_id || selectedProject?.id;
+
+  const refreshProjectSamples = async () => {
+    const pid = getSelectedProjectId();
+    if (!pid) {
+      setServerSamples([]);
+      return [];
+    }
+    const res = await api.getSamplesByProject(pid);
+    if (!res.success) {
+      setServerSamples([]);
+      return [];
+    }
+    const arr = Array.isArray(res.data) ? res.data : [];
+    setServerSamples(arr);
+    return arr;
+  };
+
   useEffect(() => {
     const load = async () => {
       setLoadingServer(true);
       try {
-        if (selectedProject && (selectedProject.project_id || selectedProject.id)) {
-          const pid = selectedProject.project_id || selectedProject.id;
-          const res = await api.getSamplesByProject(pid);
-          if (res.success) {
-            const arr = Array.isArray(res.data) ? res.data : [];
-            setServerSamples(arr);
-          } else {
-            setServerSamples([]);
-          }
-        } else {
-          const res = await api.getSamples();
-          if (res.success) {
-            const arr = Array.isArray(res.data) ? res.data : [];
-            setServerSamples(arr);
-          } else {
-            setServerSamples([]);
-          }
-        }
+        await refreshProjectSamples();
       } catch {
         setServerSamples([]);
       } finally {
@@ -130,16 +132,30 @@ export default function Samples() {
     load();
   }, [selectedProject]);
 
-  const openEdit = (sample) => {
-    setEditingSample(sample);
-    const loc = parseMaybe(sample.location, {});
-    const items = parseMaybe(sample.item_description, []);
-    const adds = parseMaybe(sample.add_fields, []);
+  const openEdit = async (sample) => {
+    const pid = getSelectedProjectId();
+    if (!pid) {
+      toast({ title: "Select project", description: "Choose a project first.", variant: "destructive" });
+      return;
+    }
+
+    const targetId = String(sample.sample_id || sample.id);
+    const list = await refreshProjectSamples();
+    const latest = list.find((item) => String(item.sample_id || item.id) === targetId);
+    if (!latest) {
+      toast({ title: "Sample not found", description: "Could not load latest sample details.", variant: "destructive" });
+      return;
+    }
+
+    setEditingSample(latest);
+    const loc = parseMaybe(latest.location, {});
+    const items = parseMaybe(latest.item_description, []);
+    const adds = parseMaybe(latest.add_fields, []);
     setEditForm({
-      building_name: sample.building_name || "",
-      site_name: sample.site_name || "",
-      work_done: sample.work_done || "",
-      sample_file: sample.sample_file || "",
+      building_name: latest.building_name || "",
+      site_name: latest.site_name || "",
+      work_done: latest.work_done || "",
+      sample_file: latest.sample_file || "",
       location: loc && typeof loc === 'object' ? { floor: loc.floor || "", block: loc.block || "", wing: loc.wing || "", coordinates: loc.coordinates || "" } : { floor: "", block: "", wing: "", coordinates: "" },
       item_description: Array.isArray(items) && items.length ? items.map(it => ({ sr_no: it.sr_no || "", description: it.description || "", quantity: it.quantity || "", value: it.value || "", add_fields: Array.isArray(it.add_fields) ? it.add_fields.map(f => ({ key: f.key || "", value: f.value || "" })) : [] })) : [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
       add_fields: Array.isArray(adds) ? adds.map(f => ({ key: f.key || "", value: f.value || "" })) : []
@@ -161,11 +177,7 @@ export default function Samples() {
     });
     if (res.success) {
       setEditOpen(false);
-      const refreshed = await (selectedProject ? api.getSamplesByProject(selectedProject.project_id || selectedProject.id) : api.getSamples());
-      if (refreshed.success) {
-        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
-        setServerSamples(arr);
-      }
+      await refreshProjectSamples();
       toast({ title: "Updated", description: "Sample updated" });
     } else {
       toast({ title: "Update failed", description: res.error || "Error", variant: "destructive" });
@@ -189,11 +201,7 @@ export default function Samples() {
       add_fields: createForm.add_fields
     });
     if (res.success) {
-      const refreshed = await api.getSamplesByProject(pid);
-      if (refreshed.success) {
-        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
-        setServerSamples(arr);
-      }
+      await refreshProjectSamples();
       setCreateForm({
         building_name: "",
         site_name: "",
@@ -213,11 +221,7 @@ export default function Samples() {
     const id = sample.sample_id || sample.id;
     const res = await api.deleteSample(id);
     if (res.success) {
-      const refreshed = await (selectedProject ? api.getSamplesByProject(selectedProject.project_id || selectedProject.id) : api.getSamples());
-      if (refreshed.success) {
-        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
-        setServerSamples(arr);
-      }
+      await refreshProjectSamples();
       toast({ title: "Deleted", description: "Sample deleted" });
     } else {
       toast({ title: "Delete failed", description: res.error || "Error", variant: "destructive" });
@@ -354,7 +358,7 @@ export default function Samples() {
 
   const openPreview = (sample) => {
     const id = sample.sample_id || sample.id;
-    navigate(`preview/${id}`, { state: { sample } });
+    navigate(`preview/${id}`);
   };
 
 
@@ -362,11 +366,7 @@ export default function Samples() {
     const id = sample.sample_id || sample.id;
     const res = await api.updateSample(id, { sample_file: path });
     if (res.success) {
-      const refreshed = await (selectedProject ? api.getSamplesByProject(selectedProject.project_id || selectedProject.id) : api.getSamples());
-      if (refreshed.success) {
-        const arr = Array.isArray(refreshed.data) ? refreshed.data : [];
-        setServerSamples(arr);
-      }
+      await refreshProjectSamples();
       toast({ title: "Attached", description: "File attached to sample" });
     } else {
       toast({ title: "Attach failed", description: res.error || "Error", variant: "destructive" });
@@ -723,77 +723,6 @@ export default function Samples() {
     });
   };
 
-  // Save configuration
-  const handleSaveConfiguration = () => {
-    const config = {
-      floorCount,
-      samples,
-      extractedDiagrams: extractedDiagrams.length,
-      suspendedDiagrams: suspendedDiagrams.length,
-      extractedValues: extractedValues.length,
-      suspendedValues: suspendedValues.length,
-      timestamp: new Date().toISOString(),
-    };
-    localStorage.setItem('sample_configuration', JSON.stringify(config));
-    toast({
-      title: "Configuration Saved",
-      description: "Your sample configuration has been saved successfully",
-    });
-  };
-
-  // Load configuration
-  const loadConfiguration = () => {
-    const saved = localStorage.getItem('sample_configuration');
-    if (saved) {
-      try {
-        const config = JSON.parse(saved);
-        if (config.samples) {
-          setSamples(config.samples);
-          if (config.floorCount) setFloorCount(config.floorCount);
-          toast({
-            title: "Configuration Loaded",
-            description: "Previous configuration restored",
-          });
-          return true;
-        }
-      } catch (error) {
-        console.error('Error loading configuration:', error);
-        toast({
-          title: "Load Failed",
-          description: "Could not load saved configuration",
-          variant: "destructive",
-        });
-      }
-    } else {
-      toast({
-        title: "No Saved Configuration",
-        description: "No saved configuration found",
-      });
-    }
-    return false;
-  };
-
-  // Auto-load on mount if configured
-  useEffect(() => {
-    if (isConfigured) {
-      const saved = localStorage.getItem('sample_configuration');
-      if (saved) {
-        try {
-          const config = JSON.parse(saved);
-          if (config.samples && config.samples.length > 0) {
-            // Only auto-load if we don't have samples yet
-            if (samples.length === MOCK_SAMPLES.length && samples.every((s, i) => s.id === MOCK_SAMPLES[i]?.id)) {
-              setSamples(config.samples);
-              if (config.floorCount) setFloorCount(config.floorCount);
-            }
-          }
-        } catch (error) {
-          console.error('Error auto-loading configuration:', error);
-        }
-      }
-    }
-  }, [isConfigured]);
-
   // Calculate summary statistics
   const summaryStats = {
     totalItems: samples.length,
@@ -818,6 +747,15 @@ export default function Samples() {
       )
     )
   ), [createForm.item_description]);
+
+  const availableUploadedFiles = useMemo(() => (
+    Array.from(
+      new Set(
+        [...uploadFilePaths, ...serverSamples.map((s) => s.sample_file)]
+          .filter(Boolean)
+      )
+    )
+  ), [uploadFilePaths, serverSamples]);
 
   // Export to Excel
   const handleExportToExcel = () => {
@@ -1072,7 +1010,7 @@ export default function Samples() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>Create Sample</CardTitle>
-              <CardDescription>Maps to API fields and saves to backend.</CardDescription>
+              <CardDescription>Fill the sample details and save them to the system.</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -1308,10 +1246,32 @@ export default function Samples() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle>Server Samples</CardTitle>
-              <CardDescription>Fetched from API {selectedProject ? `(Project ${selectedProject.project_id || selectedProject.id})` : ''}</CardDescription>
+              <CardDescription>Loaded records {selectedProject ? `(Project ${selectedProject.project_id || selectedProject.id})` : ''}</CardDescription>
             </div>
-            <div className="flex gap-2">
-              <Input type="file" multiple onChange={handleSampleUpload} className="w-auto" />
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Select value={selectedUploadedFile} onValueChange={setSelectedUploadedFile}>
+                <SelectTrigger className="w-full sm:w-[280px]">
+                  <SelectValue placeholder="Select uploaded file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableUploadedFiles.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p.split('/').pop() || p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                disabled={!selectedUploadedFile}
+                onClick={() => {
+                  if (selectedUploadedFile) {
+                    window.open(api.getApiFileUrl(selectedUploadedFile), "_blank", "noopener,noreferrer");
+                  }
+                }}
+              >
+                Preview
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -1363,33 +1323,6 @@ export default function Samples() {
                 ))}
               </TableBody>
             </Table>
-          )}
-          {uploadFilePaths.length > 0 && serverSamples.length > 0 && (
-            <div className="mt-4 border rounded-lg p-4 space-y-2">
-              <div className="font-medium">Uploaded file paths</div>
-              <div className="grid md:grid-cols-2 gap-2">
-                {uploadFilePaths.map((p) => (
-                  <div key={p} className="flex items-center justify-between gap-2">
-                    <span className="truncate">{p}</span>
-                    <Select onValueChange={(val) => {
-                      const target = serverSamples.find(x => String(x.sample_id || x.id) === String(val));
-                      if (target) attachFileToSample(target, p);
-                    }}>
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Attach to sample" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {serverSamples.map((s) => (
-                          <SelectItem key={s.sample_id || s.id} value={String(s.sample_id || s.id)}>
-                            {(s.sample_id || s.id) + ' • ' + (s.building_name || s.site_name || '')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
         </CardContent>
       </Card>
@@ -1670,13 +1603,15 @@ export default function Samples() {
                   const isPdf = lower.endsWith('.pdf');
                   return (
                     <div key={p} className="border rounded-md p-3 space-y-2">
-                      <div className="text-xs break-all">{p}</div>
+                      <div className="text-xs text-muted-foreground">{p.split('/').pop() || 'Attachment'}</div>
                       {isImage ? (
                         <img src={url} alt="Upload" className="max-h-48 object-contain w-full" />
                       ) : isPdf ? (
                         <iframe src={url} className="w-full h-48" />
                       ) : (
-                        <a href={url} target="_blank" rel="noreferrer" className="text-blue-600">Open</a>
+                        <Button asChild size="sm" variant="outline">
+                          <a href={url} target="_blank" rel="noreferrer">Preview</a>
+                        </Button>
                       )}
                     </div>
                   );

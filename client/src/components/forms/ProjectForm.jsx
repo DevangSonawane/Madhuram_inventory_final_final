@@ -494,7 +494,7 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         const original = submitData.work_order_file;
 
         if (original.size > MAX_COMPRESSION_API_SIZE) {
-          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression API limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
+          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
           toast({ title: 'File too large', description: msg, variant: 'destructive' });
           setError(msg);
           setLoading(false);
@@ -507,7 +507,7 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         try {
           const compResult = await api.compressFile(original);
           if (!compResult || !compResult.success || !compResult.data || !compResult.data.url) {
-            throw new Error((compResult && compResult.error) || 'Compression API failed to return a downloadable file URL');
+            throw new Error((compResult && compResult.error) || 'Compression failed to return a downloadable file URL');
           }
 
           let fileUrl = api.getApiFileUrl(compResult.data.url);

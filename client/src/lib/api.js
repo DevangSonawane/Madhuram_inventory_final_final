@@ -709,7 +709,7 @@ export const api = {
       lastError = res;
       if (res.status !== 404) return res;
     }
-    return lastError || { success: false, error: 'Create endpoint not found', status: 404 };
+    return lastError || { success: false, error: 'Create path not found', status: 404 };
   },
 
   createInventory: async (data) => {
@@ -837,7 +837,7 @@ const handleResponse = async (response) => {
     let error = (data && (data.error || data.message)) || response.statusText;
     
     if (response.status === 413) {
-      error = 'File too large for compression API. The file exceeds the server\'s maximum request size. Please compress the file manually using a compression tool (like 7-Zip, WinRAR, or online tools) before uploading.';
+      error = 'File too large for compression. The file exceeds the server\'s maximum request size. Please compress the file manually using a compression tool (like 7-Zip, WinRAR, or online tools) before uploading.';
     } else if (response.status === 400) {
       error = data?.error || 'Invalid request. Please check your input and try again.';
     } else if (response.status === 401) {
