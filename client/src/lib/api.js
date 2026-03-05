@@ -440,6 +440,22 @@ export const api = {
     return handleResponse(response);
   },
 
+  parsePoFile: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+
+    const response = await fetch(`${BASE_URL}/api/po-parser/parse`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
   createPo: async (data) => {
     const response = await fetch(`${BASE_URL}/api/po`, {
       method: 'POST',

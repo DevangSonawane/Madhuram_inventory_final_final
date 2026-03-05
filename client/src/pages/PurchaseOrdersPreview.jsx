@@ -10,6 +10,15 @@ import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
 import { EMPTY_PO, normalizePoData } from "@/pages/poShared";
 
+function Field({ label, children, className = "" }) {
+  return (
+    <div className={`space-y-1 ${className}`.trim()}>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  );
+}
+
 function InfoItem({ label, value }) {
   return (
     <div className="space-y-1">
@@ -28,11 +37,24 @@ const parseDecimalValue = (value) => {
 };
 
 const normalizeDateForApi = (value) => {
-  if (!value) return "";
+  if (!value) return null;
   const raw = String(value).trim();
-  if (!raw) return "";
+  if (!raw) return null;
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  // Accept values that include labels like "P.O. Date : 25/11/2025"
+  const inlineDayFirstMatch = raw.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (inlineDayFirstMatch) {
+    const [, day, month, year] = inlineDayFirstMatch;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const inlineIsoMatch = raw.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (inlineIsoMatch) {
+    const [, year, month, day] = inlineIsoMatch;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
 
   const dayFirstMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (dayFirstMatch) {
@@ -40,7 +62,7 @@ const normalizeDateForApi = (value) => {
     return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 
-  return raw;
+  return null;
 };
 
 const buildItemPayloads = (items) => {
@@ -93,7 +115,7 @@ const buildPoPayload = (poData, projectId) => ({
   delivery: poData.summary.delivery || "",
   payment: poData.summary.payment || "",
   notes: poData.notes.length ? poData.notes.join("\\n") : "",
-  status: "created",
+  status: poData.status || "created",
 });
 
 export default function PurchaseOrdersPreview() {
@@ -246,14 +268,14 @@ export default function PurchaseOrdersPreview() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Input placeholder="Company Name" value={poData.companyName} onChange={(event) => setPoData((prev) => ({ ...prev, companyName: event.target.value }))} />
-            <Input placeholder="Company Subtitle" value={poData.companySubtitle} onChange={(event) => setPoData((prev) => ({ ...prev, companySubtitle: event.target.value }))} />
-            <Input placeholder="Company Email" value={poData.companyEmail} onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value }))} />
-            <Input placeholder="Company GST No" value={poData.companyGstNo} onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value }))} />
-            <Input placeholder="Indent No" value={poData.indentNo} onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value }))} />
-            <Input type="date" placeholder="Indent Date" value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value }))} />
-            <Input placeholder="Order No" value={poData.orderNo} onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value }))} />
-            <Input type="date" placeholder="PO Date" value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value }))} />
+            <Field label="Company Name"><Input value={poData.companyName} onChange={(event) => setPoData((prev) => ({ ...prev, companyName: event.target.value }))} /></Field>
+            <Field label="Company Subtitle"><Input value={poData.companySubtitle} onChange={(event) => setPoData((prev) => ({ ...prev, companySubtitle: event.target.value }))} /></Field>
+            <Field label="Company Email"><Input value={poData.companyEmail} onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value }))} /></Field>
+            <Field label="Company GST No"><Input value={poData.companyGstNo} onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value }))} /></Field>
+            <Field label="Indent No"><Input value={poData.indentNo} onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value }))} /></Field>
+            <Field label="Indent Date (DD/MM/YYYY or YYYY-MM-DD)"><Input value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value }))} /></Field>
+            <Field label="Order No"><Input value={poData.orderNo} onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value }))} /></Field>
+            <Field label="PO Date (DD/MM/YYYY or YYYY-MM-DD)"><Input value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value }))} /></Field>
           </div>
         </CardContent>
       </Card>
@@ -265,16 +287,16 @@ export default function PurchaseOrdersPreview() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input placeholder="Vendor Name" value={poData.vendor.name} onChange={(event) => updateVendor("name", event.target.value)} />
-            <Input placeholder="Site" value={poData.vendor.site} onChange={(event) => updateVendor("site", event.target.value)} />
-            <Input placeholder="Contact Person" value={poData.vendor.contactPerson} onChange={(event) => updateVendor("contactPerson", event.target.value)} />
-            <Input placeholder="Vendor Address" value={poData.vendor.address} onChange={(event) => updateVendor("address", event.target.value)} />
+            <Field label="Vendor Name"><Input value={poData.vendor.name} onChange={(event) => updateVendor("name", event.target.value)} /></Field>
+            <Field label="Site"><Input value={poData.vendor.site} onChange={(event) => updateVendor("site", event.target.value)} /></Field>
+            <Field label="Contact Person"><Input value={poData.vendor.contactPerson} onChange={(event) => updateVendor("contactPerson", event.target.value)} /></Field>
+            <Field label="Vendor Address"><Input value={poData.vendor.address} onChange={(event) => updateVendor("address", event.target.value)} /></Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input placeholder="Primary Contact Name" value={poData.vendor.contacts.primary.name} onChange={(event) => updateVendorContact("primary", "name", event.target.value)} />
-            <Input placeholder="Primary Contact Phone" value={poData.vendor.contacts.primary.phone} onChange={(event) => updateVendorContact("primary", "phone", event.target.value)} />
-            <Input placeholder="Secondary Contact Name" value={poData.vendor.contacts.secondary.name} onChange={(event) => updateVendorContact("secondary", "name", event.target.value)} />
-            <Input placeholder="Secondary Contact Phone" value={poData.vendor.contacts.secondary.phone} onChange={(event) => updateVendorContact("secondary", "phone", event.target.value)} />
+            <Field label="Primary Contact Name"><Input value={poData.vendor.contacts.primary.name} onChange={(event) => updateVendorContact("primary", "name", event.target.value)} /></Field>
+            <Field label="Primary Contact Phone"><Input value={poData.vendor.contacts.primary.phone} onChange={(event) => updateVendorContact("primary", "phone", event.target.value)} /></Field>
+            <Field label="Secondary Contact Name"><Input value={poData.vendor.contacts.secondary.name} onChange={(event) => updateVendorContact("secondary", "name", event.target.value)} /></Field>
+            <Field label="Secondary Contact Phone"><Input value={poData.vendor.contacts.secondary.phone} onChange={(event) => updateVendorContact("secondary", "phone", event.target.value)} /></Field>
           </div>
         </CardContent>
       </Card>
@@ -296,23 +318,34 @@ export default function PurchaseOrdersPreview() {
               No items added yet.
             </div>
           ) : (
-            poData.items.map((item, idx) => (
+            <>
+              <div className="hidden sm:grid sm:grid-cols-8 gap-2 text-xs font-medium text-muted-foreground px-1">
+                <div>Sr No</div>
+                <div>HSN</div>
+                <div className="sm:col-span-2">Description</div>
+                <div>Qty</div>
+                <div>UOM</div>
+                <div>Rate</div>
+                <div>Amount</div>
+              </div>
+              {poData.items.map((item, idx) => (
               <div key={`${item.srNo}-${idx}`} className="grid gap-2 sm:grid-cols-8 items-center">
-                <Input className="sm:col-span-1" placeholder="Sr No" value={item.srNo} onChange={(event) => updateItem(idx, "srNo", event.target.value)} />
-                <Input className="sm:col-span-1" placeholder="HSN" value={item.hsnCode} onChange={(event) => updateItem(idx, "hsnCode", event.target.value)} />
-                <Input className="sm:col-span-2" placeholder="Description" value={item.description} onChange={(event) => updateItem(idx, "description", event.target.value)} />
-                <Input className="sm:col-span-1" placeholder="Qty" value={item.qty} onChange={(event) => updateItem(idx, "qty", event.target.value)} />
-                <Input className="sm:col-span-1" placeholder="UOM" value={item.uom} onChange={(event) => updateItem(idx, "uom", event.target.value)} />
-                <Input className="sm:col-span-1" placeholder="Rate" value={item.rate} onChange={(event) => updateItem(idx, "rate", event.target.value)} />
+                <Input className="sm:col-span-1" value={item.srNo} onChange={(event) => updateItem(idx, "srNo", event.target.value)} />
+                <Input className="sm:col-span-1" value={item.hsnCode} onChange={(event) => updateItem(idx, "hsnCode", event.target.value)} />
+                <Input className="sm:col-span-2" value={item.description} onChange={(event) => updateItem(idx, "description", event.target.value)} />
+                <Input className="sm:col-span-1" value={item.qty} onChange={(event) => updateItem(idx, "qty", event.target.value)} />
+                <Input className="sm:col-span-1" value={item.uom} onChange={(event) => updateItem(idx, "uom", event.target.value)} />
+                <Input className="sm:col-span-1" value={item.rate} onChange={(event) => updateItem(idx, "rate", event.target.value)} />
                 <div className="flex items-center gap-2 sm:col-span-1">
-                  <Input placeholder="Amount" value={item.amount} onChange={(event) => updateItem(idx, "amount", event.target.value)} />
+                  <Input value={item.amount} onChange={(event) => updateItem(idx, "amount", event.target.value)} />
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(idx)}>
                     <Minus className="h-4 w-4" />
                   </Button>
                 </div>
                 <Input className="sm:col-span-8" placeholder="Remarks" value={item.remarks} onChange={(event) => updateItem(idx, "remarks", event.target.value)} />
               </div>
-            ))
+              ))}
+            </>
           )}
         </CardContent>
       </Card>
@@ -324,28 +357,30 @@ export default function PurchaseOrdersPreview() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Input placeholder="Discount %" value={poData.discount.percent} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, percent: event.target.value } }))} />
-            <Input placeholder="Discount Amount" value={poData.discount.amount} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, amount: event.target.value } }))} />
-            <Input placeholder="After Discount Amount" value={poData.afterDiscountAmount} onChange={(event) => setPoData((prev) => ({ ...prev, afterDiscountAmount: event.target.value }))} />
-            <Input placeholder="CGST %" value={poData.taxes.cgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } } }))} />
-            <Input placeholder="CGST Amount" value={poData.taxes.cgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } } }))} />
-            <Input placeholder="SGST %" value={poData.taxes.sgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } } }))} />
-            <Input placeholder="SGST Amount" value={poData.taxes.sgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } } }))} />
-            <Input placeholder="Total Amount" value={poData.totalAmount} onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: event.target.value }))} />
-            <Input placeholder="Delivery" value={poData.summary.delivery} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value } }))} />
-            <Input placeholder="Payment" value={poData.summary.payment} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, payment: event.target.value } }))} />
+            <Field label="Discount %"><Input value={poData.discount.percent} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, percent: event.target.value } }))} /></Field>
+            <Field label="Discount Amount"><Input value={poData.discount.amount} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, amount: event.target.value } }))} /></Field>
+            <Field label="After Discount Amount"><Input value={poData.afterDiscountAmount} onChange={(event) => setPoData((prev) => ({ ...prev, afterDiscountAmount: event.target.value }))} /></Field>
+            <Field label="CGST %"><Input value={poData.taxes.cgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } } }))} /></Field>
+            <Field label="CGST Amount"><Input value={poData.taxes.cgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } } }))} /></Field>
+            <Field label="SGST %"><Input value={poData.taxes.sgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } } }))} /></Field>
+            <Field label="SGST Amount"><Input value={poData.taxes.sgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } } }))} /></Field>
+            <Field label="Total Amount"><Input value={poData.totalAmount} onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: event.target.value }))} /></Field>
+            <Field label="Delivery"><Input value={poData.summary.delivery} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value } }))} /></Field>
+            <Field label="Payment"><Input value={poData.summary.payment} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, payment: event.target.value } }))} /></Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Textarea
-              placeholder="Notes (one per line)"
-              value={poData.notes.join("\n")}
-              onChange={(event) => setPoData((prev) => ({ ...prev, notes: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean) }))}
-            />
-            <Textarea
-              placeholder="Terms & Conditions (one per line)"
-              value={poData.termsAndConditions.join("\n")}
-              onChange={(event) => setPoData((prev) => ({ ...prev, termsAndConditions: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean) }))}
-            />
+            <Field label="Notes (one per line)">
+              <Textarea
+                value={poData.notes.join("\n")}
+                onChange={(event) => setPoData((prev) => ({ ...prev, notes: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean) }))}
+              />
+            </Field>
+            <Field label="Terms & Conditions (one per line)">
+              <Textarea
+                value={poData.termsAndConditions.join("\n")}
+                onChange={(event) => setPoData((prev) => ({ ...prev, termsAndConditions: event.target.value.split(/\n+/).map((line) => line.trim()).filter(Boolean) }))}
+              />
+            </Field>
           </div>
         </CardContent>
       </Card>

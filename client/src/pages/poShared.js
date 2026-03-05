@@ -57,6 +57,7 @@ export const EMPTY_PO = {
   notes: [],
   termsAndConditions: [],
   authorisedSignatory: "",
+  status: "created",
 };
 
 const parseStringList = (value) => {
@@ -124,6 +125,7 @@ const mapClientToPoData = (raw) => ({
   notes: Array.isArray(raw.notes) ? raw.notes : [],
   termsAndConditions: Array.isArray(raw.termsAndConditions) ? raw.termsAndConditions : [],
   source: raw.source || EMPTY_PO.source,
+  status: raw.status || EMPTY_PO.status,
   sourceFileName: raw.sourceFileName || raw.source_file_name || EMPTY_PO.sourceFileName,
   indentDate: normalizeDateString(raw.indentDate ?? raw.indent_date ?? EMPTY_PO.indentDate),
   poDate: normalizeDateString(raw.poDate ?? raw.po_date ?? EMPTY_PO.poDate),
