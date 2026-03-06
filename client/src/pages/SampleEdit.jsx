@@ -41,12 +41,10 @@ export default function SampleEdit() {
     const load = async () => {
       setLoading(true);
       try {
-        if (!projectId) return;
-        const res = await api.getSamplesByProject(projectId);
+        const res = await api.getSampleById(id);
         if (!res.success) return;
 
-        const arr = Array.isArray(res.data) ? res.data : [];
-        const sample = arr.find((item) => String(item.sample_id || item.id) === String(id));
+        const sample = res.data;
         if (!sample) return;
 
         const loc = parseMaybe(sample.location, {});
@@ -81,7 +79,7 @@ export default function SampleEdit() {
       }
     };
     load();
-  }, [id, projectId]);
+  }, [id]);
 
   const save = async () => {
     setSaving(true);

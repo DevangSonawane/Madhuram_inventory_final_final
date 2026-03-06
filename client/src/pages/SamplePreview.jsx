@@ -30,19 +30,13 @@ export default function SamplePreview() {
     const load = async () => {
       setLoading(true);
       try {
-        if (!projectId) {
-          setSample(null);
-          return;
-        }
-
-        const res = await api.getSamplesByProject(projectId);
+        const res = await api.getSampleById(id);
         if (!res.success) {
           setSample(null);
           return;
         }
 
-        const arr = Array.isArray(res.data) ? res.data : [];
-        const s = arr.find((item) => String(item.sample_id || item.id) === String(id));
+        const s = res.data;
         if (!s) {
           setSample(null);
           return;
@@ -76,8 +70,10 @@ export default function SamplePreview() {
 
   const fileUrl = sample?.sample_file ? api.getApiFileUrl(sample.sample_file) : null;
   const lower = String(sample?.sample_file || "").toLowerCase();
+  const fileName = sample?.sample_file ? String(sample.sample_file).split('/').pop() : '';
   const isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp');
   const isPdf = lower.endsWith('.pdf');
+  const fileTypeLabel = isImage ? 'Image' : isPdf ? 'PDF' : 'File';
   const formatDate = (value) => {
     if (!value) return '-';
     const d = new Date(value);
@@ -237,20 +233,32 @@ export default function SamplePreview() {
       </Card>
 
       <Dialog open={attachmentOpen} onOpenChange={setAttachmentOpen}>
-        <DialogContent className="h-[98vh] w-[99vw] max-w-[99vw]">
-          <DialogHeader>
-            <DialogTitle>Attachment Preview</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="h-[96vh] w-[96vw] max-w-[96vw]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <DialogTitle>Attachment Preview</DialogTitle>
+              <p className="text-sm text-muted-foreground truncate">{fileName || 'Attachment'}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{fileTypeLabel}</Badge>
+              <Button asChild variant="outline" size="sm">
+                <a href={fileUrl} target="_blank" rel="noreferrer">Open in new tab</a>
+              </Button>
+            </div>
+          </div>
+
           {!fileUrl ? (
-            <div className="text-muted-foreground">No attachment</div>
+            <div className="flex h-[78vh] items-center justify-center text-muted-foreground">No attachment</div>
           ) : (
-            <div className="rounded-xl border bg-muted/10 p-3">
+            <div className="mt-4 rounded-xl border bg-muted/10 p-3">
               {isImage ? (
-                <img src={fileUrl} alt="Sample File" className="max-h-[92vh] object-contain w-full rounded-md" />
+                <img src={fileUrl} alt="Sample File" className="max-h-[78vh] object-contain w-full rounded-lg" />
               ) : isPdf ? (
-                <iframe src={fileUrl} className="h-[92vh] w-full rounded-md" title="Sample Attachment Preview" />
+                <iframe src={fileUrl} className="h-[78vh] w-full rounded-lg" title="Sample Attachment Preview" />
               ) : (
-                <div className="flex justify-center">
+                <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                  <div className="text-sm font-medium">Preview not available for this file type.</div>
                   <Button asChild>
                     <a href={fileUrl} target="_blank" rel="noreferrer">Open Attachment</a>
                   </Button>
@@ -258,9 +266,6 @@ export default function SamplePreview() {
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button onClick={() => setAttachmentOpen(false)}>Close</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

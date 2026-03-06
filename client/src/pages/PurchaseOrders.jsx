@@ -284,7 +284,7 @@ export default function PurchaseOrders() {
                     fileInputRef.current?.click();
                   }}
                 >
-                  {uploading ? "Calling parser..." : "Choose PDF"}
+                  {uploading ? "Please wait" : "Choose PDF"}
                 </Button>
                 {poData.sourceFileName ? (
                   <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
