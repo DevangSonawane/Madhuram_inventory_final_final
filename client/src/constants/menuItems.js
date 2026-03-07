@@ -65,11 +65,13 @@ export const MENU_CATEGORIES = [
         title: "Purchase Requests",
         path: "/purchase-requests",
         icon: ShoppingCart,
+        hidden: true,
       },
       {
         title: "Vendor Comparison",
         path: "/vendor-comparison",
         icon: ArrowRightLeft,
+        hidden: true,
       },
       {
         title: "Purchase Orders",
@@ -95,16 +97,19 @@ export const MENU_CATEGORIES = [
         title: "MER",
         path: "/mer",
         icon: FileCheck,
+        hidden: true,
       },
       {
         title: "MIR",
         path: "/mir",
         icon: Eye,
+        hidden: true,
       },
       {
         title: "ITR",
         path: "/itr",
         icon: Hammer,
+        hidden: true,
       },
     ]
   },
