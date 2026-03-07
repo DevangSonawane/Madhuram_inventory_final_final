@@ -128,6 +128,7 @@ export default function PurchaseOrdersPreview() {
   const [poData, setPoData] = useState(() => normalizePoData(location.state?.poData));
   const [editingPoId, setEditingPoId] = useState(() => location.state?.poId ?? location.state?.poData?.po_id ?? null);
   const [saving, setSaving] = useState(false);
+  const [loadingPo, setLoadingPo] = useState(false);
 
   useEffect(() => {
     if (!location.state) return;
@@ -137,6 +138,46 @@ export default function PurchaseOrdersPreview() {
       setEditingPoId(location.state.poId ?? normalized.po_id ?? null);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    if (!editingPoId) return;
+    let active = true;
+    const fetchPo = async () => {
+      setLoadingPo(true);
+      try {
+        const response = await api.getPoById(editingPoId);
+        if (response.success && response.data) {
+          const normalized = normalizePoData(response.data);
+          if (!active) return;
+          setPoData(normalized);
+          setEditingPoId(normalized.po_id ?? editingPoId);
+        } else if (active) {
+          toast({
+            title: "Error",
+            description: response.error || "Failed to load purchase order.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        if (active) {
+          toast({
+            title: "Error",
+            description: error?.message || "Failed to load purchase order.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (active) {
+          setLoadingPo(false);
+        }
+      }
+    };
+
+    fetchPo();
+    return () => {
+      active = false;
+    };
+  }, [editingPoId, toast]);
 
   const hasPreview = useMemo(() => {
     return poData.vendor?.name || poData.orderNo || poData.poDate || poData.totalAmount;
@@ -241,7 +282,7 @@ export default function PurchaseOrdersPreview() {
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Review extracted fields and finalize the purchase order.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || !hasPreview || !projectId}>
+          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || loadingPo || !hasPreview || !projectId}>
             {saving ? (editingPoId ? "Updating..." : "Submitting...") : (editingPoId ? "Update PO" : "Submit PO")}
           </Button>
           <Button
@@ -260,6 +301,14 @@ export default function PurchaseOrdersPreview() {
           </Button>
         </div>
       </div>
+
+      {loadingPo ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            Loading purchase order details...
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

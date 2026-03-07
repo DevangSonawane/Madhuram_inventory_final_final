@@ -1,5 +1,6 @@
 import path from 'path';
 import MIR from '../models/MIR.js';
+import Project from '../models/Project.js';
 import { parseJsonLike } from '../utils/jsonField.js';
 
 const toInt = (v) => {
@@ -8,21 +9,34 @@ const toInt = (v) => {
   return Number.isNaN(n) ? null : n;
 };
 
+const emptyToNull = (v) => (v === '' ? null : v);
+
+const toBool = (v) => {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v === 1;
+  if (typeof v === 'string') return v.toLowerCase() === 'true' || v === '1';
+  return Boolean(v);
+};
+
+const ensureArray = (value, fallback = []) => (Array.isArray(value) ? value : fallback);
+
 const buildPayload = (body = {}, isUpdate = false) => {
   const payload = {
-    project_name: body.project_name,
-    project_code: body.project_code,
-    client_name: body.client_name,
-    pmc: body.pmc,
-    contractor: body.contractor,
-    vendor_code: body.vendor_code,
-    mir_refrence_no: body.mir_refrence_no,
-    material_code: body.material_code,
-    inspection_date_time: body.inspection_date_time,
-    client_submission_date: body.client_submission_date,
-    refrence_docs_attached: body.refrence_docs_attached,
-    mir_submited: body.mir_submited,
-    dynamic_field: parseJsonLike(body.dynamic_field, []),
+    project_name: emptyToNull(body.project_name),
+    project_code: emptyToNull(body.project_code),
+    client_name: emptyToNull(body.client_name),
+    pmc: emptyToNull(body.pmc),
+    contractor: emptyToNull(body.contractor),
+    vendor_code: emptyToNull(body.vendor_code),
+    mir_refrence_no: emptyToNull(body.mir_refrence_no),
+    material_code: emptyToNull(body.material_code),
+    inspection_date_time: emptyToNull(body.inspection_date_time),
+    client_submission_date: emptyToNull(body.client_submission_date),
+    refrence_docs_attached: emptyToNull(body.refrence_docs_attached),
+    mir_submited: toBool(body.mir_submited),
+    dynamic_field: ensureArray(parseJsonLike(body.dynamic_field, []), []),
     project_id: Object.prototype.hasOwnProperty.call(body, 'project_id') ? toInt(body.project_id) : undefined,
   };
 
@@ -44,6 +58,9 @@ export const createMir = async (req, res) => {
   try {
     const payload = buildPayload(req.body);
     if (payload.project_id == null) return res.status(400).json({ error: 'Invalid project_id: Project does not exist' });
+
+    const project = await Project.findByPk(payload.project_id);
+    if (!project) return res.status(400).json({ error: 'Invalid project_id: Project does not exist' });
 
     const created = await MIR.create(payload);
     return res.status(201).json(created);
@@ -92,6 +109,11 @@ export const updateMir = async (req, res) => {
 
     const payload = buildPayload(req.body, true);
     if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+    if (payload.project_id != null) {
+      const project = await Project.findByPk(payload.project_id);
+      if (!project) return res.status(400).json({ error: 'Invalid project_id: Project does not exist' });
+    }
 
     await row.update(payload);
     return res.status(200).json(row);

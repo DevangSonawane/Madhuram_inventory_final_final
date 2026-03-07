@@ -88,6 +88,15 @@ const normalizeSnakeKeys = (value) => {
 
 const mapApiItrToForm = (rawItem = {}, normalizedItem = null) => {
   const normalized = normalizedItem || normalizeSnakeKeys(rawItem);
+  const resolvedItrId =
+    normalized.itrId ??
+    normalized.itrID ??
+    normalized.itr_id ??
+    rawItem?.itr_id ??
+    rawItem?.itrId ??
+    normalized.id ??
+    rawItem?.id ??
+    null;
   const contractorPart = normalized.contractorPart || {};
   const contractorClearances = contractorPart.clearances || {};
   const disciplineField = Array.isArray(contractorPart.discipline)
@@ -131,7 +140,7 @@ const mapApiItrToForm = (rawItem = {}, normalizedItem = null) => {
 
   return {
     ...EMPTY_ITR,
-    itr_id: normalized.itrId || normalized.id,
+    itr_id: resolvedItrId,
     projectName: normalized.projectName || normalized.project || "",
     projectCode: normalized.projectCode || "",
     clientEmployer: normalized.clientEmployer || normalized.clientName || normalized.client || "",
@@ -199,6 +208,15 @@ function loadRecentItrs() {
 function saveRecentItrs(items) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(items));
+}
+
+function Field({ label, children, className = "" }) {
+  return (
+    <div className={`space-y-1 ${className}`.trim()}>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      {children}
+    </div>
+  );
 }
 
 function setPathValue(base, path, value) {
@@ -478,7 +496,33 @@ export default function ITR() {
     }
   };
 
-  const handleEditRecent = (item) => {
+  const handleEditRecent = async (item) => {
+    if (!item) return;
+
+    if (item.itr_id) {
+      try {
+        const res = await api.getItrById(item.itr_id);
+        if (!res.success) {
+          toast({ title: "Error", description: res.error || "Failed to load ITR.", variant: "destructive" });
+          return;
+        }
+        const formData = mapApiItrToForm(res.data);
+        setItrData(formData);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+        }
+        navigate("preview", { state: { itrId: formData.itr_id } });
+        return;
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to load ITR.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (!item?.payload) {
       toast({ title: "Cannot edit", description: "Saved ITR data is not available.", variant: "destructive" });
       return;
@@ -487,7 +531,7 @@ export default function ITR() {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(item.payload));
     }
-    navigate("preview");
+    navigate("preview", { state: { itrId: item.payload?.itr_id ?? null } });
   };
 
   useEffect(() => {
@@ -540,12 +584,20 @@ export default function ITR() {
                   event.preventDefault();
                   setIsDragging(true);
                 }}
-                onDragLeave={() => setIsDragging(false)}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) {
+                    setIsDragging(false);
+                  }
+                }}
                 onDrop={handleDrop}
               >
                 <Upload className="h-6 w-6 text-muted-foreground" />
-                <div className="text-sm font-medium">Drag & drop ITR PDF/XLSX/CSV here</div>
-                <div className="text-xs text-muted-foreground">or click to browse and extract fields</div>
+                <div className="text-sm font-medium">Upload ITR PDF/XLSX/CSV</div>
+                <div className="text-xs text-muted-foreground">Drag and drop or click to upload</div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -583,124 +635,139 @@ export default function ITR() {
                   </div>
                 ) : null}
               </div>
-              <div className="mt-3 text-xs text-muted-foreground">
-                Extraction is client-side for now and prepares fields for review.
-              </div>
             </TabsContent>
 
             <TabsContent value="manual">
               <div className="manual-entry-panel">
                 <div className="manual-entry-grid sm:grid-cols-2">
-                  <Input
-                    placeholder="Project Name"
-                    value={itrData.projectName}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, projectName: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="Project Code"
-                    value={itrData.projectCode}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, projectCode: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="Client / Employer"
-                    value={itrData.clientEmployer}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, clientEmployer: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="PMC / Engineer"
-                    value={itrData.pmcEngineer}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, pmcEngineer: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="Contractor"
-                    value={itrData.contractor}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, contractor: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="Vendor Code"
-                    value={itrData.vendorCode}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, vendorCode: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="Material Code"
-                    value={itrData.materialCode}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="WIR/ITR Ref. No"
-                    value={itrData.itrRefNo}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, itrRefNo: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="WIR/ITR Submission (Date & Time)"
-                    value={itrData.wirItrSubmissionDateTime}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, wirItrSubmissionDateTime: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="Inspection (Date & Time)"
-                    value={itrData.inspectionDateTime}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, inspectionDateTime: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="WIR/ITR Submitted To"
-                    value={itrData.submittedTo}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, submittedTo: event.target.value, source: "Manual" }))}
-                  />
-                  <Input
-                    placeholder="WIR/ITR Submitted By"
-                    value={itrData.submittedBy}
-                    onChange={(event) => setItrData((prev) => ({ ...prev, submittedBy: event.target.value, source: "Manual" }))}
-                  />
+                  <Field label="Project Name">
+                    <Input
+                      value={itrData.projectName}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, projectName: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Project Code">
+                    <Input
+                      value={itrData.projectCode}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, projectCode: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Client / Employer">
+                    <Input
+                      value={itrData.clientEmployer}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, clientEmployer: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="PMC / Engineer">
+                    <Input
+                      value={itrData.pmcEngineer}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, pmcEngineer: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Contractor">
+                    <Input
+                      value={itrData.contractor}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, contractor: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Vendor Code">
+                    <Input
+                      value={itrData.vendorCode}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, vendorCode: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Material Code">
+                    <Input
+                      value={itrData.materialCode}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="WIR/ITR Ref. No">
+                    <Input
+                      value={itrData.itrRefNo}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, itrRefNo: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="WIR/ITR Submission (Date & Time)">
+                    <Input
+                      value={itrData.wirItrSubmissionDateTime}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, wirItrSubmissionDateTime: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Inspection (Date & Time)">
+                    <Input
+                      value={itrData.inspectionDateTime}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, inspectionDateTime: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="WIR/ITR Submitted To">
+                    <Input
+                      value={itrData.submittedTo}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, submittedTo: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="WIR/ITR Submitted By">
+                    <Input
+                      value={itrData.submittedBy}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, submittedBy: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
                 </div>
 
                 <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-4">
-                  <Input
-                    placeholder="Tower / Block Ref"
-                    value={itrData.contractorPart.locationRef}
-                    onChange={(event) => setContractorPart("locationRef", event.target.value)}
-                  />
-                  <Input
-                    placeholder="Floor / Level"
-                    value={itrData.contractorPart.floorLevel}
-                    onChange={(event) => setContractorPart("floorLevel", event.target.value)}
-                  />
-                  <Input
-                    placeholder="Grid Reference"
-                    value={itrData.contractorPart.gridReference}
-                    onChange={(event) => setContractorPart("gridReference", event.target.value)}
-                  />
-                  <Input
-                    placeholder="Room / Area Ref"
-                    value={itrData.contractorPart.areaRef}
-                    onChange={(event) => setContractorPart("areaRef", event.target.value)}
-                  />
+                  <Field label="Tower / Block Ref">
+                    <Input
+                      value={itrData.contractorPart.locationRef}
+                      onChange={(event) => setContractorPart("locationRef", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Floor / Level">
+                    <Input
+                      value={itrData.contractorPart.floorLevel}
+                      onChange={(event) => setContractorPart("floorLevel", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Grid Reference">
+                    <Input
+                      value={itrData.contractorPart.gridReference}
+                      onChange={(event) => setContractorPart("gridReference", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Room / Area Ref">
+                    <Input
+                      value={itrData.contractorPart.areaRef}
+                      onChange={(event) => setContractorPart("areaRef", event.target.value)}
+                    />
+                  </Field>
                 </div>
 
                 <div className="manual-entry-grid sm:grid-cols-3">
-                  <Input
-                    placeholder="Previous Qty"
-                    value={itrData.contractorPart.measurement.previousQty}
-                    onChange={(event) => setMeasurement("previousQty", event.target.value)}
-                  />
-                  <Input
-                    placeholder="Current Qty"
-                    value={itrData.contractorPart.measurement.currentQty}
-                    onChange={(event) => setMeasurement("currentQty", event.target.value)}
-                  />
-                  <Input
-                    placeholder="Cumulative Qty"
-                    value={itrData.contractorPart.measurement.cumulativeQty}
-                    onChange={(event) => setMeasurement("cumulativeQty", event.target.value)}
-                  />
+                  <Field label="Previous Qty">
+                    <Input
+                      value={itrData.contractorPart.measurement.previousQty}
+                      onChange={(event) => setMeasurement("previousQty", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Current Qty">
+                    <Input
+                      value={itrData.contractorPart.measurement.currentQty}
+                      onChange={(event) => setMeasurement("currentQty", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Cumulative Qty">
+                    <Input
+                      value={itrData.contractorPart.measurement.cumulativeQty}
+                      onChange={(event) => setMeasurement("cumulativeQty", event.target.value)}
+                    />
+                  </Field>
                 </div>
 
-                <div>
+                <Field label="Description of works / activity for which inspection is requested">
                   <Textarea
-                    placeholder="Description of works / activity for which inspection is requested"
                     value={itrData.contractorPart.descriptionOfWorks}
                     onChange={(event) => setContractorPart("descriptionOfWorks", event.target.value)}
                   />
-                </div>
+                </Field>
 
                 <div>
                   <div className="manual-section-title">Discipline</div>

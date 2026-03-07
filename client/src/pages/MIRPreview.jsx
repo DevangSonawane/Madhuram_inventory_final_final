@@ -208,8 +208,8 @@ export default function MIRPreview() {
         vendor_code: mirData.requestSubmission.vendorCode || "",
         mir_refrence_no: mirData.mirRefNo || "",
         material_code: mirData.materialCode || "",
-        inspection_date_time: mirData.requestSubmission.engineerInspectionDateTime || "",
-        client_submission_date: mirData.requestSubmission.clientSubmissionDateTime || "",
+        inspection_date_time: mirData.requestSubmission.engineerInspectionDateTime || null,
+        client_submission_date: mirData.requestSubmission.clientSubmissionDateTime || null,
         refrence_docs_attached: mirData.requestSubmission.refDocAttached || "",
         mir_submited: true,
         dynamic_field: buildDynamicField(),
@@ -222,7 +222,7 @@ export default function MIRPreview() {
         if (typeof window !== "undefined") {
           window.sessionStorage.removeItem(STORAGE_KEY);
         }
-        navigate("/mir");
+        navigate(`/${projectId}/mir`);
       } else {
         toast({ title: "Error", description: res.error || "Failed to submit MIR.", variant: "destructive" });
       }
