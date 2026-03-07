@@ -728,6 +728,84 @@ export const api = {
     return lastError || { success: false, error: 'Create path not found', status: 404 };
   },
 
+  // Vendors
+  createVendor: async (data) => {
+    const payload = {};
+    ['vendor_name', 'vendor_company_name', 'vendor_email', 'mobile_number', 'location', 'status'].forEach((k) => {
+      if (data[k] != null && String(data[k]).trim() !== '') payload[k] = data[k];
+    });
+    if (data.project_id != null && data.project_id !== '') payload.project_id = Number(data.project_id);
+
+    const response = await fetch(`${BASE_URL}/api/vendors`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  getVendors: async () => {
+    const response = await fetch(`${BASE_URL}/api/vendors`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getVendorsByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/vendors/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getVendorById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/vendors/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateVendor: async (id, data) => {
+    const payload = {};
+    ['vendor_name', 'vendor_company_name', 'vendor_email', 'mobile_number', 'location', 'status'].forEach((k) => {
+      if (data[k] != null && String(data[k]).trim() !== '') payload[k] = data[k];
+    });
+    if (data.project_id != null && data.project_id !== '') payload.project_id = Number(data.project_id);
+
+    const response = await fetch(`${BASE_URL}/api/vendors/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  updateVendorStatus: async (id, status) => {
+    const response = await fetch(`${BASE_URL}/api/vendors/${id}/status`, {
+      method: 'PATCH',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+    return handleResponse(response);
+  },
+
+  deleteVendor: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/vendors/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   createInventory: async (data) => {
     const payload = {
       project_id: data.project_id,

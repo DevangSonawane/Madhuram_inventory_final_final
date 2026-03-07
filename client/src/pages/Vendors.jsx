@@ -1,23 +1,26 @@
-import React, { useState } from 'react';
-import { 
-  Building2, 
-  Search, 
-  Filter, 
-  Plus, 
-  MoreVertical,
-  Phone,
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import {
+  Building2,
+  Filter,
   Mail,
   MapPin,
-  Globe,
-  ArrowRightLeft
-} from 'lucide-react';
-import { VendorComparison } from "@/components/VendorComparison";
+  Phone,
+  Plus,
+  Search,
+  ShieldAlert,
+  UserCheck,
+  Pencil,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -28,7 +31,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -37,404 +39,597 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { DataTable } from "@/components/ui/data-table";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
-// Mock Data
-const initialPartners = [
-  {
-    id: "BP-001",
-    name: "Acme Supplies Ltd",
-    type: "Vendor",
-    contactPerson: "Robert Fox",
-    email: "robert@acme.com",
-    phone: "+1 234 567 890",
-    location: "New York, USA",
-    status: "Active",
-    rating: 4.8
-  },
-  {
-    id: "BP-002",
-    name: "Global Tech Industries",
-    type: "Customer",
-    contactPerson: "Sarah Wilson",
-    email: "sarah@globaltech.com",
-    phone: "+1 987 654 321",
-    location: "London, UK",
-    status: "Active",
-    rating: 4.5
-  },
-  {
-    id: "BP-003",
-    name: "Fast Logistics Inc",
-    type: "Service Provider",
-    contactPerson: "Mike Brown",
-    email: "mike@fastlog.com",
-    phone: "+1 456 789 012",
-    location: "Berlin, Germany",
-    status: "Inactive",
-    rating: 3.2
-  }
-];
+const statusStyles = {
+  active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  inactive: "bg-amber-100 text-amber-800 border-amber-200",
+  blocked: "bg-rose-100 text-rose-800 border-rose-200",
+};
 
-export default function BusinessPartners() {
-  const [showComparison, setShowComparison] = useState(false);
-  const [partners, setPartners] = useState(initialPartners);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newPartner, setNewPartner] = useState({
-    name: "",
-    type: "Vendor",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    location: "",
-    status: "Active"
-  });
+const getEmptyForm = (projectId = "") => ({
+  project_id: projectId ? String(projectId) : "",
+  vendor_name: "",
+  vendor_company_name: "",
+  vendor_email: "",
+  mobile_number: "",
+  location: "",
+  status: "active",
+});
+
+export default function Vendors() {
   const { toast } = useToast();
+  const { projectId } = useParams();
+  const [vendors, setVendors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingVendorId, setEditingVendorId] = useState(null);
+  const [editingVendor, setEditingVendor] = useState(null);
+  const [vendorToDelete, setVendorToDelete] = useState(null);
+  const [deletingVendorId, setDeletingVendorId] = useState(null);
+  const [form, setForm] = useState(getEmptyForm(projectId));
 
-  const handleCreatePartner = () => {
-    if (!newPartner.name || !newPartner.email || !newPartner.contactPerson) {
+  const fetchVendors = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = projectId
+        ? await api.getVendorsByProject(projectId)
+        : await api.getVendors();
+
+      if (result.success) {
+        setVendors(Array.isArray(result.data) ? result.data : []);
+      } else {
+        setVendors([]);
+        toast({
+          title: "Failed to load vendors",
+          description: result.error || "Could not fetch vendor list.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      setVendors([]);
       toast({
-        title: "Error",
-        description: "Please fill in all required fields (Name, Email, Contact Person).",
+        title: "Failed to load vendors",
+        description: "Could not fetch vendor list.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, toast]);
+
+  useEffect(() => {
+    fetchVendors();
+  }, [fetchVendors]);
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      project_id: prev.project_id || (projectId ? String(projectId) : ""),
+    }));
+  }, [projectId]);
+
+  const projects = useMemo(() => {
+    return Array.from(new Set(vendors.map((vendor) => String(vendor.project_id)).filter(Boolean)));
+  }, [vendors]);
+
+  const filteredVendors = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+
+    return vendors.filter((vendor) => {
+      const name = (vendor.vendor_name || "").toLowerCase();
+      const company = (vendor.vendor_company_name || "").toLowerCase();
+      const email = (vendor.vendor_email || "").toLowerCase();
+      const phone = (vendor.mobile_number || "").toLowerCase();
+      const location = (vendor.location || "").toLowerCase();
+
+      const matchesSearch =
+        !normalized ||
+        name.includes(normalized) ||
+        company.includes(normalized) ||
+        email.includes(normalized) ||
+        phone.includes(normalized) ||
+        location.includes(normalized);
+
+      const matchesStatus = statusFilter === "all" || vendor.status === statusFilter;
+      const matchesProject =
+        projectFilter === "all" || String(vendor.project_id) === projectFilter;
+
+      return matchesSearch && matchesStatus && matchesProject;
+    });
+  }, [vendors, query, statusFilter, projectFilter]);
+
+  const stats = useMemo(() => {
+    const activeCount = vendors.filter((vendor) => vendor.status === "active").length;
+    const blockedCount = vendors.filter((vendor) => vendor.status === "blocked").length;
+
+    return {
+      total: vendors.length,
+      active: activeCount,
+      blocked: blockedCount,
+      projects: new Set(vendors.map((vendor) => vendor.project_id).filter(Boolean)).size,
+    };
+  }, [vendors]);
+
+  const openCreateDialog = () => {
+    setEditingVendorId(null);
+    setEditingVendor(null);
+    setForm(getEmptyForm(projectId));
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (vendor) => {
+    setEditingVendorId(vendor.vendor_id);
+    setEditingVendor(vendor);
+    setForm({
+      project_id: vendor.project_id != null ? String(vendor.project_id) : "",
+      vendor_name: vendor.vendor_name || "",
+      vendor_company_name: vendor.vendor_company_name || "",
+      vendor_email: vendor.vendor_email || "",
+      mobile_number: vendor.mobile_number || "",
+      location: vendor.location || "",
+      status: vendor.status || "active",
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.vendor_name.trim()) {
+      toast({
+        title: "Vendor name required",
+        description: "Please enter vendor name before saving.",
         variant: "destructive",
       });
       return;
     }
 
-    const partner = {
-      id: `BP-${String(partners.length + 1).padStart(3, '0')}`,
-      ...newPartner,
-      rating: 5.0
+    const payload = {
+      project_id: form.project_id ? Number(form.project_id) : undefined,
+      vendor_name: form.vendor_name.trim(),
+      vendor_company_name: form.vendor_company_name.trim(),
+      vendor_email: form.vendor_email.trim(),
+      mobile_number: form.mobile_number.trim(),
+      location: form.location.trim(),
+      status: form.status,
     };
 
-    setPartners([...partners, partner]);
-    setIsAddOpen(false);
-    setNewPartner({
-      name: "",
-      type: "Vendor",
-      contactPerson: "",
-      email: "",
-      phone: "",
-      location: "",
-      status: "Active"
-    });
-    toast({
-      title: "Success",
-      description: "Business Partner added successfully.",
-    });
+    try {
+      setSubmitting(true);
+
+      let result;
+      if (editingVendorId) {
+        const originalProjectId =
+          editingVendor?.project_id != null ? Number(editingVendor.project_id) : null;
+        const nextProjectId = payload.project_id != null ? Number(payload.project_id) : null;
+        const otherFieldsChanged =
+          (editingVendor?.vendor_name || "") !== payload.vendor_name ||
+          (editingVendor?.vendor_company_name || "") !== payload.vendor_company_name ||
+          (editingVendor?.vendor_email || "") !== payload.vendor_email ||
+          (editingVendor?.mobile_number || "") !== payload.mobile_number ||
+          (editingVendor?.location || "") !== payload.location ||
+          originalProjectId !== nextProjectId;
+        const statusChanged = (editingVendor?.status || "active") !== payload.status;
+
+        if (statusChanged && !otherFieldsChanged) {
+          result = await api.updateVendorStatus(editingVendorId, payload.status);
+        } else {
+          result = await api.updateVendor(editingVendorId, payload);
+        }
+      } else {
+        result = await api.createVendor(payload);
+      }
+
+      if (!result.success) {
+        toast({
+          title: editingVendorId ? "Failed to update vendor" : "Failed to create vendor",
+          description: result.error || "Please check the form values and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: editingVendorId ? "Vendor updated" : "Vendor created",
+        description: editingVendorId
+          ? "Vendor details were updated successfully."
+          : "Vendor was added successfully.",
+      });
+
+      setIsDialogOpen(false);
+      setEditingVendorId(null);
+      setEditingVendor(null);
+      setForm(getEmptyForm(projectId));
+      await fetchVendors();
+    } catch {
+      toast({
+        title: editingVendorId ? "Failed to update vendor" : "Failed to create vendor",
+        description: "Something went wrong while saving vendor.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const columns = [
-    {
-      accessorKey: "name",
-      header: "Partner Name",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-9 w-9">
-            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${row.original.name}`} />
-            <AvatarFallback>{row.original.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div>
-            <div className="font-medium">{row.getValue("name")}</div>
-            <div className="text-xs text-muted-foreground">{row.original.id}</div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "type",
-      header: "Type",
-      cell: ({ row }) => (
-        <Badge variant="outline">{row.getValue("type")}</Badge>
-      ),
-    },
-    {
-      accessorKey: "contactPerson",
-      header: "Contact Person",
-      cell: ({ row }) => (
-        <div className="flex flex-col text-sm">
-          <span>{row.getValue("contactPerson")}</span>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "contact",
-      header: "Contact Info",
-      cell: ({ row }) => (
-        <div className="flex flex-col text-xs text-muted-foreground gap-1">
-          <div className="flex items-center gap-1">
-            <Mail className="h-3 w-3" /> {row.original.email}
-          </div>
-          <div className="flex items-center gap-1">
-            <Phone className="h-3 w-3" /> {row.original.phone}
-          </div>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "location",
-      header: "Location",
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1 text-muted-foreground">
-          <MapPin className="h-3 w-3" />
-          <span>{row.getValue("location")}</span>
-        </div>
-      ),
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => (
-        <Badge variant={row.getValue("status") === "Active" ? "default" : "secondary"}>
-          {row.getValue("status")}
-        </Badge>
-      ),
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => {
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem>View Details</DropdownMenuItem>
-              <DropdownMenuItem>Edit Partner</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600">Deactivate</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
-      },
-    },
-  ];
+  const handleDeleteVendor = async () => {
+    if (!vendorToDelete?.vendor_id) return;
 
-  if (showComparison) {
-    return <VendorComparison onBack={() => setShowComparison(false)} />;
-  }
+    try {
+      setDeletingVendorId(vendorToDelete.vendor_id);
+      const result = await api.deleteVendor(vendorToDelete.vendor_id);
+
+      if (!result.success) {
+        toast({
+          title: "Failed to delete vendor",
+          description: result.error || "Could not delete vendor.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Vendor deleted",
+        description: `${vendorToDelete.vendor_name || "Vendor"} removed successfully.`,
+      });
+      setVendorToDelete(null);
+      await fetchVendors();
+    } catch {
+      toast({
+        title: "Failed to delete vendor",
+        description: "Something went wrong while deleting vendor.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingVendorId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Business Partners</h1>
-          <p className="text-muted-foreground">
-            Manage vendors, suppliers, and customers.
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button variant="outline" onClick={() => setShowComparison(true)} className="w-full sm:w-auto">
-            <ArrowRightLeft className="mr-2 h-4 w-4" /> Price Comparison
-          </Button>
-          <Button onClick={() => setIsAddOpen(true)} className="w-full sm:w-auto">
-            <Plus className="mr-2 h-4 w-4" /> Add Partner
+      <section className="rounded-2xl border bg-gradient-to-r from-cyan-50 via-sky-50 to-white p-6 md:p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Vendors</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage project vendors in one place.
+            </p>
+          </div>
+          <Button onClick={openCreateDialog} className="w-full lg:w-auto">
+            <Plus className="mr-2 h-4 w-4" /> Add Vendor
           </Button>
         </div>
-      </div>
+      </section>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Vendors</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-2">
+            <CardDescription>Total Vendors</CardDescription>
+            <CardTitle className="text-2xl">{stats.total}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">48</div>
-            <p className="text-xs text-muted-foreground">Active suppliers</p>
-          </CardContent>
+          <CardContent className="pt-0 text-xs text-muted-foreground">Across loaded scope</CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Customers</CardTitle>
-            <Globe className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-2">
+            <CardDescription>Active</CardDescription>
+            <CardTitle className="text-2xl">{stats.active}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">126</div>
-            <p className="text-xs text-muted-foreground">Registered clients</p>
-          </CardContent>
+          <CardContent className="pt-0 text-xs text-muted-foreground">Ready for procurement</CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New This Month</CardTitle>
-            <Plus className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-2">
+            <CardDescription>Blocked</CardDescription>
+            <CardTitle className="text-2xl">{stats.blocked}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">+5</div>
-            <p className="text-xs text-muted-foreground">Recently added</p>
-          </CardContent>
+          <CardContent className="pt-0 text-xs text-muted-foreground">Need review before use</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Projects Covered</CardDescription>
+            <CardTitle className="text-2xl">{stats.projects}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-xs text-muted-foreground">Distinct project mappings</CardContent>
         </Card>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search partners..."
-            className="pl-8"
-          />
-        </div>
-        <Button variant="outline" className="flex gap-2">
-          <Filter className="h-4 w-4" />
-          Type
-        </Button>
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="grid grid-cols-1 gap-4 md:hidden">
-        {partners.map((partner) => (
-            <Card key={partner.id}>
-                <CardContent className="p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-3">
-                           <Avatar className="h-9 w-9">
-                              <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${partner.name}`} />
-                              <AvatarFallback>{partner.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                                <div className="font-semibold text-base">{partner.name}</div>
-                                <div className="text-xs text-muted-foreground">{partner.id}</div>
-                            </div>
-                        </div>
-                        <Badge variant={partner.status === "Active" ? "default" : "secondary"}>
-                          {partner.status}
-                        </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-2 text-sm mt-2">
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Type</span>
-                            <Badge variant="outline">{partner.type}</Badge>
-                        </div>
-                        <div className="space-y-1 pt-2 border-t">
-                             <div className="flex items-center gap-2 text-muted-foreground">
-                                <span className="text-foreground font-medium">{partner.contactPerson}</span>
-                             </div>
-                             <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                                <Mail className="h-3 w-3" /> {partner.email}
-                             </div>
-                             <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                                <Phone className="h-3 w-3" /> {partner.phone}
-                             </div>
-                             <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                                <MapPin className="h-3 w-3" /> {partner.location}
-                             </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-        ))}
-      </div>
-
-      <div className="hidden md:block">
-        <DataTable columns={columns} data={partners} />
-      </div>
-
-      {/* Add Partner Dialog */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Business Partner</DialogTitle>
-            <DialogDescription>
-              Register a new vendor, customer, or service provider.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Partner Type</Label>
-                <Select value={newPartner.type} onValueChange={(val) => setNewPartner({...newPartner, type: val})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Vendor">Vendor</SelectItem>
-                    <SelectItem value="Customer">Customer</SelectItem>
-                    <SelectItem value="Service Provider">Service Provider</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={newPartner.status} onValueChange={(val) => setNewPartner({...newPartner, status: val})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Blocked">Blocked</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Company Name</Label>
-              <Input 
-                placeholder="e.g. Acme Supplies Ltd" 
-                value={newPartner.name}
-                onChange={(e) => setNewPartner({...newPartner, name: e.target.value})}
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg">Vendor Directory</CardTitle>
+          <CardDescription>Search and filter real vendor records.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[1fr_180px_180px]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by name, company, email, phone or city"
+                className="pl-9"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Contact Person</Label>
-                <Input 
-                    placeholder="Full Name" 
-                    value={newPartner.contactPerson}
-                    onChange={(e) => setNewPartner({...newPartner, contactPerson: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input 
-                    type="email" 
-                    placeholder="contact@company.com" 
-                    value={newPartner.email}
-                    onChange={(e) => setNewPartner({...newPartner, email: e.target.value})}
-                />
-              </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="blocked">Blocked</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger>
+                <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
+                <SelectValue placeholder="Filter by project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All projects</SelectItem>
+                {projects.map((pid) => (
+                  <SelectItem key={pid} value={pid}>
+                    Project {pid}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Project</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[80px] text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      <div className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading vendors...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredVendors.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-20 text-center text-muted-foreground">
+                      No vendors found for current filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredVendors.map((vendor) => (
+                    <TableRow key={vendor.vendor_id}>
+                      <TableCell>
+                        <div className="font-medium">{vendor.vendor_name || "-"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {vendor.vendor_company_name || "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell>Project {vendor.project_id ?? "-"}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <Mail className="h-3 w-3" /> {vendor.vendor_email || "-"}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="h-3 w-3" /> {vendor.mobile_number || "-"}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <MapPin className="h-3.5 w-3.5" />
+                          {vendor.location || "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={statusStyles[vendor.status] || ""} variant="outline">
+                          {vendor.status || "-"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="inline-flex items-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(vendor)}
+                            title="Edit vendor"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setVendorToDelete(vendor)}
+                            title="Delete vendor"
+                            className="text-rose-600 hover:text-rose-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingVendorId ? "Edit Vendor" : "Create Vendor"}</DialogTitle>
+            <DialogDescription>
+              Update vendor details and status.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="vendor_name">Vendor Name *</Label>
+              <Input
+                id="vendor_name"
+                value={form.vendor_name}
+                onChange={(event) => setForm((prev) => ({ ...prev, vendor_name: event.target.value }))}
+                placeholder="Enter vendor name"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input 
-                    placeholder="+1 234 567 890" 
-                    value={newPartner.phone}
-                    onChange={(e) => setNewPartner({...newPartner, phone: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Location/City</Label>
-                <Input 
-                    placeholder="New York, USA" 
-                    value={newPartner.location}
-                    onChange={(e) => setNewPartner({...newPartner, location: e.target.value})}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="project_id">Project ID</Label>
+              <Input
+                id="project_id"
+                value={form.project_id}
+                onChange={(event) => setForm((prev) => ({ ...prev, project_id: event.target.value }))}
+                placeholder="Enter project ID"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={form.status}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">
+                    <div className="flex items-center gap-2">
+                      <UserCheck className="h-4 w-4" /> active
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="inactive">inactive</SelectItem>
+                  <SelectItem value="blocked">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4" /> blocked
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="vendor_company_name">Company Name</Label>
+              <Input
+                id="vendor_company_name"
+                value={form.vendor_company_name}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, vendor_company_name: event.target.value }))
+                }
+                placeholder="Enter company name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="vendor_email">Email</Label>
+              <Input
+                id="vendor_email"
+                type="email"
+                value={form.vendor_email}
+                onChange={(event) => setForm((prev) => ({ ...prev, vendor_email: event.target.value }))}
+                placeholder="Enter email address"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mobile_number">Mobile Number</Label>
+              <Input
+                id="mobile_number"
+                value={form.mobile_number}
+                onChange={(event) => setForm((prev) => ({ ...prev, mobile_number: event.target.value }))}
+                placeholder="Enter mobile number"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                value={form.location}
+                onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
+                placeholder="Enter location"
+              />
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreatePartner}>Create Partner</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                </>
+              ) : editingVendorId ? (
+                "Save Changes"
+              ) : (
+                "Create Vendor"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!vendorToDelete} onOpenChange={(open) => !open && setVendorToDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Vendor</DialogTitle>
+            <DialogDescription>
+              This will permanently delete{" "}
+              <span className="font-medium text-foreground">
+                {vendorToDelete?.vendor_name || "this vendor"}
+              </span>
+              . This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setVendorToDelete(null)}
+              disabled={deletingVendorId === vendorToDelete?.vendor_id}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteVendor}
+              disabled={deletingVendorId === vendorToDelete?.vendor_id}
+            >
+              {deletingVendorId === vendorToDelete?.vendor_id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...
+                </>
+              ) : (
+                "Delete Vendor"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
