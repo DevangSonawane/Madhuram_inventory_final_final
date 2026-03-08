@@ -5,11 +5,17 @@ import { Header } from './Header';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from "@/lib/utils";
 import { useProject } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { hasPageAccess, normalizeProjectRoutePath } from '@/lib/accessControl';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { AlertCircle } from 'lucide-react';
 
 export function MainLayout() {
   const location = useLocation();
   const { projectId } = useParams();
   const { projects, selectedProject, selectProject, loading } = useProject();
+  const { user } = useAuth();
   const navigate = useNavigate();
   
   // Sync URL with Project Context
@@ -42,6 +48,8 @@ export function MainLayout() {
   }, [projectId, projects, selectedProject, loading, navigate, selectProject]);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const currentPagePath = normalizeProjectRoutePath(location.pathname);
+  const isCurrentPageAllowed = hasPageAccess(user, currentPagePath);
 
   return (
     <div className="min-h-screen w-full flex bg-muted/30">
@@ -60,18 +68,28 @@ export function MainLayout() {
           <div className="content-shell">
             <AnimatePresence mode="wait">
               <motion.div
-                key={
-                  location.pathname.endsWith("/settings")
-                    ? location.pathname.replace(/\/settings$/, "/profile")
-                    : location.pathname
-                }
+                key={location.pathname}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
                 className="h-full w-full"
               >
-                <Outlet />
+                {isCurrentPageAllowed ? (
+                  <Outlet />
+                ) : (
+                  <div className="max-w-xl">
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        You do not have access to this page. Contact an administrator to request access.
+                      </AlertDescription>
+                    </Alert>
+                    <Button className="mt-4" onClick={() => navigate(projectId ? `/${projectId}` : '/projects')}>
+                      Go to dashboard
+                    </Button>
+                  </div>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>

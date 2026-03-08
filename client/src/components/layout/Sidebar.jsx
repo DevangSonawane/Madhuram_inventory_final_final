@@ -1,24 +1,21 @@
 import React from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { cn } from "@/lib/utils";
-import { MENU_CATEGORIES } from "@/constants/menuItems";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Package2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useAuth } from '@/contexts/AuthContext';
+import { getAccessibleMenuCategories } from '@/lib/accessControl';
 
 export function Sidebar({ className, isCollapsed, toggleSidebar }) {
   // If props are not provided (e.g. mobile sheet usage), use local state logic or defaults
   // For mobile sheet, it's always expanded, so we don't need collapse logic there really.
   // But to be safe, we can default isCollapsed to false if undefined.
   
+  const { user } = useAuth();
   const collapsed = isCollapsed === undefined ? false : isCollapsed;
   const { projectId } = useParams();
-  const visibleCategories = MENU_CATEGORIES
-    .map((category) => ({
-      ...category,
-      items: category.items.filter((item) => !item.hidden),
-    }))
-    .filter((category) => category.items.length > 0);
+  const visibleCategories = getAccessibleMenuCategories(user);
 
   const getPath = (path) => {
     if (path === '/projects') return '/projects';

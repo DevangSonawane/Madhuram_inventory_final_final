@@ -60,6 +60,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import SettingsAccessControl from '@/pages/SettingsAccessControl';
 
 export default function Profile() {
   const { user: currentUser } = useAuth();
@@ -337,6 +338,12 @@ export default function Profile() {
               User Management
             </TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="access-control" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4">
+              <Shield className="mr-2 h-4 w-4" />
+              Access Control
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6 mt-0">
@@ -567,6 +574,12 @@ export default function Profile() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="access-control" className="space-y-6 mt-0">
+            <SettingsAccessControl embedded />
           </TabsContent>
         )}
       </Tabs>

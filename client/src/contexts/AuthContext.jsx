@@ -2,12 +2,21 @@ import React, { createContext, useContext, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { loginStart, loginSuccess, loginFailure, logout as logoutAction } from '../redux/slices/authSlice';
 import { api } from '@/lib/api';
+import { resolveUserAccessControl } from '@/lib/accessControlStore';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const dispatch = useDispatch();
   const { user, isAuthenticated, loading, error } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    if (!user) return;
+    const resolvedUser = resolveUserAccessControl(user);
+    if (JSON.stringify(resolvedUser) !== JSON.stringify(user)) {
+      dispatch(loginSuccess(resolvedUser));
+    }
+  }, [user, dispatch]);
 
   // We rely on Redux initial state for checking localStorage on mount
   // But if we wanted to sync or re-validate token on mount, we could do it here.
@@ -19,10 +28,10 @@ export const AuthProvider = ({ children }) => {
       const result = await api.login(email, password);
 
       if (result.success) {
-        const userData = {
+        const userData = resolveUserAccessControl({
           ...result.data.user,
           token: result.data.token
-        };
+        });
         dispatch(loginSuccess(userData));
         return true;
       } else {
