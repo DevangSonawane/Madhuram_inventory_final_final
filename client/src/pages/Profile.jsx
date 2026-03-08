@@ -323,23 +323,23 @@ export default function Profile() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="h-11 w-full sm:w-auto bg-muted/60 p-1 rounded-xl">
-          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4">
+        <TabsList className="h-auto w-full flex flex-wrap gap-1 bg-muted/60 p-1.5 rounded-xl">
+          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-2">
             <User className="mr-2 h-4 w-4" />
             Profile
           </TabsTrigger>
-          <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4">
+          <TabsTrigger value="settings" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-2">
             <Monitor className="mr-2 h-4 w-4" />
             Settings
           </TabsTrigger>
           {isAdmin && (
-            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4">
+            <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-2">
               <Shield className="mr-2 h-4 w-4" />
               User Management
             </TabsTrigger>
           )}
           {isAdmin && (
-            <TabsTrigger value="access-control" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4">
+            <TabsTrigger value="access-control" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-2">
               <Shield className="mr-2 h-4 w-4" />
               Access Control
             </TabsTrigger>

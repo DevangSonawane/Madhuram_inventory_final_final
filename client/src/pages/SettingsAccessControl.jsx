@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Save, Shield } from 'lucide-react';
+import { CheckCircle2, Save, Shield, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
@@ -164,48 +164,55 @@ export default function SettingsAccessControl({ embedded = false }) {
   }
 
   return (
-    <div className={embedded ? 'space-y-4' : 'space-y-6'}>
+    <div className={embedded ? 'space-y-5' : 'space-y-8'}>
       {!embedded && (
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Access Control Settings</h1>
-          <p className="text-muted-foreground mt-1">Set user-level page and function visibility.</p>
+        <div className="rounded-2xl border bg-gradient-to-br from-primary/5 via-background to-background p-6">
+          <div className="flex items-start gap-4">
+            <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Access Control Settings</h1>
+              <p className="text-muted-foreground mt-1">Set user-level page and function visibility.</p>
+            </div>
+          </div>
         </div>
       )}
 
-      <Card className="border-0 shadow-sm ring-1 ring-border/50">
-        <CardHeader>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="border-0 shadow-sm ring-1 ring-border/50 overflow-hidden">
+        <CardHeader className="border-b bg-muted/20">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 Access Matrix
               </CardTitle>
-              <CardDescription>Choose a user from dropdown, then update page and function permissions.</CardDescription>
+              <CardDescription className="mt-1">Choose a user from dropdown, then update page and function permissions.</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={() => setAllAccess(true)} disabled={!selectedUser || selectedUser.role === 'admin'}>
+              <Button size="sm" variant="outline" onClick={() => setAllAccess(true)} disabled={!selectedUser || selectedUser.role === 'admin'}>
                 Allow all
               </Button>
-              <Button variant="outline" onClick={() => setAllAccess(false)} disabled={!selectedUser || selectedUser.role === 'admin'}>
+              <Button size="sm" variant="outline" onClick={() => setAllAccess(false)} disabled={!selectedUser || selectedUser.role === 'admin'}>
                 Deny all
               </Button>
-              <Button onClick={handleSave} disabled={!selectedUser || selectedUser.role === 'admin'}>
+              <Button size="sm" className="px-4" onClick={handleSave} disabled={!selectedUser || selectedUser.role === 'admin'}>
                 <Save className="h-4 w-4 mr-2" /> Save
               </Button>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 lg:grid-cols-[minmax(260px,360px)_1fr]">
-            <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+        <CardContent className="space-y-6 p-6">
+          <div className="grid gap-4 xl:grid-cols-[minmax(280px,360px)_1fr]">
+            <div className="rounded-2xl border bg-muted/20 p-5 space-y-3">
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Select User</Label>
               <Select
                 value={selectedUserId}
                 onValueChange={setSelectedUserId}
                 disabled={loadingUsers || users.length === 0}
               >
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11 bg-background">
                   <SelectValue placeholder={loadingUsers ? 'Loading users...' : 'Select user'} />
                 </SelectTrigger>
                 <SelectContent>
@@ -218,7 +225,7 @@ export default function SettingsAccessControl({ embedded = false }) {
               </Select>
 
               {selectedUser && (
-                <div className="rounded-md border bg-background p-3 text-sm">
+                <div className="rounded-xl border bg-background p-4 text-sm">
                   <p className="font-medium">{selectedUser.name}</p>
                   <p className="text-muted-foreground text-xs mt-1">{selectedUser.email}</p>
                   <Badge variant={selectedUser.role === 'admin' ? 'default' : 'secondary'} className="mt-2">
@@ -229,13 +236,17 @@ export default function SettingsAccessControl({ embedded = false }) {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border p-4">
-                <p className="text-xs text-muted-foreground">Pages Enabled</p>
-                <p className="text-2xl font-semibold mt-1">{enabledPages} / {totalPages}</p>
+              <div className="rounded-2xl border bg-gradient-to-b from-background to-muted/20 p-5 min-h-[132px] flex flex-col items-center justify-center text-center">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pages Enabled</p>
+                <p className="text-5xl font-semibold mt-3 leading-none">
+                  {enabledPages} <span className="text-lg text-muted-foreground">/ {totalPages}</span>
+                </p>
               </div>
-              <div className="rounded-xl border p-4">
-                <p className="text-xs text-muted-foreground">Functions Enabled</p>
-                <p className="text-2xl font-semibold mt-1">{enabledFunctions} / {totalFunctions}</p>
+              <div className="rounded-2xl border bg-gradient-to-b from-background to-muted/20 p-5 min-h-[132px] flex flex-col items-center justify-center text-center">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Functions Enabled</p>
+                <p className="text-5xl font-semibold mt-3 leading-none">
+                  {enabledFunctions} <span className="text-lg text-muted-foreground">/ {totalFunctions}</span>
+                </p>
               </div>
             </div>
           </div>
@@ -250,20 +261,20 @@ export default function SettingsAccessControl({ embedded = false }) {
               <AlertDescription>Admin users always have full access.</AlertDescription>
             </Alert>
           ) : (
-            <Accordion type="multiple" className="w-full space-y-3">
+            <Accordion type="multiple" className="w-full space-y-4">
               {ACCESS_CONTROL_CATALOG.map((page) => {
                 const pageEnabled = Boolean(draftAccessControl.pages?.[page.pagePath]);
 
                 return (
-                  <AccordionItem value={page.pagePath} key={page.pagePath} className="rounded-xl border px-4">
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="text-left">
+                  <AccordionItem value={page.pagePath} key={page.pagePath} className="rounded-2xl border bg-card px-5">
+                    <AccordionTrigger className="hover:no-underline py-5">
+                      <div className="text-left pr-4">
                         <p className="font-medium">{page.pageTitle}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{page.category} • {page.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{page.category} • {page.description}</p>
                       </div>
                     </AccordionTrigger>
-                    <AccordionContent className="space-y-3 pb-4">
-                      <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
+                    <AccordionContent className="space-y-3 pb-5">
+                      <div className="flex items-center justify-between rounded-xl bg-muted/40 p-4">
                         <div>
                           <Label className="font-medium">Page Access</Label>
                           <p className="text-xs text-muted-foreground">Allow this page in sidebar and direct URL.</p>
@@ -275,8 +286,8 @@ export default function SettingsAccessControl({ embedded = false }) {
                         const fnEnabled = Boolean(draftAccessControl.functions?.[fn.key]);
 
                         return (
-                          <div key={fn.key} className="flex items-center justify-between rounded-lg border p-3">
-                            <div className="pr-4">
+                          <div key={fn.key} className="flex items-center justify-between rounded-xl border bg-background p-4">
+                            <div className="pr-5">
                               <p className="text-sm font-medium">{fn.label}</p>
                               <p className="text-xs text-muted-foreground mt-0.5">{fn.description}</p>
                             </div>
