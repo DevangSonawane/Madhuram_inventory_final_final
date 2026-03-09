@@ -1,22 +1,25 @@
-📘 Madhuram API Documentation – Inventory Management Module
+📘 Madhuram API Documentation – Inventory Module (Updated Version)
 Overview
-The Inventory API in Madhuram manages inventory items for projects, including:
-Creating inventory items
-Fetching inventory items (all / by project / by ID)
-Updating inventory items
-Deleting inventory items
+The Inventory API in Madhuram is used to manage project inventory items.
+It supports:
+Create inventory item
+Get all inventory items
+Get inventory item by ID
+Get inventory items by project
+Update inventory item
+Delete inventory item
+Update only stockin status
+Update only billing status
 ✅ Base URL: /api/inventory
 ✅ Database Table: inventories
-✅ Foreign key validation: project_id (error code 23503 → invalid project)
 
-📦 Inventory Schema
-Inventory Object
+Inventory Object Schema
 Field
 Type
-Notes
+Description
 inventory_id
 integer
-Primary key
+Unique inventory ID
 project_id
 integer
 Linked project ID
@@ -25,226 +28,286 @@ string
 Brand name
 quantity
 number
-Quantity
+Quantity of item
 name
 string
-Item name
+Inventory item name
 price
 number
-Unit price / price
+Price of item
 stockin
 boolean
-Stock status flag
+Stock-in status
+billing
+boolean
+Billing status
 created_at
-datetime
+string (date-time)
 Created timestamp
 updated_at
-datetime
-Updated timestamp (on update)
+string (date-time)
+Updated timestamp
 
-Example Inventory Object
-{
-  "inventory_id": 1,
-  "project_id": 10,
-  "brand": "ACC",
-  "quantity": 100,
-  "name": "Cement Bag",
-  "price": 350,
-  "stockin": true,
-  "created_at": "2026-02-18T10:00:00.000Z"
-}
-
-
-✅ Endpoints
 
 1) Create Inventory Item
 POST /api/inventory
 Creates a new inventory item.
-Content-Type: application/json
 Request Body
-Field
-Type
-Required
-project_id
-integer
-✅
-brand
-string
-✅
-quantity
-number
-✅
-name
-string
-✅
-price
-number
-✅
-stockin
-boolean
-✅
-
-Example Request
 {
-  "project_id": 10,
-  "brand": "ACC",
+  "project_id": 1,
+  "brand": "Asian Paints",
   "quantity": 50,
-  "name": "Cement Bag",
-  "price": 350,
-  "stockin": true
+  "name": "Wall Paint",
+  "price": 1200,
+  "stockin": true,
+  "billing": false
 }
 
 Success Response (201)
-Returns the created inventory item:
 {
   "inventory_id": 1,
-  "project_id": 10,
-  "brand": "ACC",
+  "project_id": 1,
+  "brand": "Asian Paints",
   "quantity": 50,
-  "name": "Cement Bag",
-  "price": 350,
+  "name": "Wall Paint",
+  "price": 1200,
   "stockin": true,
-  "created_at": "2026-02-18T10:00:00.000Z"
+  "billing": false,
+  "created_at": "2026-03-09T10:00:00.000Z"
 }
 
 Error Responses
-400 – Invalid project_id (project does not exist)
+400
 { "error": "Invalid project_id: Project does not exist" }
 
-500 – Internal server error
+500
 { "error": "Internal Server Error" }
 
 
 2) Get All Inventory Items
 GET /api/inventory
-Fetches all inventory items ordered by latest created first.
+Fetches all inventory items ordered by latest first.
 Success Response (200)
-Returns array of inventory items:
 [
   {
     "inventory_id": 1,
-    "project_id": 10,
-    "brand": "ACC",
+    "project_id": 1,
+    "brand": "Asian Paints",
     "quantity": 50,
-    "name": "Cement Bag",
-    "price": 350,
+    "name": "Wall Paint",
+    "price": 1200,
     "stockin": true,
-    "created_at": "2026-02-18T10:00:00.000Z"
+    "billing": false,
+    "created_at": "2026-03-09T10:00:00.000Z"
   }
 ]
-
-Error Response (500)
-{ "error": "Internal Server Error" }
 
 
 3) Get Inventory Item by ID
 GET /api/inventory/{id}
-Fetch a single inventory item using inventory_id.
+Fetch a single inventory item by inventory_id.
 Path Parameter
-Param
+Name
 Type
 Required
 id
 integer
-✅
+Yes
 
 Success Response (200)
-Returns one inventory item object.
-Error Response (404)
+{
+  "inventory_id": 1,
+  "project_id": 1,
+  "brand": "Asian Paints",
+  "quantity": 50,
+  "name": "Wall Paint",
+  "price": 1200,
+  "stockin": true,
+  "billing": false
+}
+
+Error Response
+404
 { "error": "Inventory item not found" }
 
 
 4) Get Inventory Items by Project ID
 GET /api/inventory/project/{projectId}
-Fetch all inventory items for a specific project.
+Fetches all inventory items for a specific project.
 Path Parameter
-Param
+Name
 Type
 Required
 projectId
 integer
-✅
+Yes
 
 Success Response (200)
-Returns array of items for that project:
 [
   {
     "inventory_id": 2,
-    "project_id": 10,
-    "brand": "Ultratech",
+    "project_id": 1,
+    "brand": "Berger",
     "quantity": 20,
-    "name": "Concrete Mix",
-    "price": 500,
-    "stockin": false
+    "name": "Primer",
+    "price": 950,
+    "stockin": false,
+    "billing": true
   }
 ]
-
-Error Response (500)
-{ "error": "Internal Server Error" }
 
 
 5) Update Inventory Item
 PUT /api/inventory/{id}
-Updates inventory item details.
-Uses COALESCE, so only fields provided will be updated.
-✅ updated_at is set automatically.
-Content-Type: application/json
-Path Parameter
-Param
-Type
-Required
-id
-integer
-✅
-
-Request Body (Any optional)
-Field
-Type
-brand
-string
-quantity
-number
-name
-string
-price
-number
-stockin
-boolean
-
-Example Request
+Updates full inventory item details.
+Request Body
+All fields are optional.
 {
-  "quantity": 80,
+  "brand": "Asian Paints Premium",
+  "quantity": 60,
+  "name": "Wall Paint Deluxe",
+  "price": 1350,
   "stockin": true,
-  "price": 360
+  "billing": true
 }
 
 Success Response (200)
-Returns updated inventory item.
-Error Response (404)
+{
+  "inventory_id": 1,
+  "project_id": 1,
+  "brand": "Asian Paints Premium",
+  "quantity": 60,
+  "name": "Wall Paint Deluxe",
+  "price": 1350,
+  "stockin": true,
+  "billing": true,
+  "updated_at": "2026-03-09T10:30:00.000Z"
+}
+
+Error Response
+404
 { "error": "Inventory item not found" }
 
 
 6) Delete Inventory Item
 DELETE /api/inventory/{id}
-Deletes inventory item by ID.
-Path Parameter
-Param
-Type
-Required
-id
-integer
-✅
-
+Deletes an inventory item.
 Success Response (200)
 { "message": "Inventory item deleted successfully" }
 
-Error Response (404)
+Error Response
+404
 { "error": "Inventory item not found" }
 
 
-✅ Notes (Based on Your Code)
-project_id is validated by DB constraint → if project doesn’t exist, PostgreSQL throws error 23503 and API returns 400
-No authentication middleware is used here (all routes are currently public)
-Inventory list is sorted by created_at DESC
+7) Update Stockin Status Only
+PATCH /api/inventory/{id}/stockin
+Updates only the stockin status of an inventory item.
+Request Body
+{
+  "stockin": true
+}
+
+Validation
+stockin must be a boolean
+Success Response (200)
+{
+  "inventory_id": 1,
+  "project_id": 1,
+  "brand": "Asian Paints",
+  "quantity": 50,
+  "name": "Wall Paint",
+  "price": 1200,
+  "stockin": true,
+  "billing": false,
+  "updated_at": "2026-03-09T11:00:00.000Z"
+}
+
+Error Responses
+400
+{ "error": "stockin must be a boolean" }
+
+404
+{ "error": "Inventory item not found" }
+
+
+8) Update Billing Status Only
+PATCH /api/inventory/{id}/billing
+Updates only the billing status of an inventory item.
+Request Body
+{
+  "billing": true
+}
+
+Validation
+billing must be a boolean
+Success Response (200)
+{
+  "inventory_id": 1,
+  "project_id": 1,
+  "brand": "Asian Paints",
+  "quantity": 50,
+  "name": "Wall Paint",
+  "price": 1200,
+  "stockin": true,
+  "billing": true,
+  "updated_at": "2026-03-09T11:05:00.000Z"
+}
+
+Error Responses
+400
+{ "error": "billing must be a boolean" }
+
+404
+{ "error": "Inventory item not found" }
+
+
+Notes for Frontend Developer
+Suggested Usage
+Use these endpoints like this in UI:
+Create page / modal → POST /api/inventory
+Inventory listing page → GET /api/inventory or GET /api/inventory/project/:projectId
+Edit form → PUT /api/inventory/:id
+Delete action → DELETE /api/inventory/:id
+Quick toggle for stock in/out → PATCH /api/inventory/:id/stockin
+Quick toggle for billing done/pending → PATCH /api/inventory/:id/billing
+UI Recommendation
+Since stockin and billing now have separate patch routes, frontend can use:
+Toggle switch for Stockin
+Toggle switch for Billing
+without submitting the full edit form.
+Example:
+Toggle stock status → call /api/inventory/:id/stockin
+Toggle billing status → call /api/inventory/:id/billing
+
+Quick Endpoint Summary
+Method
+Endpoint
+Purpose
+POST
+/api/inventory
+Create inventory item
+GET
+/api/inventory
+Get all inventory items
+GET
+/api/inventory/:id
+Get inventory item by ID
+GET
+/api/inventory/project/:projectId
+Get inventory by project
+PUT
+/api/inventory/:id
+Update inventory item
+DELETE
+/api/inventory/:id
+Delete inventory item
+PATCH
+/api/inventory/:id/stockin
+Update stockin status
+PATCH
+/api/inventory/:id/billing
+Update billing status
+
 
 

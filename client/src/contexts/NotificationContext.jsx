@@ -1,48 +1,65 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import { api } from '@/lib/api';
 
 const NotificationContext = createContext(null);
+
+const getUserId = (user) => user?.user_id || user?.id || user?.uid || null;
+
+const formatRelativeTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return date.toLocaleDateString();
+};
+
+const mapNotification = (n) => ({
+  id: n.id,
+  userId: n.user_id,
+  title: `${n.entity_type ? n.entity_type.toUpperCase() : 'Update'} ${n.action || ''}`.trim(),
+  message: n.message || `${n.entity_name || 'Entity'} was ${n.action || 'updated'}.`,
+  time: formatRelativeTime(n.created_at),
+  createdAt: n.created_at,
+  isRead: Boolean(n.is_read),
+  read: Boolean(n.is_read),
+  entityType: n.entity_type,
+  action: n.action,
+});
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const userId = useMemo(() => getUserId(user), [user]);
 
-  // Fetch notifications from server
   const fetchNotifications = async () => {
-    if (!user || !user.token) {
+    if (!user?.token || !userId) {
       setNotifications([]);
+      setUnreadCount(0);
       setLoading(false);
       return;
     }
 
-    // Skip fetch for demo token
-    if (user.token === 'demo-token') {
-       // Keep mock data or empty for demo if needed, but let's stick to the initial mock logic if it was there
-       // actually, the previous mock logic was good for demo.
-       // We can combine them.
-       setLoading(false);
-       return; 
-    }
-
     try {
-      const response = await fetch('http://localhost:3000/api/v1/notifications', {
-        headers: {
-          'Authorization': `Bearer ${user.token}`
-        }
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        // Transform server data to match UI component expectations if needed
-        const formatted = data.data.notifications.map(n => ({
-          id: n.notification_id,
-          title: n.title || 'Notification',
-          message: n.message,
-          time: new Date(n.created_at).toLocaleString(), // Simple formatting
-          read: n.is_read,
-          type: n.type || 'info'
-        }));
-        setNotifications(formatted);
+      const [listResult, countResult] = await Promise.all([
+        api.getNotifications({ userId, limit: 30, offset: 0 }),
+        api.getUnreadNotificationCount(userId),
+      ]);
+      if (listResult.success && listResult.data?.success) {
+        const mapped = (listResult.data.notifications || []).map(mapNotification);
+        setNotifications(mapped);
+      }
+      if (countResult.success && countResult.data?.success) {
+        setUnreadCount(Number(countResult.data.unread_count || 0));
       }
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
@@ -52,89 +69,104 @@ export const NotificationProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    setLoading(true);
     fetchNotifications();
-    // Poll every minute for new notifications
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.token, userId]);
 
-  // Initial mock data fallback for demo/testing if no real data
   useEffect(() => {
-    if (user?.token === 'demo-token' && notifications.length === 0) {
-       setTimeout(() => {
-        setNotifications([
-          {
-            id: '1',
-            title: 'New Material Request',
-            message: 'John Doe requested 50 units of Cement.',
-            time: '10 min ago',
-            read: false,
-            type: 'request'
-          },
-          {
-            id: '2',
-            title: 'Low Stock Alert',
-            message: 'Sand inventory is below reorder level (100 units).',
-            time: '1 hour ago',
-            read: false,
-            type: 'alert'
-          }
-        ]);
-        setLoading(false);
-      }, 1000);
-    }
-  }, [user]);
+    if (!user?.token) return undefined;
+
+    const ws = new WebSocket(api.getDashboardSocketUrl());
+    let heartbeat = null;
+
+    ws.onopen = () => {
+      heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 30000);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'NEW_NOTIFICATION') {
+          const next = mapNotification(msg.data);
+          if (userId && String(next.userId) !== String(userId)) return;
+          setNotifications((prev) => [next, ...prev.filter((item) => item.id !== next.id)]);
+          setUnreadCount((prev) => prev + (next.isRead ? 0 : 1));
+        }
+      } catch (error) {
+        console.error('Invalid WS notification payload:', error);
+      }
+    };
+
+    return () => {
+      if (heartbeat) clearInterval(heartbeat);
+      ws.close();
+    };
+  }, [user?.token, userId]);
 
   const addNotification = (notification) => {
-    setNotifications(prev => [notification, ...prev]);
+    const normalized = {
+      id: notification.id || `local-${Date.now()}`,
+      title: notification.title || 'Notification',
+      message: notification.message || '',
+      time: notification.time || 'Just now',
+      createdAt: notification.createdAt || new Date().toISOString(),
+      isRead: Boolean(notification.isRead || notification.read),
+      read: Boolean(notification.isRead || notification.read),
+    };
+    setNotifications((prev) => [normalized, ...prev]);
+    if (!normalized.isRead) {
+      setUnreadCount((prev) => prev + 1);
+    }
   };
 
   const markAsRead = async (id) => {
-    // Optimistic update
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+    let changed = false;
+    setNotifications((prev) => prev.map((n) => {
+      if (n.id !== id || n.isRead) return n;
+      changed = true;
+      return { ...n, isRead: true, read: true };
+    }));
+    if (changed) setUnreadCount((prev) => Math.max(0, prev - 1));
 
-    if (user?.token && user.token !== 'demo-token') {
-      try {
-        await fetch(`http://localhost:3000/api/v1/notifications/${id}/read`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${user.token}`
-          }
-        });
-      } catch (error) {
-        console.error("Failed to mark notification as read:", error);
-      }
+    try {
+      await api.markNotificationRead(id);
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+      fetchNotifications();
     }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(n => ({ ...n, read: true }))
-    );
-    // Note: Backend might not have bulk mark-read endpoint, implementing per-item or skipping for now
+  const markAllAsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true, read: true })));
+    setUnreadCount(0);
+    if (!userId) return;
+    try {
+      await api.markAllNotificationsRead(userId);
+    } catch (error) {
+      console.error("Failed to mark all notifications as read:", error);
+      fetchNotifications();
+    }
   };
 
   const clearNotification = async (id) => {
-    // Optimistic update
-    setNotifications(prev => prev.filter(n => n.id !== id));
-
-    if (user?.token && user.token !== 'demo-token') {
-      try {
-        await fetch(`http://localhost:3000/api/v1/notifications/${id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${user.token}`
-          }
-        });
-      } catch (error) {
-        console.error("Failed to delete notification:", error);
-      }
+    const target = notifications.find((n) => n.id === id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (target && !target.isRead) {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
+    try {
+      await api.deleteNotification(id);
+    } catch (error) {
+      console.error("Failed to delete notification:", error);
+      fetchNotifications();
     }
   };
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <NotificationContext.Provider value={{ 

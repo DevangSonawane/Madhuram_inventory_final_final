@@ -1,76 +1,148 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, ShoppingCart, TrendingUp, AlertTriangle, ArrowUpRight, ArrowDownRight, Plus, FileText, Users, Activity } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Package, ShoppingCart, FlaskConical, ClipboardCheck, Users, Building2, RefreshCw, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { itemVariants, containerVariants } from '@/components/PageTransition';
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from '@/hooks/use-toast';
 import { useProject } from '@/contexts/ProjectContext';
+import { api } from '@/lib/api';
 
-const data = [
-  { name: 'Jan', total: 1200 },
-  { name: 'Feb', total: 2100 },
-  { name: 'Mar', total: 800 },
-  { name: 'Apr', total: 1600 },
-  { name: 'May', total: 900 },
-  { name: 'Jun', total: 1700 },
-];
+const formatRelativeTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return date.toLocaleDateString();
+};
 
-const activity = [
-  {
-    user: "John Doe",
-    action: "Created a purchase order",
-    time: "2 mins ago",
-    status: "success",
-    initials: "JD"
-  },
-  {
-    user: "Jane Smith",
-    action: "Approved material request",
-    time: "1 hour ago",
-    status: "success",
-    initials: "JS"
-  },
-  {
-    user: "System",
-    action: "Low stock alert: Cement",
-    time: "2 hours ago",
-    status: "warning",
-    initials: "SY"
-  },
-  {
-    user: "Mike Johnson",
-    action: "Received shipment PO-123",
-    time: "4 hours ago",
-    status: "info",
-    initials: "MJ"
-  }
-];
+const activityInitials = (name) => {
+  const value = String(name || 'NA').trim();
+  if (!value) return 'NA';
+  const parts = value.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { selectedProject } = useProject();
 
-  const handleExport = () => {
-    toast({
-      title: "Export Started",
-      description: "Dashboard report is being generated...",
-    });
-    // Simulate export
-    setTimeout(() => {
-        toast({
-            title: "Export Complete",
-            description: "Dashboard report has been downloaded.",
-        });
-    }, 1500);
+  const [stats, setStats] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const projectId = selectedProject?.id || selectedProject?.project_id;
+
+  const loadData = async ({ silent = false } = {}) => {
+    try {
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      const [statsResult, activityResult] = await Promise.all([
+        api.getDashboardStats(projectId ? { projectId } : {}),
+        api.getDashboardActivity({ projectId, limit: 8, offset: 0 }),
+      ]);
+
+      if (statsResult.success && statsResult.data?.success) {
+        setStats(statsResult.data.stats || null);
+      }
+
+      if (activityResult.success && activityResult.data?.success) {
+        setActivities(activityResult.data.activities || []);
+      }
+    } catch (error) {
+      toast({
+        title: 'Failed to load dashboard',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [projectId]);
+
+  useEffect(() => {
+    const ws = new WebSocket(api.getDashboardSocketUrl());
+    let heartbeat = null;
+
+    ws.onopen = () => {
+      heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 30000);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'INITIAL_ACTIVITIES' && Array.isArray(msg.data) && !projectId) {
+          setActivities(msg.data);
+        }
+        if (msg.type === 'NEW_ACTIVITY' && msg.data) {
+          if (projectId && String(msg.data.project_id) !== String(projectId)) return;
+          setActivities((prev) => [msg.data, ...prev.filter((item) => item.id !== msg.data.id)].slice(0, 8));
+        }
+      } catch (error) {
+        console.error('Invalid dashboard WS payload:', error);
+      }
+    };
+
+    return () => {
+      if (heartbeat) clearInterval(heartbeat);
+      ws.close();
+    };
+  }, [projectId]);
+
+  const cardData = useMemo(() => {
+    const source = stats || {};
+    const metric = (key) => {
+      const value = source[key];
+      if (typeof value === 'number') return { total: value, last30: null };
+      return { total: Number(value?.total || 0), last30: value?.last_30_days ?? null };
+    };
+
+    return [
+      { key: 'vendors', label: 'Vendors', icon: Building2, ...metric('vendors') },
+      { key: 'pos', label: 'Purchase Orders', icon: ShoppingCart, ...metric('pos') },
+      { key: 'samples', label: 'Samples', icon: FlaskConical, ...metric('samples') },
+      { key: 'mirs', label: 'MIRs', icon: Package, ...metric('mirs') },
+      { key: 'itrs', label: 'ITRs', icon: ClipboardCheck, ...metric('itrs') },
+      { key: 'users', label: 'Users', icon: Users, ...metric('users') },
+    ];
+  }, [stats]);
+
+  const chartData = useMemo(() => cardData.map((item) => ({
+    name: item.label.replace('Purchase Orders', 'POs'),
+    total: item.total,
+  })), [cardData]);
+
+  const handleRefresh = () => {
+    loadData({ silent: true });
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="space-y-8"
       variants={containerVariants}
       initial="hidden"
@@ -78,178 +150,118 @@ export default function Dashboard() {
     >
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">
-              Overview of {selectedProject ? selectedProject.name : 'your inventory'} and operations.
-            </p>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            {projectId ? `Live project metrics for ${selectedProject?.name || 'selected project'}.` : 'Live overall operational metrics.'}
+          </p>
         </div>
-        <div className="flex items-center space-x-3 w-full sm:w-auto">
-            <Button variant="outline" size="sm" className="h-12 sm:h-10 flex-1 sm:flex-none px-4 border-muted-foreground/20 hover:border-primary hover:text-primary transition-colors" onClick={handleExport}>
-                <FileText className="mr-2 h-4 w-4" />
-                Export
-            </Button>
-            <Button size="sm" className="h-12 sm:h-10 flex-1 sm:flex-none px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95" onClick={() => navigate('/purchase-requests')}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Request
-            </Button>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-12 sm:h-10 flex-1 sm:flex-none px-4"
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            className="h-12 sm:h-10 flex-1 sm:flex-none px-4"
+            onClick={() => navigate(projectId ? `/${projectId}/purchase-requests` : '/projects')}
+          >
+            New Request
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <motion.div variants={itemVariants}>
-          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Value</CardTitle>
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
-                 <span className="text-primary font-bold text-lg">₹</span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold tracking-tight text-foreground">₹45,231.89</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-2 font-medium">
-                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md flex items-center mr-2 dark:bg-emerald-900/30 dark:text-emerald-400">
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                    20.1%
-                </span>
-                from last month
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-        
-        <motion.div variants={itemVariants}>
-          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Active Orders</CardTitle>
-              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center shadow-inner">
-                  <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold tracking-tight text-foreground">+2350</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-2 font-medium">
-                <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-md flex items-center mr-2 dark:bg-red-900/30 dark:text-red-400">
-                    <ArrowDownRight className="h-3 w-3 mr-1" />
-                    4%
-                </span>
-                from last month
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-        
-        <motion.div variants={itemVariants}>
-          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Low Stock</CardTitle>
-              <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center shadow-inner">
-                  <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold tracking-tight text-foreground">12</div>
-              <p className="text-xs text-muted-foreground mt-2 font-medium">
-                Requires immediate attention
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-        
-        <motion.div variants={itemVariants}>
-          <Card className="shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none ring-1 ring-black/5 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Materials</CardTitle>
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
-                  <Package className="h-5 w-5 text-primary" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold tracking-tight text-foreground">573</div>
-              <p className="text-xs text-muted-foreground mt-2 font-medium">
-                Across 4 warehouses
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        {cardData.map((item) => (
+          <motion.div variants={itemVariants} key={item.key}>
+            <Card className="shadow-sm border-none ring-1 ring-black/5 bg-card/60 backdrop-blur-sm">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{item.label}</CardTitle>
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
+                  <item.icon className="h-5 w-5 text-primary" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold tracking-tight text-foreground">
+                  {loading ? '...' : item.total}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 font-medium">
+                  {item.last30 == null ? 'No monthly delta available' : `${item.last30} added in last 30 days`}
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
       </div>
 
       <div className="grid items-start gap-8 grid-cols-1 lg:grid-cols-7">
         <motion.div className="col-span-1 lg:col-span-4" variants={itemVariants}>
           <Card className="shadow-lg border-none ring-1 ring-black/5">
             <CardHeader>
-              <CardTitle>Overview</CardTitle>
-              <CardDescription>Monthly consumption trends.</CardDescription>
+              <CardTitle>Entity Overview</CardTitle>
+              <CardDescription>Totals by module based on current dashboard scope.</CardDescription>
             </CardHeader>
             <CardContent className="pl-0 sm:pl-2">
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={data}>
-                  <XAxis
-                    dataKey="name"
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      borderRadius: '12px',
+                      border: '1px solid hsl(var(--border))',
+                    }}
                   />
-                  <YAxis
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `₹${value}`}
-                  />
-                  <Tooltip 
-                      contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))',
-                          borderRadius: '12px', 
-                          border: '1px solid hsl(var(--border))', 
-                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' 
-                      }}
-                      itemStyle={{ color: 'hsl(var(--foreground))' }}
-                      cursor={{fill: 'hsl(var(--muted))', opacity: 0.4}}
-                  />
-                  <Bar 
-                    dataKey="total" 
-                    fill="hsl(var(--primary))" 
-                    radius={[6, 6, 0, 0]} 
-                    className="hover:opacity-80 transition-opacity"
-                  />
+                  <Bar dataKey="total" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         </motion.div>
-        
+
         <motion.div className="col-span-1 lg:col-span-3" variants={itemVariants}>
           <Card className="shadow-lg border-none ring-1 ring-black/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Activity className="h-5 w-5 text-primary" />
-                  </div>
-                  Recent Activity
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Activity className="h-5 w-5 text-primary" />
+                </div>
+                Recent Activity
               </CardTitle>
-              <CardDescription>
-                Latest actions across the system.
-              </CardDescription>
+              <CardDescription>Latest actions from the activity stream.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-muted before:to-transparent">
-                {activity.map((item, index) => (
-                  <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active" key={index}>
-                    <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-50 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 dark:bg-slate-800 dark:border-slate-900">
-                       <div className="text-xs font-bold text-muted-foreground">{item.initials}</div>
-                    </div>
-                    
-                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-border/50 bg-card shadow-sm transition-all hover:shadow-md">
-                        <div className="flex items-center justify-between space-x-2 mb-1">
-                            <div className="font-bold text-sm text-foreground">{item.user}</div>
-                            <time className="font-mono text-xs text-muted-foreground">{item.time}</time>
+              {loading ? (
+                <p className="text-sm text-muted-foreground">Loading activity...</p>
+              ) : activities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No activity found for this scope.</p>
+              ) : (
+                <div className="space-y-4">
+                  {activities.map((item) => (
+                    <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl border border-border/60 bg-card/60">
+                      <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-foreground shrink-0">
+                        {activityInitials(item.performed_by_name || item.performed_by)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium truncate">{item.performed_by_name || 'System'}</p>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{formatRelativeTime(item.created_at)}</span>
                         </div>
-                        <div className="text-sm text-muted-foreground">{item.action}</div>
+                        <p className="text-sm text-muted-foreground">
+                          {`${item.action || 'updated'} ${item.entity_type || 'record'} ${item.entity_name || ''}`.trim()}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>

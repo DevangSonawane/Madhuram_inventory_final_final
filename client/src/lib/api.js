@@ -71,6 +71,99 @@ export const api = {
     return handleResponse(response);
   },
 
+  // Dashboard
+  getDashboardStats: async ({ projectId, userId } = {}) => {
+    const params = new URLSearchParams();
+    if (projectId != null && projectId !== '') params.set('project_id', String(projectId));
+    if (userId != null && userId !== '') params.set('user_id', String(userId));
+    const query = params.toString();
+    const response = await fetch(`${BASE_URL}/api/dashboard/stats${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getDashboardActivity: async ({ userId, projectId, entityType, action, limit, offset } = {}) => {
+    const params = new URLSearchParams();
+    if (userId != null && userId !== '') params.set('user_id', String(userId));
+    if (projectId != null && projectId !== '') params.set('project_id', String(projectId));
+    if (entityType) params.set('entity_type', entityType);
+    if (action) params.set('action', action);
+    if (limit != null) params.set('limit', String(limit));
+    if (offset != null) params.set('offset', String(offset));
+    const query = params.toString();
+    const response = await fetch(`${BASE_URL}/api/dashboard/activity${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  deleteDashboardActivity: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/dashboard/activity/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  // Notifications (Dashboard module)
+  getNotifications: async ({ userId, isRead, limit, offset } = {}) => {
+    const params = new URLSearchParams();
+    if (userId != null && userId !== '') params.set('user_id', String(userId));
+    if (typeof isRead === 'boolean') params.set('is_read', String(isRead));
+    if (limit != null) params.set('limit', String(limit));
+    if (offset != null) params.set('offset', String(offset));
+    const query = params.toString();
+    const response = await fetch(`${BASE_URL}/api/dashboard/notifications${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getUnreadNotificationCount: async (userId) => {
+    const params = new URLSearchParams();
+    if (userId != null && userId !== '') params.set('user_id', String(userId));
+    const query = params.toString();
+    const response = await fetch(`${BASE_URL}/api/dashboard/notifications/unread-count${query ? `?${query}` : ''}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  markNotificationRead: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/dashboard/notifications/${id}/read`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  markAllNotificationsRead: async (userId) => {
+    const params = new URLSearchParams();
+    if (userId != null && userId !== '') params.set('user_id', String(userId));
+    const query = params.toString();
+    const response = await fetch(`${BASE_URL}/api/dashboard/notifications/read-all${query ? `?${query}` : ''}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  deleteNotification: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/dashboard/notifications/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getDashboardSocketUrl: () => {
+    const explicit = import.meta.env.VITE_DASHBOARD_WS_URL;
+    if (explicit) return explicit;
+    const wsBase = BASE_URL.replace(/^http/i, 'ws');
+    return `${wsBase}/ws/activity`;
+  },
+
   // Projects
   createProject: async (projectData) => {
     const formData = new FormData();
@@ -814,6 +907,7 @@ export const api = {
       name: data.name,
       price: Number(data.price),
       stockin: Boolean(data.stockin),
+      billing: Boolean(data.billing),
     };
     const response = await fetch(`${BASE_URL}/api/inventory`, {
       method: 'POST',
@@ -855,6 +949,7 @@ export const api = {
     if (data.quantity != null && data.quantity !== '') payload.quantity = Number(data.quantity);
     if (data.price != null && data.price !== '') payload.price = Number(data.price);
     if (typeof data.stockin === 'boolean') payload.stockin = data.stockin;
+    if (typeof data.billing === 'boolean') payload.billing = data.billing;
 
     const response = await fetch(`${BASE_URL}/api/inventory/${id}`, {
       method: 'PUT',
@@ -863,6 +958,30 @@ export const api = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
+  },
+
+  updateInventoryStockIn: async (id, stockin) => {
+    const response = await fetch(`${BASE_URL}/api/inventory/${id}/stockin`, {
+      method: 'PATCH',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ stockin }),
+    });
+    return handleResponse(response);
+  },
+
+  updateInventoryBilling: async (id, billing) => {
+    const response = await fetch(`${BASE_URL}/api/inventory/${id}/billing`, {
+      method: 'PATCH',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ billing }),
     });
     return handleResponse(response);
   },
