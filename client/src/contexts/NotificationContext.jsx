@@ -77,8 +77,10 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user?.token) return undefined;
+    const wsUrl = api.getDashboardSocketUrl({ userId, token: user?.token });
+    if (!wsUrl) return undefined;
 
-    const ws = new WebSocket(api.getDashboardSocketUrl());
+    const ws = new WebSocket(wsUrl);
     let heartbeat = null;
 
     ws.onopen = () => {

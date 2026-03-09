@@ -84,8 +84,11 @@ export const api = {
   },
 
   getDashboardActivity: async ({ userId, projectId, entityType, action, limit, offset } = {}) => {
+    if (userId == null || userId === '') {
+      throw new Error('userId is required for dashboard activity');
+    }
     const params = new URLSearchParams();
-    if (userId != null && userId !== '') params.set('user_id', String(userId));
+    params.set('user_id', String(userId));
     if (projectId != null && projectId !== '') params.set('project_id', String(projectId));
     if (entityType) params.set('entity_type', entityType);
     if (action) params.set('action', action);
@@ -157,11 +160,13 @@ export const api = {
     return handleResponse(response);
   },
 
-  getDashboardSocketUrl: () => {
-    const explicit = import.meta.env.VITE_DASHBOARD_WS_URL;
-    if (explicit) return explicit;
-    const wsBase = BASE_URL.replace(/^http/i, 'ws');
-    return `${wsBase}/ws/activity`;
+  getDashboardSocketUrl: ({ userId, token } = {}) => {
+    const explicit = (import.meta.env.VITE_DASHBOARD_WS_URL || '').trim();
+    const wsBase = explicit || BASE_URL.replace(/^http/i, 'ws');
+    const wsUrl = new URL(`${wsBase}/ws/activity`);
+    if (userId != null && userId !== '') wsUrl.searchParams.set('user_id', String(userId));
+    if (token) wsUrl.searchParams.set('token', token);
+    return wsUrl.toString();
   },
 
   // Projects

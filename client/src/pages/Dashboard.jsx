@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { itemVariants, containerVariants } from '@/components/PageTransition';
 import { useToast } from '@/hooks/use-toast';
 import { useProject } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
 
 const formatRelativeTime = (value) => {
@@ -37,6 +38,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { selectedProject } = useProject();
+  const { user } = useAuth();
 
   const [stats, setStats] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -44,9 +46,15 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   const projectId = selectedProject?.id || selectedProject?.project_id;
+  const userId = user?.user_id || user?.id || user?.uid;
 
   const loadData = async ({ silent = false } = {}) => {
     try {
+      if (userId == null || userId === '') {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
       if (silent) {
         setRefreshing(true);
       } else {
@@ -55,7 +63,7 @@ export default function Dashboard() {
 
       const [statsResult, activityResult] = await Promise.all([
         api.getDashboardStats(projectId ? { projectId } : {}),
-        api.getDashboardActivity({ projectId, limit: 8, offset: 0 }),
+        api.getDashboardActivity({ userId, projectId, limit: 8, offset: 0 }),
       ]);
 
       if (statsResult.success && statsResult.data?.success) {
@@ -79,10 +87,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData();
-  }, [projectId]);
+  }, [projectId, userId]);
 
   useEffect(() => {
-    const ws = new WebSocket(api.getDashboardSocketUrl());
+    const wsUrl = api.getDashboardSocketUrl({ userId, token: user?.token });
+    if (!wsUrl) return undefined;
+    const ws = new WebSocket(wsUrl);
     let heartbeat = null;
 
     ws.onopen = () => {
@@ -112,7 +122,7 @@ export default function Dashboard() {
       if (heartbeat) clearInterval(heartbeat);
       ws.close();
     };
-  }, [projectId]);
+  }, [projectId, userId, user?.token]);
 
   const cardData = useMemo(() => {
     const source = stats || {};
