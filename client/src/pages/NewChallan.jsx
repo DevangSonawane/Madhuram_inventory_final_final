@@ -108,16 +108,6 @@ export default function NewChallan() {
     setSelectedPoItems(mapPoItemsForPreview(selected));
   };
 
-  const handlePoIdSelect = (value) => {
-    if (value === NONE_VALUE) {
-      selectPo(null);
-      return;
-    }
-
-    const selected = projectPos.find((po) => String(po.po_id) === String(value));
-    selectPo(selected);
-  };
-
   const handlePoNumberSelect = (value) => {
     if (value === NONE_VALUE) {
       selectPo(null);
@@ -230,22 +220,6 @@ export default function NewChallan() {
               <Input className="h-11 text-base" value={form.challan_number} onChange={(e) => setForm((prev) => ({ ...prev, challan_number: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <div className="text-sm">PO ID</div>
-              <Select value={form.po_id || NONE_VALUE} onValueChange={handlePoIdSelect}>
-                <SelectTrigger className="h-11 text-base">
-                  <SelectValue placeholder={loadingPos ? "Loading PO..." : "Select PO ID"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>None</SelectItem>
-                  {projectPos.map((po) => (
-                    <SelectItem key={po.po_id} value={String(po.po_id)}>
-                      {po.po_id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <div className="text-sm">PO Number</div>
               <Select value={form.po_number || NONE_VALUE} onValueChange={handlePoNumberSelect}>
                 <SelectTrigger className="h-11 text-base">
@@ -280,7 +254,7 @@ export default function NewChallan() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-center">
+      <div className="flex justify-end">
         <Button
           type="button"
           variant="secondary"
@@ -303,7 +277,9 @@ export default function NewChallan() {
             onValueChange={(value) => setPoItemsExpanded(value === "po-items")}
           >
             <AccordionItem value="po-items">
-              <AccordionTrigger>PO Items (View Only)</AccordionTrigger>
+              <AccordionTrigger className="justify-end py-2 hover:no-underline">
+                <span className="sr-only">Toggle PO items</span>
+              </AccordionTrigger>
               <AccordionContent className="space-y-3 pt-2">
                 {selectedPoItems.length > 0 ? (
                   <div className="hidden md:grid md:grid-cols-7 gap-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -334,11 +310,6 @@ export default function NewChallan() {
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-          {selectedPoItems.length > 0 ? (
-            <div className="text-xs text-muted-foreground">
-              View in Detail pre-fills challan items with 50% PO quantity for delivery. You can edit quantities before saving.
-            </div>
-          ) : null}
         </CardContent>
       </Card>
 

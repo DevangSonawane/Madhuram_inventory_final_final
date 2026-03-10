@@ -134,7 +134,7 @@ export default function PurchaseOrdersPreview() {
     if (!location.state) return;
     if (location.state.poData) {
       const normalized = normalizePoData(location.state.poData);
-      setPoData(normalized);
+      setPoData(recalculatePoAmounts(normalized));
       setEditingPoId(location.state.poId ?? normalized.po_id ?? null);
     }
   }, [location.state]);
@@ -149,7 +149,7 @@ export default function PurchaseOrdersPreview() {
         if (response.success && response.data) {
           const normalized = normalizePoData(response.data);
           if (!active) return;
-          setPoData(normalized);
+          setPoData(recalculatePoAmounts(normalized));
           setEditingPoId(normalized.po_id ?? editingPoId);
         } else if (active) {
           toast({
@@ -183,6 +183,107 @@ export default function PurchaseOrdersPreview() {
     return poData.vendor?.name || poData.orderNo || poData.poDate || poData.totalAmount;
   }, [poData]);
 
+  const toNumberOrNull = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    const parsed = Number(String(value).replace(/,/g, "").trim());
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const formatCalculatedNumber = (value) => {
+    const rounded = Math.round(value * 100) / 100;
+    return String(rounded);
+  };
+
+  const recalculatePoAmounts = (
+    nextPoData,
+    { discountMode = "auto", cgstMode = "auto", sgstMode = "auto" } = {}
+  ) => {
+    const subtotal = (nextPoData.items || []).reduce((sum, item) => {
+      const amount = toNumberOrNull(item.amount);
+      return sum + (amount ?? 0);
+    }, 0);
+
+    const discountPercentInput = toNumberOrNull(nextPoData.discount?.percent);
+    const discountAmountInput = toNumberOrNull(nextPoData.discount?.amount);
+
+    let discountPercent = discountPercentInput;
+    let discountAmount = 0;
+
+    if (discountMode === "amount") {
+      discountAmount = discountAmountInput ?? 0;
+      discountPercent = subtotal > 0 ? (discountAmount * 100) / subtotal : undefined;
+    } else if (discountMode === "percent") {
+      discountAmount = discountPercentInput != null ? (subtotal * discountPercentInput) / 100 : 0;
+    } else if (discountPercentInput != null) {
+      discountAmount = (subtotal * discountPercentInput) / 100;
+    } else if (discountAmountInput != null) {
+      discountAmount = discountAmountInput;
+      discountPercent = subtotal > 0 ? (discountAmount * 100) / subtotal : undefined;
+    }
+
+    const afterDiscountAmount = subtotal - discountAmount;
+
+    const calculateTax = (tax, mode) => {
+      const percentInput = toNumberOrNull(tax?.percent);
+      const amountInput = toNumberOrNull(tax?.amount);
+
+      if (mode === "amount") {
+        const amount = amountInput ?? 0;
+        const percent = afterDiscountAmount !== 0 ? (amount * 100) / afterDiscountAmount : undefined;
+        return { percent, amount };
+      }
+
+      if (mode === "percent") {
+        const percent = percentInput;
+        const amount = percent != null ? (afterDiscountAmount * percent) / 100 : 0;
+        return { percent, amount };
+      }
+
+      if (percentInput != null) {
+        return { percent: percentInput, amount: (afterDiscountAmount * percentInput) / 100 };
+      }
+
+      if (amountInput != null) {
+        return {
+          amount: amountInput,
+          percent: afterDiscountAmount !== 0 ? (amountInput * 100) / afterDiscountAmount : undefined,
+        };
+      }
+
+      return { percent: undefined, amount: 0 };
+    };
+
+    const cgst = calculateTax(nextPoData.taxes?.cgst, cgstMode);
+    const sgst = calculateTax(nextPoData.taxes?.sgst, sgstMode);
+    const totalAmount = afterDiscountAmount + cgst.amount + sgst.amount;
+    const toValue = (value) => (value != null ? formatCalculatedNumber(value) : "");
+
+    return {
+      ...nextPoData,
+      subtotalAmount: subtotal > 0 ? formatCalculatedNumber(subtotal) : "",
+      discount: {
+        ...nextPoData.discount,
+        percent: toValue(discountPercent),
+        amount: discountAmount > 0 ? formatCalculatedNumber(discountAmount) : "",
+      },
+      afterDiscountAmount: subtotal > 0 ? formatCalculatedNumber(afterDiscountAmount) : "",
+      taxes: {
+        ...nextPoData.taxes,
+        cgst: {
+          ...nextPoData.taxes.cgst,
+          percent: toValue(cgst.percent),
+          amount: cgst.amount > 0 ? formatCalculatedNumber(cgst.amount) : "",
+        },
+        sgst: {
+          ...nextPoData.taxes.sgst,
+          percent: toValue(sgst.percent),
+          amount: sgst.amount > 0 ? formatCalculatedNumber(sgst.amount) : "",
+        },
+      },
+      totalAmount: totalAmount > 0 ? formatCalculatedNumber(totalAmount) : "",
+    };
+  };
+
   const updateVendor = (key, value) => {
     setPoData((prev) => ({
       ...prev,
@@ -206,8 +307,16 @@ export default function PurchaseOrdersPreview() {
   const updateItem = (index, field, value) => {
     setPoData((prev) => {
       const nextItems = [...prev.items];
-      nextItems[index] = { ...nextItems[index], [field]: value };
-      return { ...prev, items: nextItems };
+      const nextItem = { ...nextItems[index], [field]: value };
+
+      if (field === "qty" || field === "rate") {
+        const qty = toNumberOrNull(nextItem.qty);
+        const rate = toNumberOrNull(nextItem.rate);
+        nextItem.amount = qty != null && rate != null ? formatCalculatedNumber(qty * rate) : "";
+      }
+
+      nextItems[index] = nextItem;
+      return recalculatePoAmounts({ ...prev, items: nextItems });
     });
   };
 
@@ -223,8 +332,10 @@ export default function PurchaseOrdersPreview() {
 
   const removeItem = (index) => {
     setPoData((prev) => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index),
+      ...recalculatePoAmounts({
+        ...prev,
+        items: prev.items.filter((_, i) => i !== index),
+      }),
     }));
   };
 
@@ -406,14 +517,86 @@ export default function PurchaseOrdersPreview() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Discount %"><Input value={poData.discount.percent} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, percent: event.target.value } }))} /></Field>
-            <Field label="Discount Amount"><Input value={poData.discount.amount} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, amount: event.target.value } }))} /></Field>
-            <Field label="After Discount Amount"><Input value={poData.afterDiscountAmount} onChange={(event) => setPoData((prev) => ({ ...prev, afterDiscountAmount: event.target.value }))} /></Field>
-            <Field label="CGST %"><Input value={poData.taxes.cgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } } }))} /></Field>
-            <Field label="CGST Amount"><Input value={poData.taxes.cgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } } }))} /></Field>
-            <Field label="SGST %"><Input value={poData.taxes.sgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } } }))} /></Field>
-            <Field label="SGST Amount"><Input value={poData.taxes.sgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } } }))} /></Field>
-            <Field label="Total Amount"><Input value={poData.totalAmount} onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: event.target.value }))} /></Field>
+            <Field label="Discount %">
+              <Input
+                value={poData.discount.percent}
+                onChange={(event) =>
+                  setPoData((prev) =>
+                    recalculatePoAmounts({
+                      ...prev,
+                      discount: { ...prev.discount, percent: event.target.value },
+                    }, { discountMode: "percent" })
+                  )
+                }
+              />
+            </Field>
+            <Field label="Discount Amount">
+              <Input
+                value={poData.discount.amount}
+                onChange={(event) =>
+                  setPoData((prev) =>
+                    recalculatePoAmounts({
+                      ...prev,
+                      discount: { ...prev.discount, amount: event.target.value },
+                    }, { discountMode: "amount" })
+                  )
+                }
+              />
+            </Field>
+            <Field label="After Discount Amount"><Input value={poData.afterDiscountAmount} readOnly /></Field>
+            <Field label="CGST %">
+              <Input
+                value={poData.taxes.cgst.percent}
+                onChange={(event) =>
+                  setPoData((prev) =>
+                    recalculatePoAmounts({
+                      ...prev,
+                      taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } },
+                    }, { cgstMode: "percent" })
+                  )
+                }
+              />
+            </Field>
+            <Field label="CGST Amount">
+              <Input
+                value={poData.taxes.cgst.amount}
+                onChange={(event) =>
+                  setPoData((prev) =>
+                    recalculatePoAmounts({
+                      ...prev,
+                      taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } },
+                    }, { cgstMode: "amount" })
+                  )
+                }
+              />
+            </Field>
+            <Field label="SGST %">
+              <Input
+                value={poData.taxes.sgst.percent}
+                onChange={(event) =>
+                  setPoData((prev) =>
+                    recalculatePoAmounts({
+                      ...prev,
+                      taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } },
+                    }, { sgstMode: "percent" })
+                  )
+                }
+              />
+            </Field>
+            <Field label="SGST Amount">
+              <Input
+                value={poData.taxes.sgst.amount}
+                onChange={(event) =>
+                  setPoData((prev) =>
+                    recalculatePoAmounts({
+                      ...prev,
+                      taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } },
+                    }, { sgstMode: "amount" })
+                  )
+                }
+              />
+            </Field>
+            <Field label="Total Amount"><Input value={poData.totalAmount} readOnly /></Field>
             <Field label="Delivery"><Input value={poData.summary.delivery} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value } }))} /></Field>
             <Field label="Payment"><Input value={poData.summary.payment} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, payment: event.target.value } }))} /></Field>
           </div>

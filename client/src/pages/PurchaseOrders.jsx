@@ -171,7 +171,7 @@ export default function PurchaseOrders() {
 
   const toNumberOrNull = (value) => {
     if (value === undefined || value === null || value === "") return null;
-    const parsed = Number(value);
+    const parsed = Number(String(value).replace(/,/g, "").trim());
     return Number.isNaN(parsed) ? null : parsed;
   };
 
@@ -180,25 +180,94 @@ export default function PurchaseOrders() {
     return String(rounded);
   };
 
-  const applyDiscountCalculations = (nextPoData) => {
+  const recalculatePoAmounts = (
+    nextPoData,
+    { discountMode = "auto", cgstMode = "auto", sgstMode = "auto" } = {}
+  ) => {
     const subtotal = (nextPoData.items || []).reduce((sum, item) => {
       const amount = toNumberOrNull(item.amount);
       return sum + (amount ?? 0);
     }, 0);
 
-    const discountPercent = toNumberOrNull(nextPoData.discount?.percent);
-    const hasDiscountPercent = discountPercent != null;
-    const discountAmount = hasDiscountPercent ? (subtotal * discountPercent) / 100 : 0;
+    const discountPercentInput = toNumberOrNull(nextPoData.discount?.percent);
+    const discountAmountInput = toNumberOrNull(nextPoData.discount?.amount);
+
+    let discountPercent = discountPercentInput;
+    let discountAmount = 0;
+
+    if (discountMode === "amount") {
+      discountAmount = discountAmountInput ?? 0;
+      discountPercent = subtotal > 0 ? (discountAmount * 100) / subtotal : undefined;
+    } else if (discountMode === "percent") {
+      discountAmount = discountPercentInput != null ? (subtotal * discountPercentInput) / 100 : 0;
+    } else if (discountPercentInput != null) {
+      discountAmount = (subtotal * discountPercentInput) / 100;
+    } else if (discountAmountInput != null) {
+      discountAmount = discountAmountInput;
+      discountPercent = subtotal > 0 ? (discountAmount * 100) / subtotal : undefined;
+    }
+
     const afterDiscountAmount = subtotal - discountAmount;
+
+    const calculateTax = (tax, mode) => {
+      const percentInput = toNumberOrNull(tax?.percent);
+      const amountInput = toNumberOrNull(tax?.amount);
+
+      if (mode === "amount") {
+        const amount = amountInput ?? 0;
+        const percent = afterDiscountAmount !== 0 ? (amount * 100) / afterDiscountAmount : undefined;
+        return { percent, amount };
+      }
+
+      if (mode === "percent") {
+        const percent = percentInput;
+        const amount = percent != null ? (afterDiscountAmount * percent) / 100 : 0;
+        return { percent, amount };
+      }
+
+      if (percentInput != null) {
+        return { percent: percentInput, amount: (afterDiscountAmount * percentInput) / 100 };
+      }
+
+      if (amountInput != null) {
+        return {
+          amount: amountInput,
+          percent: afterDiscountAmount !== 0 ? (amountInput * 100) / afterDiscountAmount : undefined,
+        };
+      }
+
+      return { percent: undefined, amount: 0 };
+    };
+
+    const cgst = calculateTax(nextPoData.taxes?.cgst, cgstMode);
+    const sgst = calculateTax(nextPoData.taxes?.sgst, sgstMode);
+    const totalAmount = afterDiscountAmount + cgst.amount + sgst.amount;
+
+    const toValue = (value) => (value != null ? formatCalculatedNumber(value) : "");
 
     return {
       ...nextPoData,
       subtotalAmount: subtotal > 0 ? formatCalculatedNumber(subtotal) : "",
       discount: {
         ...nextPoData.discount,
-        amount: hasDiscountPercent ? formatCalculatedNumber(discountAmount) : "",
+        percent: toValue(discountPercent),
+        amount: discountAmount > 0 ? formatCalculatedNumber(discountAmount) : "",
       },
       afterDiscountAmount: subtotal > 0 ? formatCalculatedNumber(afterDiscountAmount) : "",
+      taxes: {
+        ...nextPoData.taxes,
+        cgst: {
+          ...nextPoData.taxes.cgst,
+          percent: toValue(cgst.percent),
+          amount: cgst.amount > 0 ? formatCalculatedNumber(cgst.amount) : "",
+        },
+        sgst: {
+          ...nextPoData.taxes.sgst,
+          percent: toValue(sgst.percent),
+          amount: sgst.amount > 0 ? formatCalculatedNumber(sgst.amount) : "",
+        },
+      },
+      totalAmount: totalAmount > 0 ? formatCalculatedNumber(totalAmount) : "",
     };
   };
 
@@ -246,7 +315,7 @@ export default function PurchaseOrders() {
       }
 
       nextItems[index] = nextItem;
-      return applyDiscountCalculations({ ...prev, items: nextItems, source: "Manual" });
+      return recalculatePoAmounts({ ...prev, items: nextItems, source: "Manual" });
     });
   };
 
@@ -264,7 +333,7 @@ export default function PurchaseOrders() {
   const removeItem = (index) => {
     setPoData((prev) => {
       const nextItems = prev.items.filter((_, i) => i !== index);
-      return { ...prev, items: nextItems, source: "Manual" };
+      return recalculatePoAmounts({ ...prev, items: nextItems, source: "Manual" });
     });
   };
 
@@ -291,8 +360,9 @@ export default function PurchaseOrders() {
         sourceFileName: result?.data?.filename || file.name,
       };
 
-      setPoData(next);
-      navigate("preview", { state: { poData: next, mode: "create" } });
+      const recalculated = recalculatePoAmounts(next);
+      setPoData(recalculated);
+      navigate("preview", { state: { poData: recalculated, mode: "create" } });
     } catch (error) {
       toast({ title: "Upload failed", description: error?.message || "Could not extract PO document.", variant: "destructive" });
     } finally {
@@ -390,11 +460,12 @@ export default function PurchaseOrders() {
   const handleEditRecent = (item) => {
     if (!item?.payload) return;
     const normalized = normalizePoData(item.payload);
-    setPoData(normalized);
+    const recalculated = recalculatePoAmounts(normalized);
+    setPoData(recalculated);
     navigate("preview", {
       state: {
-        poData: normalized,
-        poId: item.po_id ?? normalized.po_id ?? null,
+        poData: recalculated,
+        poId: item.po_id ?? recalculated.po_id ?? null,
         mode: "edit",
       },
     });
@@ -495,17 +566,15 @@ export default function PurchaseOrders() {
                   <Field label="Company GST No">
                     <Input
                       type="text"
-                      inputMode="numeric"
                       value={poData.companyGstNo}
-                      onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: sanitizeNumberInput(event.target.value, { allowDecimal: false }), source: "Manual" }))}
+                      onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value, source: "Manual" }))}
                     />
                   </Field>
                   <Field label="Indent No">
                     <Input
                       type="text"
-                      inputMode="numeric"
                       value={poData.indentNo}
-                      onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: sanitizeNumberInput(event.target.value, { allowDecimal: false }), source: "Manual" }))}
+                      onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value, source: "Manual" }))}
                     />
                   </Field>
                   <Field label="Indent Date">
@@ -514,9 +583,8 @@ export default function PurchaseOrders() {
                   <Field label="Order No">
                     <Input
                       type="text"
-                      inputMode="numeric"
                       value={poData.orderNo}
-                      onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: sanitizeNumberInput(event.target.value, { allowDecimal: false }), source: "Manual" }))}
+                      onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value, source: "Manual" }))}
                     />
                   </Field>
                   <Field label="PO Date">
@@ -659,11 +727,11 @@ export default function PurchaseOrders() {
                       value={poData.discount.percent}
                       onChange={(event) =>
                         setPoData((prev) =>
-                          applyDiscountCalculations({
+                          recalculatePoAmounts({
                             ...prev,
                             discount: { ...prev.discount, percent: sanitizeNumberInput(event.target.value) },
                             source: "Manual",
-                          })
+                          }, { discountMode: "percent" })
                         )
                       }
                     />
@@ -685,7 +753,15 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.cgst.percent}
-                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                            onChange={(event) =>
+                              setPoData((prev) =>
+                                recalculatePoAmounts({
+                                  ...prev,
+                                  taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: sanitizeNumberInput(event.target.value) } },
+                                  source: "Manual",
+                                }, { cgstMode: "percent" })
+                              )
+                            }
                           />
                         </div>
                         <div className="flex items-center gap-2">
@@ -695,7 +771,15 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.cgst.amount}
-                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                            onChange={(event) =>
+                              setPoData((prev) =>
+                                recalculatePoAmounts({
+                                  ...prev,
+                                  taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: sanitizeNumberInput(event.target.value) } },
+                                  source: "Manual",
+                                }, { cgstMode: "amount" })
+                              )
+                            }
                           />
                         </div>
                       </div>
@@ -709,7 +793,15 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.sgst.percent}
-                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                            onChange={(event) =>
+                              setPoData((prev) =>
+                                recalculatePoAmounts({
+                                  ...prev,
+                                  taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: sanitizeNumberInput(event.target.value) } },
+                                  source: "Manual",
+                                }, { sgstMode: "percent" })
+                              )
+                            }
                           />
                         </div>
                         <div className="flex items-center gap-2">
@@ -719,14 +811,22 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.sgst.amount}
-                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                            onChange={(event) =>
+                              setPoData((prev) =>
+                                recalculatePoAmounts({
+                                  ...prev,
+                                  taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: sanitizeNumberInput(event.target.value) } },
+                                  source: "Manual",
+                                }, { sgstMode: "amount" })
+                              )
+                            }
                           />
                         </div>
                       </div>
                     </div>
                   </div>
                   <Field label="Total Amount">
-                    <Input type="number" inputMode="decimal" step="any" value={poData.totalAmount} onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: sanitizeNumberInput(event.target.value), source: "Manual" }))} />
+                    <Input type="number" inputMode="decimal" step="any" value={poData.totalAmount} readOnly />
                   </Field>
                   <Field label="Delivery">
                     <Input value={poData.summary.delivery} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value }, source: "Manual" }))} />
