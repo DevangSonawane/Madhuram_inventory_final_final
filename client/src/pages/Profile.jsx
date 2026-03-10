@@ -7,7 +7,6 @@ import {
   Phone,
   Mail,
   Edit,
-  Trash2,
   Shield,
   Loader2,
   Moon,
@@ -291,7 +290,7 @@ export default function Profile() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteUser(user)}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

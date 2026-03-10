@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, FileText, FileUp, PencilLine, Eye, Trash2 } from "lucide-react";
+import { Upload, FileText, FileUp, PencilLine, Eye } from "lucide-react";
 import { EMPTY_MIR } from "@/pages/mirShared";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
@@ -614,7 +614,7 @@ export default function MIR() {
                       <PencilLine className="mr-2 h-4 w-4" /> Edit
                     </Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(item.mir_id)}>
-                      <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      Delete
                     </Button>
                   </div>
                 </div>
@@ -662,7 +662,7 @@ export default function MIR() {
                         <PencilLine className="mr-2 h-3 w-3" /> Edit
                       </Button>
                       <Button variant="destructive" size="sm" onClick={() => handleDelete(item.mir_id)}>
-                        <Trash2 className="mr-2 h-3 w-3" /> Delete
+                        Delete
                       </Button>
                     </div>
                   </TableCell>

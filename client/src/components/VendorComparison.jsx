@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Plus, Trash2, ArrowRightLeft, DollarSign, ArrowLeft, Download } from 'lucide-react';
+import { Plus, ArrowRightLeft, DollarSign, ArrowLeft, Download } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -168,8 +168,8 @@ export function VendorComparison({ onBack }) {
                   className="font-semibold text-lg h-9 bg-background"
                   placeholder="Vendor Name"
                 />
-                <Button variant="ghost" size="icon" onClick={() => removeVendor(vendor.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                  <Trash2 className="h-4 w-4" />
+                <Button variant="destructive" size="sm" onClick={() => removeVendor(vendor.id)}>
+                  Delete
                 </Button>
               </div>
             </CardHeader>
@@ -193,8 +193,8 @@ export function VendorComparison({ onBack }) {
                         className="pl-8"
                       />
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => removeProduct(vendor.id, index)} className="h-8 w-8 text-muted-foreground hover:text-red-500">
-                      <Trash2 className="h-3 w-3" />
+                    <Button variant="destructive" size="sm" onClick={() => removeProduct(vendor.id, index)} className="h-8 px-2 text-xs">
+                      Delete
                     </Button>
                   </div>
                 ))}

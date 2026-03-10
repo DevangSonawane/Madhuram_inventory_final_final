@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Building2,
   Filter,
+  FileText,
+  Eye,
   Mail,
   MapPin,
   Phone,
@@ -11,7 +13,6 @@ import {
   ShieldAlert,
   UserCheck,
   Pencil,
-  Trash2,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,12 +51,14 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { vendorFlowStore } from "@/lib/vendorFlowStore";
 
 const statusStyles = {
   active: "bg-emerald-100 text-emerald-800 border-emerald-200",
   inactive: "bg-amber-100 text-amber-800 border-amber-200",
   blocked: "bg-rose-100 text-rose-800 border-rose-200",
 };
+const toTitleCase = (value = "") => (value ? value.charAt(0).toUpperCase() + value.slice(1) : "");
 
 const getEmptyForm = (projectId = "") => ({
   project_id: projectId ? String(projectId) : "",
@@ -68,6 +71,7 @@ const getEmptyForm = (projectId = "") => ({
 });
 
 export default function Vendors() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { projectId } = useParams();
   const [vendors, setVendors] = useState([]);
@@ -93,20 +97,31 @@ export default function Vendors() {
       if (result.success) {
         setVendors(Array.isArray(result.data) ? result.data : []);
       } else {
-        setVendors([]);
+        const localRows = vendorFlowStore.listVendors(projectId);
+        setVendors(localRows);
+        if ((localRows || []).length === 0) {
+          toast({
+            title: "Failed to load vendors",
+            description: result.error || "Could not fetch vendor list.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Using local vendor data",
+            description: "Backend vendor API is unavailable. Showing local draft data.",
+          });
+        }
+      }
+    } catch {
+      const localRows = vendorFlowStore.listVendors(projectId);
+      setVendors(localRows);
+      if ((localRows || []).length === 0) {
         toast({
           title: "Failed to load vendors",
-          description: result.error || "Could not fetch vendor list.",
+          description: "Could not fetch vendor list.",
           variant: "destructive",
         });
       }
-    } catch {
-      setVendors([]);
-      toast({
-        title: "Failed to load vendors",
-        description: "Could not fetch vendor list.",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }
@@ -209,6 +224,7 @@ export default function Vendors() {
 
     try {
       setSubmitting(true);
+      let savedLocally = false;
 
       let result;
       if (editingVendorId) {
@@ -229,8 +245,21 @@ export default function Vendors() {
         } else {
           result = await api.updateVendor(editingVendorId, payload);
         }
+
+        if (!result?.success) {
+          const local = vendorFlowStore.updateVendor(editingVendorId, payload);
+          if (local) {
+            savedLocally = true;
+            result = { success: true, data: local };
+          }
+        }
       } else {
         result = await api.createVendor(payload);
+        if (!result?.success) {
+          const local = vendorFlowStore.createVendor(payload);
+          savedLocally = true;
+          result = { success: true, data: local };
+        }
       }
 
       if (!result.success) {
@@ -245,8 +274,12 @@ export default function Vendors() {
       toast({
         title: editingVendorId ? "Vendor updated" : "Vendor created",
         description: editingVendorId
-          ? "Vendor details were updated successfully."
-          : "Vendor was added successfully.",
+          ? savedLocally
+            ? "Vendor updated in local draft mode."
+            : "Vendor details were updated successfully."
+          : savedLocally
+            ? "Vendor added in local draft mode."
+            : "Vendor was added successfully.",
       });
 
       setIsDialogOpen(false);
@@ -270,7 +303,15 @@ export default function Vendors() {
 
     try {
       setDeletingVendorId(vendorToDelete.vendor_id);
-      const result = await api.deleteVendor(vendorToDelete.vendor_id);
+      let result = await api.deleteVendor(vendorToDelete.vendor_id);
+      let deletedLocally = false;
+
+      if (!result?.success) {
+        deletedLocally = vendorFlowStore.deleteVendor(vendorToDelete.vendor_id);
+        if (deletedLocally) {
+          result = { success: true };
+        }
+      }
 
       if (!result.success) {
         toast({
@@ -283,7 +324,9 @@ export default function Vendors() {
 
       toast({
         title: "Vendor deleted",
-        description: `${vendorToDelete.vendor_name || "Vendor"} removed successfully.`,
+        description: deletedLocally
+          ? `${vendorToDelete.vendor_name || "Vendor"} removed from local draft data.`
+          : `${vendorToDelete.vendor_name || "Vendor"} removed successfully.`,
       });
       setVendorToDelete(null);
       await fetchVendors();
@@ -296,6 +339,16 @@ export default function Vendors() {
     } finally {
       setDeletingVendorId(null);
     }
+  };
+
+  const openPriceLists = (vendor) => {
+    if (!vendor?.vendor_id) return;
+    navigate(`/${projectId}/vendors/${vendor.vendor_id}/price-lists`);
+  };
+
+  const openViewPrice = (vendor) => {
+    if (!vendor?.vendor_id) return;
+    navigate(`/${projectId}/vendors/${vendor.vendor_id}/view-price`);
   };
 
   return (
@@ -357,7 +410,6 @@ export default function Vendors() {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by name, company, email, phone or city"
                 className="pl-9"
               />
             </div>
@@ -365,7 +417,7 @@ export default function Vendors() {
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
                 <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
-                <SelectValue placeholder="Filter by status" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All statuses</SelectItem>
@@ -378,7 +430,7 @@ export default function Vendors() {
             <Select value={projectFilter} onValueChange={setProjectFilter}>
               <SelectTrigger>
                 <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                <SelectValue placeholder="Filter by project" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All projects</SelectItem>
@@ -391,91 +443,104 @@ export default function Vendors() {
             </Select>
           </div>
 
-          <div className="rounded-xl border">
-            <Table>
-              <TableHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Project</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[320px] text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
                 <TableRow>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[80px] text-right">Action</TableHead>
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <div className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading vendors...
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              ) : filteredVendors.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-20 text-center text-muted-foreground">
+                    No vendors found for current filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredVendors.map((vendor) => (
+                  <TableRow key={vendor.vendor_id}>
+                    <TableCell>
+                      <div className="font-medium">{vendor.vendor_name || "-"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {vendor.vendor_company_name || "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell>Project {vendor.project_id ?? "-"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <Mail className="h-3 w-3" /> {vendor.vendor_email || "-"}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="h-3 w-3" /> {vendor.mobile_number || "-"}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {vendor.location || "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={statusStyles[vendor.status] || ""} variant="outline">
+                        {vendor.status ? toTitleCase(vendor.status) : "-"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
                       <div className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Loading vendors...
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openPriceLists(vendor)}
+                          title="Open price lists"
+                        >
+                          <FileText className="mr-2 h-4 w-4" /> Price Lists
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openViewPrice(vendor)}
+                          title="View latest prices"
+                        >
+                          <Eye className="mr-2 h-4 w-4" /> View Price
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(vendor)}
+                          title="Edit vendor"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setVendorToDelete(vendor)}
+                          title="Delete vendor"
+                        >
+                          Delete
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredVendors.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-20 text-center text-muted-foreground">
-                      No vendors found for current filters.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredVendors.map((vendor) => (
-                    <TableRow key={vendor.vendor_id}>
-                      <TableCell>
-                        <div className="font-medium">{vendor.vendor_name || "-"}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {vendor.vendor_company_name || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>Project {vendor.project_id ?? "-"}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1.5">
-                            <Mail className="h-3 w-3" /> {vendor.vendor_email || "-"}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="h-3 w-3" /> {vendor.mobile_number || "-"}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {vendor.location || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={statusStyles[vendor.status] || ""} variant="outline">
-                          {vendor.status || "-"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="inline-flex items-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(vendor)}
-                            title="Edit vendor"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setVendorToDelete(vendor)}
-                            title="Delete vendor"
-                            className="text-rose-600 hover:text-rose-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
@@ -495,17 +560,15 @@ export default function Vendors() {
                 id="vendor_name"
                 value={form.vendor_name}
                 onChange={(event) => setForm((prev) => ({ ...prev, vendor_name: event.target.value }))}
-                placeholder="Enter vendor name"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="project_id">Project ID</Label>
+              <Label htmlFor="project_id">Project Id</Label>
               <Input
                 id="project_id"
                 value={form.project_id}
                 onChange={(event) => setForm((prev) => ({ ...prev, project_id: event.target.value }))}
-                placeholder="Enter project ID"
               />
             </div>
 
@@ -521,13 +584,13 @@ export default function Vendors() {
                 <SelectContent>
                   <SelectItem value="active">
                     <div className="flex items-center gap-2">
-                      <UserCheck className="h-4 w-4" /> active
+                      <UserCheck className="h-4 w-4" /> Active
                     </div>
                   </SelectItem>
-                  <SelectItem value="inactive">inactive</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
                   <SelectItem value="blocked">
                     <div className="flex items-center gap-2">
-                      <ShieldAlert className="h-4 w-4" /> blocked
+                      <ShieldAlert className="h-4 w-4" /> Blocked
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -542,7 +605,6 @@ export default function Vendors() {
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, vendor_company_name: event.target.value }))
                 }
-                placeholder="Enter company name"
               />
             </div>
 
@@ -553,7 +615,6 @@ export default function Vendors() {
                 type="email"
                 value={form.vendor_email}
                 onChange={(event) => setForm((prev) => ({ ...prev, vendor_email: event.target.value }))}
-                placeholder="Enter email address"
               />
             </div>
 
@@ -563,7 +624,6 @@ export default function Vendors() {
                 id="mobile_number"
                 value={form.mobile_number}
                 onChange={(event) => setForm((prev) => ({ ...prev, mobile_number: event.target.value }))}
-                placeholder="Enter mobile number"
               />
             </div>
 
@@ -573,7 +633,6 @@ export default function Vendors() {
                 id="location"
                 value={form.location}
                 onChange={(event) => setForm((prev) => ({ ...prev, location: event.target.value }))}
-                placeholder="Enter location"
               />
             </div>
           </div>

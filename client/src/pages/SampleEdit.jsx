@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Plus, Trash2, Eye } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Eye } from "lucide-react";
 
 export default function SampleEdit() {
   const { id, projectId } = useParams();
@@ -197,10 +197,10 @@ export default function SampleEdit() {
                       <Input placeholder="Value" value={row.value} onChange={(e) => {
                         const next = [...form.item_description]; next[idx] = { ...next[idx], value: e.target.value }; setForm({ ...form, item_description: next });
                       }} />
-                      <Button size="sm" variant="ghost" onClick={() => {
+                      <Button size="sm" variant="destructive" onClick={() => {
                         const next = form.item_description.filter((_, i) => i !== idx); setForm({ ...form, item_description: next });
                       }}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        Delete
                       </Button>
                     </div>
                   ))}
@@ -226,11 +226,11 @@ export default function SampleEdit() {
                       <Button
                         type="button"
                         size="sm"
-                        variant="ghost"
+                        variant="destructive"
                         onClick={() => setForm({ ...form, add_fields: form.add_fields.filter((_, i) => i !== idx) })}
                         className="md:w-auto w-full"
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        Delete
                       </Button>
                     </div>
                   ))}

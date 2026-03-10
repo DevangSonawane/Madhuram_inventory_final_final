@@ -2,18 +2,34 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Table = React.forwardRef(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props} />
-  </div>
-))
+const Table = React.forwardRef(({ className, containerClassName, ...props }, ref) => {
+  const hiddenTableMatch =
+    typeof className === "string"
+      ? className.match(/\b((?:sm|md|lg|xl|2xl):table)\b/)
+      : null
+  const responsiveContainerVisibility = hiddenTableMatch
+    ? `hidden ${hiddenTableMatch[1].replace(":table", ":block")}`
+    : ""
+
+  return (
+    <div
+      className={cn(
+        "relative w-full overflow-x-auto rounded-xl border border-border/70 bg-background",
+        responsiveContainerVisibility,
+        containerClassName
+      )}
+    >
+      <table
+        ref={ref}
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props} />
+    </div>
+  )
+})
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b bg-muted/30", className)} {...props} />
+  <thead ref={ref} className={cn("[&_tr]:border-b bg-muted/40", className)} {...props} />
 ))
 TableHeader.displayName = "TableHeader"
 
@@ -37,7 +53,7 @@ const TableRow = React.forwardRef(({ className, ...props }, ref) => (
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-muted/40 data-[state=selected]:bg-muted",
+      "border-b transition-colors hover:bg-muted/30 data-[state=selected]:bg-muted",
       className
     )}
     {...props} />
@@ -48,7 +64,7 @@ const TableHead = React.forwardRef(({ className, ...props }, ref) => (
   <th
     ref={ref}
     className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+      "h-12 px-4 text-left align-middle text-sm font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0",
       className
     )}
     {...props} />

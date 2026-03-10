@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Eye, Calendar as CalendarIcon, Check, ChevronsRight, Trash2, Upload, FileText, Keyboard, FileSpreadsheet } from "lucide-react";
+import { Plus, Eye, Calendar as CalendarIcon, Check, ChevronsRight, Upload, FileText, Keyboard, FileSpreadsheet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -309,8 +309,8 @@ function CreatePRDialog({ open, onOpenChange, onSubmit }) {
                                                     <div className="flex-1 md:col-span-3 text-sm">{item.quantity}</div>
                                                     <div className="flex-1 md:col-span-3 text-sm">{item.unit}</div>
                                                     <div className="md:col-span-1 text-center">
-                                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleRemoveItem(item.id)}>
-                                                            <Trash2 className="h-4 w-4" />
+                                                        <Button variant="destructive" size="sm" onClick={() => handleRemoveItem(item.id)}>
+                                                            Delete
                                                         </Button>
                                                     </div>
                                                 </div>

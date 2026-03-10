@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, Boxes, PackagePlus, RefreshCw, Search, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, Boxes, PackagePlus, RefreshCw, Search, Loader2, Pencil } from 'lucide-react';
 
 const EMPTY_FORM = {
   brand: '',
@@ -650,11 +650,11 @@ export default function AddInventory() {
                         </Button>
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="destructive"
                           onClick={() => removeItem(item)}
                           disabled={Boolean(rowPending[item.id])}
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          Delete
                         </Button>
                       </div>
                     </div>

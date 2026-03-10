@@ -12,6 +12,8 @@ import mirRoutes from './routes/mirRoutes.js';
 import itrRoutes from './routes/itrRoutes.js';
 import sampleRoutes from './routes/sampleRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
+import vendorRoutes from './routes/vendorRoutes.js';
+import vendorPriceListRoutes from './routes/vendorPriceListRoutes.js';
 
 dotenv.config();
 
@@ -36,6 +38,8 @@ app.use('/api/mir', mirRoutes);
 app.use('/api/itr', itrRoutes);
 app.use('/api/sample', sampleRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/vendors', vendorRoutes);
+app.use('/api/vendor-price-list', vendorPriceListRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {

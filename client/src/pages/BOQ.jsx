@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil, Trash2 } from "lucide-react";
+import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPdfWithOcr } from "@/lib/pdfUtils";
@@ -450,8 +450,8 @@ export default function BOQ() {
                         <Button variant="ghost" size="icon" onClick={() => openEditDialog(item)} title="Edit">
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item)} title="Delete" className="text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteItem(item)} title="Delete">
+                          Delete
                         </Button>
                       </div>
                     </TableCell>
@@ -572,8 +572,8 @@ export default function BOQ() {
                   <Button variant="ghost" size="sm" onClick={() => openEditDialog(item)}>
                     <Pencil className="mr-2 h-4 w-4" /> Edit
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteItem(item)} className="text-destructive hover:text-destructive">
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  <Button variant="destructive" size="sm" onClick={() => handleDeleteItem(item)}>
+                    Delete
                   </Button>
                 </div>
               </div>

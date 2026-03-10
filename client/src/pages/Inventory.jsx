@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
-import { Search, RefreshCw, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Search, RefreshCw, Plus, Pencil } from 'lucide-react';
 
 function normalizeInventory(it) {
   return {
@@ -310,8 +310,8 @@ export default function Inventory() {
                         <Button size="sm" variant="outline" onClick={() => openEdit(it)}>
                           <Pencil className="h-4 w-4 mr-2" /> Edit
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => removeItem(it)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button size="sm" variant="destructive" onClick={() => removeItem(it)}>
+                          Delete
                         </Button>
                       </div>
                     </TableCell>

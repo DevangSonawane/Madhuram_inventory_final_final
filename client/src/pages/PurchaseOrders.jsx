@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, FileUp, PencilLine, Eye, Trash2, Plus, Minus } from "lucide-react";
+import { Upload, FileUp, PencilLine, Eye, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
@@ -535,7 +535,7 @@ export default function PurchaseOrders() {
                     <PencilLine className="mr-2 h-4 w-4" /> Edit
                   </Button>
                   <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item)}>
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                    Delete
                   </Button>
                 </div>
               </div>
@@ -578,7 +578,7 @@ export default function PurchaseOrders() {
                         <PencilLine className="mr-2 h-3 w-3" /> Edit
                       </Button>
                       <Button variant="destructive" size="sm" onClick={() => handleDeleteRecent(item)}>
-                        <Trash2 className="mr-2 h-3 w-3" /> Delete
+                        Delete
                       </Button>
                     </div>
                   </TableCell>

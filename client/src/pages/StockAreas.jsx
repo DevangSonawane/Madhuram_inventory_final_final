@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Warehouse, MapPin, Box, MoreVertical, Edit, Trash2 } from "lucide-react";
+import { Plus, Warehouse, MapPin, Box, MoreVertical, Edit } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -232,7 +232,7 @@ export default function StockAreas() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                                <DropdownMenuItem className="text-red-600">Delete</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

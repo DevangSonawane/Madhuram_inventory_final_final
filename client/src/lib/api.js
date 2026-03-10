@@ -904,6 +904,77 @@ export const api = {
     return handleResponse(response);
   },
 
+  // Vendor Price Lists
+  uploadVendorPriceListFile: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  getVendorPriceLists: async (vendorId) => {
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/vendor/${vendorId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getVendorPriceListById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  createVendorPriceList: async (data) => {
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  updateVendorPriceList: async (id, data) => {
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  deleteVendorPriceList: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateVendorPriceListStatus: async (id, status) => {
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/${id}/status`, {
+      method: 'PATCH',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+    return handleResponse(response);
+  },
+
   createInventory: async (data) => {
     const payload = {
       project_id: data.project_id,

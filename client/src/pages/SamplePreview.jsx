@@ -162,34 +162,32 @@ export default function SamplePreview() {
 
                 <div className="space-y-3">
                   <div className="text-sm font-medium">Item Description</div>
-                  <div className="overflow-x-auto rounded-xl border">
-                    <Table>
-                      <TableHeader>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[100px]">Sr No</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="w-[160px] text-right">Quantity</TableHead>
+                        <TableHead className="w-[160px] text-right">Value</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(sample.item_description || []).length === 0 ? (
                         <TableRow>
-                          <TableHead className="w-[100px]">Sr No</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="w-[160px] text-right">Quantity</TableHead>
-                          <TableHead className="w-[160px] text-right">Value</TableHead>
+                          <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">No item rows available</TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(sample.item_description || []).length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">No item rows available</TableCell>
+                      ) : (
+                        (sample.item_description || []).map((row, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>{row.sr_no || '-'}</TableCell>
+                            <TableCell>{row.description || '-'}</TableCell>
+                            <TableCell className="text-right">{row.quantity || '-'}</TableCell>
+                            <TableCell className="text-right">{row.value || '-'}</TableCell>
                           </TableRow>
-                        ) : (
-                          (sample.item_description || []).map((row, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell>{row.sr_no || '-'}</TableCell>
-                              <TableCell>{row.description || '-'}</TableCell>
-                              <TableCell className="text-right">{row.quantity || '-'}</TableCell>
-                              <TableCell className="text-right">{row.value || '-'}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
 
                 <div className="space-y-3">

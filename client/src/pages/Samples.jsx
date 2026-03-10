@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Layers, Save, Copy, Upload, CheckCircle, FileText, Image as ImageIcon, ArrowRight, ArrowLeft, Eye, Loader2, Search, Filter, Download, Plus, Trash2 } from "lucide-react";
+import { Layers, Save, Copy, Upload, CheckCircle, FileText, Image as ImageIcon, ArrowRight, ArrowLeft, Eye, Loader2, Search, Filter, Download, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { extractImagesFromPdf, extractTextFromPdf } from "@/lib/pdfUtils";
@@ -1079,10 +1079,10 @@ export default function Samples() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => {
+                      <Button size="sm" variant="destructive" onClick={() => {
                         const next = createForm.item_description.filter((_, i) => i !== idx); setCreateForm({ ...createForm, item_description: next });
                       }}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        Delete
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -1109,11 +1109,11 @@ export default function Samples() {
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
+                    variant="destructive"
                     onClick={() => removeAdditionalField("create", idx)}
                     className="md:w-auto w-full"
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    Delete
                   </Button>
                 </div>
               ))}
@@ -1177,7 +1177,6 @@ export default function Samples() {
                   <TableHead>Building</TableHead>
                   <TableHead>Site</TableHead>
                   <TableHead>Work</TableHead>
-                  <TableHead>File</TableHead>
                   <TableHead className="w-[160px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -1189,19 +1188,12 @@ export default function Samples() {
                     <TableCell>{s.site_name || '-'}</TableCell>
                     <TableCell>{s.work_done || '-'}</TableCell>
                     <TableCell>
-                      {s.sample_file ? (
-                        <a href={api.getApiFileUrl(s.sample_file)} target="_blank" rel="noreferrer" className="text-blue-600">Open</a>
-                      ) : (
-                        <span className="text-muted-foreground">None</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       <div className="flex gap-2">
                         <Button size="sm" variant="secondary" onClick={() => openPreview(s)}>
                           <Eye className="h-4 w-4 mr-1" /> Preview
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => removeSample(s)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                        <Button size="sm" variant="destructive" onClick={() => removeSample(s)}>
+                          Delete
                         </Button>
                       </div>
                     </TableCell>

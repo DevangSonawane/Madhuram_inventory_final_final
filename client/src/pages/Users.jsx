@@ -6,8 +6,7 @@ import {
   MoreVertical,
   Phone,
   Mail,
-  Edit,
-  Trash2
+  Edit
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -314,7 +313,7 @@ export default function Users() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(user)}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete User
+                Delete User
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

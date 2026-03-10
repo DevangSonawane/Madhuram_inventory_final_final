@@ -21,6 +21,10 @@ import Samples from '@/pages/Samples';
 import SamplePreview from '@/pages/SamplePreview';
 import SampleEdit from '@/pages/SampleEdit';
 import VendorComparison from '@/pages/VendorComparison';
+import VendorPriceLists from '@/pages/VendorPriceLists';
+import VendorPriceListCreate from '@/pages/VendorPriceListCreate';
+import VendorViewPrice from '@/pages/VendorViewPrice';
+import VendorPriceListView from '@/pages/VendorPriceListView';
 import Challans from '@/pages/Challans';
 import NewChallan from '@/pages/NewChallan';
 import MER from '@/pages/MER';
@@ -79,6 +83,10 @@ function App() {
                   <Route path="consumption" element={<Consumption />} />
                   <Route path="returns" element={<Returns />} />
                   <Route path="vendors" element={<Vendors />} />
+                  <Route path="vendors/:vendorId/price-lists" element={<VendorPriceLists />} />
+                  <Route path="vendors/:vendorId/price-lists/create" element={<VendorPriceListCreate />} />
+                  <Route path="vendors/:vendorId/view-price" element={<VendorViewPrice />} />
+                  <Route path="vendors/:vendorId/price-lists/:priceListId" element={<VendorPriceListView />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="boq" element={<BOQ />} />

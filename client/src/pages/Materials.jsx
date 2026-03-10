@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
-import { Plus, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -247,7 +247,7 @@ export default function Materials() {
                   <Pencil className="mr-2 h-4 w-4" /> Edit
               </DropdownMenuItem>
               <DropdownMenuItem className="text-red-600">
-                  <Trash className="mr-2 h-4 w-4" /> Delete
+                  Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
