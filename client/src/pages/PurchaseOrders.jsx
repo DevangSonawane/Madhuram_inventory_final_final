@@ -7,11 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, FileUp, PencilLine, Eye, Plus, Minus } from "lucide-react";
+import { Upload, FileUp, PencilLine, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
-import { EMPTY_PO, normalizePoData } from "@/pages/poShared";
+import { EMPTY_PO, normalizePoData, sanitizeNumberInput, sanitizePhoneInput } from "@/pages/poShared";
 
 function Field({ label, children, className = "" }) {
   return (
@@ -22,6 +22,89 @@ function Field({ label, children, className = "" }) {
   );
 }
 
+const parseDecimalValue = (value) => {
+  if (value === undefined || value === null) return undefined;
+  const normalized = String(value).replace(/,/g, "").trim();
+  if (normalized === "") return undefined;
+  const parsed = Number(normalized);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
+const normalizeDateForApi = (value) => {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const inlineDayFirstMatch = raw.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (inlineDayFirstMatch) {
+    const [, day, month, year] = inlineDayFirstMatch;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const inlineIsoMatch = raw.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (inlineIsoMatch) {
+    const [, year, month, day] = inlineIsoMatch;
+    return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  return null;
+};
+
+const buildItemPayloads = (items) => {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item, index) => {
+      const payload = {
+        srno: item.srNo || item.srno || index + 1,
+        hsn: item.hsnCode || item.hsn || "",
+        description: item.description || "",
+        qty: item.qty || item.quantity || "",
+        UOM: item.uom || item.UOM || "",
+        Rate: item.rate || item.Rate || "",
+        Amount: item.amount || item.Amount || "",
+        remark: item.remarks || item.remark || "",
+      };
+      const hasContent = payload.description || payload.hsn || payload.qty || payload.Rate || payload.Amount;
+      return hasContent ? payload : null;
+    })
+    .filter(Boolean);
+};
+
+const buildPoPayload = (poData, projectId) => ({
+  project_id: projectId,
+  company_name: poData.companyName || "",
+  company_subtitle: poData.companySubtitle || "",
+  company_email: poData.companyEmail || "",
+  company_gst: poData.companyGstNo || "",
+  indent_no: poData.indentNo || "",
+  indent_date: normalizeDateForApi(poData.indentDate),
+  order_no: poData.orderNo || "",
+  po_date: normalizeDateForApi(poData.poDate),
+  vendor_name: poData.vendor.name || "",
+  site: poData.vendor.site || "",
+  contact_person: poData.vendor.contactPerson || "",
+  vendor_address: poData.vendor.address || "",
+  primary_contact_name: poData.vendor.contacts.primary.name || "",
+  primary_contact_number: poData.vendor.contacts.primary.phone || "",
+  secondary_contact_name: poData.vendor.contacts.secondary.name || "",
+  secondary_contact_number: poData.vendor.contacts.secondary.phone || "",
+  items: buildItemPayloads(poData.items),
+  discount: parseDecimalValue(poData.discount.percent),
+  discount_amount: parseDecimalValue(poData.discount.amount),
+  after_discount: parseDecimalValue(poData.afterDiscountAmount),
+  cgst: parseDecimalValue(poData.taxes.cgst.percent),
+  cgst_amount: parseDecimalValue(poData.taxes.cgst.amount),
+  sgst: parseDecimalValue(poData.taxes.sgst.percent),
+  sgst_amount: parseDecimalValue(poData.taxes.sgst.amount),
+  total_amount: parseDecimalValue(poData.totalAmount),
+  delivery: poData.summary.delivery || "",
+  payment: poData.summary.payment || "",
+  notes: poData.notes.length ? poData.notes.join("\\n") : "",
+  status: poData.status || "created",
+});
+
 export default function PurchaseOrders() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -31,6 +114,7 @@ export default function PurchaseOrders() {
   const [poData, setPoData] = useState(EMPTY_PO);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [recentPos, setRecentPos] = useState([]);
   const [loadingPos, setLoadingPos] = useState(false);
 
@@ -85,6 +169,39 @@ export default function PurchaseOrders() {
     return poData.vendor?.name || poData.orderNo || poData.poDate || poData.totalAmount;
   }, [poData]);
 
+  const toNumberOrNull = (value) => {
+    if (value === undefined || value === null || value === "") return null;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const formatCalculatedNumber = (value) => {
+    const rounded = Math.round(value * 100) / 100;
+    return String(rounded);
+  };
+
+  const applyDiscountCalculations = (nextPoData) => {
+    const subtotal = (nextPoData.items || []).reduce((sum, item) => {
+      const amount = toNumberOrNull(item.amount);
+      return sum + (amount ?? 0);
+    }, 0);
+
+    const discountPercent = toNumberOrNull(nextPoData.discount?.percent);
+    const hasDiscountPercent = discountPercent != null;
+    const discountAmount = hasDiscountPercent ? (subtotal * discountPercent) / 100 : 0;
+    const afterDiscountAmount = subtotal - discountAmount;
+
+    return {
+      ...nextPoData,
+      subtotalAmount: subtotal > 0 ? formatCalculatedNumber(subtotal) : "",
+      discount: {
+        ...nextPoData.discount,
+        amount: hasDiscountPercent ? formatCalculatedNumber(discountAmount) : "",
+      },
+      afterDiscountAmount: subtotal > 0 ? formatCalculatedNumber(afterDiscountAmount) : "",
+    };
+  };
+
   const updateVendor = (key, value) => {
     setPoData((prev) => ({
       ...prev,
@@ -94,13 +211,14 @@ export default function PurchaseOrders() {
   };
 
   const updateVendorContact = (key, field, value) => {
+    const nextValue = field === "phone" ? sanitizePhoneInput(value) : value;
     setPoData((prev) => ({
       ...prev,
       vendor: {
         ...prev.vendor,
         contacts: {
           ...prev.vendor.contacts,
-          [key]: { ...prev.vendor.contacts[key], [field]: value },
+          [key]: { ...prev.vendor.contacts[key], [field]: nextValue },
         },
       },
       source: "Manual",
@@ -108,10 +226,27 @@ export default function PurchaseOrders() {
   };
 
   const updateItem = (index, field, value) => {
+    const numericIntegerFields = new Set(["srNo"]);
+    const numericDecimalFields = new Set(["qty", "rate", "amount"]);
+    const nextValue = numericIntegerFields.has(field)
+      ? sanitizeNumberInput(value, { allowDecimal: false })
+      : numericDecimalFields.has(field)
+        ? sanitizeNumberInput(value)
+        : value;
     setPoData((prev) => {
       const nextItems = [...prev.items];
-      nextItems[index] = { ...nextItems[index], [field]: value };
-      return { ...prev, items: nextItems, source: "Manual" };
+      const nextItem = { ...nextItems[index], [field]: nextValue };
+
+      if (field === "qty" || field === "rate") {
+        const qty = Number(nextItem.qty);
+        const rate = Number(nextItem.rate);
+        const hasQty = nextItem.qty !== "" && !Number.isNaN(qty);
+        const hasRate = nextItem.rate !== "" && !Number.isNaN(rate);
+        nextItem.amount = hasQty && hasRate ? String(qty * rate) : "";
+      }
+
+      nextItems[index] = nextItem;
+      return applyDiscountCalculations({ ...prev, items: nextItems, source: "Manual" });
     });
   };
 
@@ -172,14 +307,57 @@ export default function PurchaseOrders() {
     handleFile(file);
   };
 
-  const handlePreview = () => {
-    navigate("preview", {
-      state: {
-        poData,
-        poId: poData?.po_id ?? null,
-        mode: poData?.po_id ? "edit" : "create",
-      },
-    });
+  const handleSubmitPo = async () => {
+    if (!projectId) {
+      toast({ title: "Select project", description: "Choose a project before submitting a PO.", variant: "destructive" });
+      return;
+    }
+
+    const numericProjectId = Number(projectId);
+    if (Number.isNaN(numericProjectId)) {
+      toast({ title: "Select project", description: "Invalid project selected.", variant: "destructive" });
+      return;
+    }
+
+    const payload = buildPoPayload(poData, numericProjectId);
+    setSubmitting(true);
+    try {
+      const response = await api.createPo(payload);
+      if (response.success) {
+        toast({ title: "PO submitted", description: "Purchase order saved successfully." });
+        setPoData(EMPTY_PO);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        const result = await api.getPosByProject(numericProjectId);
+        if (result.success && Array.isArray(result.data)) {
+          const mapped = result.data.map((record) => {
+            const normalized = normalizePoData(record);
+            const id = normalized.orderNo || `PO-${record.po_id || Date.now()}`;
+            const date = normalized.poDate || normalized.indentDate || record.created_at || "";
+            const vendorName = normalized.vendor?.name || "";
+            const totalAmount = normalized.totalAmount || record.total_amount || "";
+            const status = normalized.status || record.status || "created";
+            return {
+              id,
+              date,
+              vendor: vendorName,
+              totalAmount,
+              status,
+              payload: normalized,
+              po_id: record.po_id,
+            };
+          });
+          setRecentPos(mapped);
+        }
+      } else {
+        toast({ title: "Error", description: response.error || "Failed to submit PO.", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to submit PO.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleClear = () => {
@@ -229,9 +407,6 @@ export default function PurchaseOrders() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Purchase Orders</h1>
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Upload and manage purchase orders.</p>
         </div>
-        <Button variant="outline" className="w-full sm:w-auto" onClick={handlePreview}>
-          <Eye className="mr-2 h-4 w-4" /> Preview
-        </Button>
       </div>
 
       <Card>
@@ -318,19 +493,34 @@ export default function PurchaseOrders() {
                     <Input value={poData.companyEmail} onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value, source: "Manual" }))} />
                   </Field>
                   <Field label="Company GST No">
-                    <Input value={poData.companyGstNo} onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value, source: "Manual" }))} />
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={poData.companyGstNo}
+                      onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: sanitizeNumberInput(event.target.value, { allowDecimal: false }), source: "Manual" }))}
+                    />
                   </Field>
                   <Field label="Indent No">
-                    <Input value={poData.indentNo} onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value, source: "Manual" }))} />
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={poData.indentNo}
+                      onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: sanitizeNumberInput(event.target.value, { allowDecimal: false }), source: "Manual" }))}
+                    />
                   </Field>
                   <Field label="Indent Date">
-                    <Input value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value, source: "Manual" }))} />
+                    <Input type="date" value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value, source: "Manual" }))} />
                   </Field>
                   <Field label="Order No">
-                    <Input value={poData.orderNo} onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value, source: "Manual" }))} />
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={poData.orderNo}
+                      onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: sanitizeNumberInput(event.target.value, { allowDecimal: false }), source: "Manual" }))}
+                    />
                   </Field>
                   <Field label="PO Date">
-                    <Input value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value, source: "Manual" }))} />
+                    <Input type="date" value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value, source: "Manual" }))} />
                   </Field>
                 </div>
 
@@ -354,13 +544,13 @@ export default function PurchaseOrders() {
                     <Input value={poData.vendor.contacts.primary.name} onChange={(event) => updateVendorContact("primary", "name", event.target.value)} />
                   </Field>
                   <Field label="Primary Contact Phone">
-                    <Input value={poData.vendor.contacts.primary.phone} onChange={(event) => updateVendorContact("primary", "phone", event.target.value)} />
+                    <Input type="tel" inputMode="numeric" maxLength={15} value={poData.vendor.contacts.primary.phone} onChange={(event) => updateVendorContact("primary", "phone", event.target.value)} />
                   </Field>
                   <Field label="Secondary Contact Name">
                     <Input value={poData.vendor.contacts.secondary.name} onChange={(event) => updateVendorContact("secondary", "name", event.target.value)} />
                   </Field>
                   <Field label="Secondary Contact Phone">
-                    <Input value={poData.vendor.contacts.secondary.phone} onChange={(event) => updateVendorContact("secondary", "phone", event.target.value)} />
+                    <Input type="tel" inputMode="numeric" maxLength={15} value={poData.vendor.contacts.secondary.phone} onChange={(event) => updateVendorContact("secondary", "phone", event.target.value)} />
                   </Field>
                 </div>
 
@@ -388,53 +578,72 @@ export default function PurchaseOrders() {
                           <div>Amount</div>
                         </div>
                         {poData.items.map((item, idx) => (
-                        <div key={`${item.srNo}-${idx}`} className="grid gap-2 sm:grid-cols-8 items-center">
-                          <Input
-                            className="sm:col-span-1"
-                            value={item.srNo}
-                            onChange={(event) => updateItem(idx, "srNo", event.target.value)}
-                          />
-                          <Input
-                            className="sm:col-span-1"
-                            value={item.hsnCode}
-                            onChange={(event) => updateItem(idx, "hsnCode", event.target.value)}
-                          />
-                          <Input
-                            className="sm:col-span-2"
-                            value={item.description}
-                            onChange={(event) => updateItem(idx, "description", event.target.value)}
-                          />
-                          <Input
-                            className="sm:col-span-1"
-                            value={item.qty}
-                            onChange={(event) => updateItem(idx, "qty", event.target.value)}
-                          />
-                          <Input
-                            className="sm:col-span-1"
-                            value={item.uom}
-                            onChange={(event) => updateItem(idx, "uom", event.target.value)}
-                          />
-                          <Input
-                            className="sm:col-span-1"
-                            value={item.rate}
-                            onChange={(event) => updateItem(idx, "rate", event.target.value)}
-                          />
-                          <div className="flex items-center gap-2 sm:col-span-1">
-                            <Input
-                              value={item.amount}
-                              onChange={(event) => updateItem(idx, "amount", event.target.value)}
-                            />
-                            <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(idx)}>
-                              <Minus className="h-4 w-4" />
-                            </Button>
+                          <div key={`${item.srNo}-${idx}`} className="space-y-3 rounded-lg border border-border/70 bg-card/60 p-3 sm:p-4">
+                            <div className="grid gap-2 sm:grid-cols-8 items-center">
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                step="1"
+                                className="sm:col-span-1"
+                                value={item.srNo}
+                                onChange={(event) => updateItem(idx, "srNo", event.target.value)}
+                              />
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                className="sm:col-span-1"
+                                value={item.hsnCode}
+                                onChange={(event) => updateItem(idx, "hsnCode", sanitizeNumberInput(event.target.value, { allowDecimal: false }))}
+                              />
+                              <Input
+                                className="sm:col-span-2"
+                                value={item.description}
+                                onChange={(event) => updateItem(idx, "description", event.target.value)}
+                              />
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="any"
+                                className="sm:col-span-1"
+                                value={item.qty}
+                                onChange={(event) => updateItem(idx, "qty", event.target.value)}
+                              />
+                              <Input
+                                className="sm:col-span-1"
+                                value={item.uom}
+                                onChange={(event) => updateItem(idx, "uom", event.target.value)}
+                              />
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="any"
+                                className="sm:col-span-1"
+                                value={item.rate}
+                                onChange={(event) => updateItem(idx, "rate", event.target.value)}
+                              />
+                              <div className="flex items-center gap-2 sm:col-span-1">
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  step="any"
+                                  value={item.amount}
+                                  readOnly
+                                />
+                                <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(idx)}>
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            <Field label="Remarks">
+                              <Textarea
+                                placeholder="Add notes for this line item"
+                                value={item.remarks}
+                                onChange={(event) => updateItem(idx, "remarks", event.target.value)}
+                                rows={2}
+                                className="resize-y"
+                              />
+                            </Field>
                           </div>
-                          <Input
-                            className="sm:col-span-8"
-                            placeholder="Remarks"
-                            value={item.remarks}
-                            onChange={(event) => updateItem(idx, "remarks", event.target.value)}
-                          />
-                        </div>
                         ))}
                       </>
                     )}
@@ -443,28 +652,81 @@ export default function PurchaseOrders() {
 
                 <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-3">
                   <Field label="Discount %">
-                    <Input value={poData.discount.percent} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, percent: event.target.value }, source: "Manual" }))} />
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      value={poData.discount.percent}
+                      onChange={(event) =>
+                        setPoData((prev) =>
+                          applyDiscountCalculations({
+                            ...prev,
+                            discount: { ...prev.discount, percent: sanitizeNumberInput(event.target.value) },
+                            source: "Manual",
+                          })
+                        )
+                      }
+                    />
                   </Field>
                   <Field label="Discount Amount">
-                    <Input value={poData.discount.amount} onChange={(event) => setPoData((prev) => ({ ...prev, discount: { ...prev.discount, amount: event.target.value }, source: "Manual" }))} />
+                    <Input type="number" inputMode="decimal" step="any" value={poData.discount.amount} readOnly />
                   </Field>
                   <Field label="After Discount Amount">
-                    <Input value={poData.afterDiscountAmount} onChange={(event) => setPoData((prev) => ({ ...prev, afterDiscountAmount: event.target.value, source: "Manual" }))} />
+                    <Input type="number" inputMode="decimal" step="any" value={poData.afterDiscountAmount} readOnly />
                   </Field>
-                  <Field label="CGST %">
-                    <Input value={poData.taxes.cgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } }, source: "Manual" }))} />
-                  </Field>
-                  <Field label="CGST Amount">
-                    <Input value={poData.taxes.cgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } }, source: "Manual" }))} />
-                  </Field>
-                  <Field label="SGST %">
-                    <Input value={poData.taxes.sgst.percent} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } }, source: "Manual" }))} />
-                  </Field>
-                  <Field label="SGST Amount">
-                    <Input value={poData.taxes.sgst.amount} onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } }, source: "Manual" }))} />
-                  </Field>
+                  <div className="space-y-3 rounded-lg border border-border/70 bg-card/60 p-3 sm:col-span-2 lg:col-span-3">
+                    <div className="grid gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_1fr] items-center gap-2">
+                        <div className="text-xs font-medium text-muted-foreground">CGST</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-14">% </span>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={poData.taxes.cgst.percent}
+                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-14">Amount</span>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={poData.taxes.cgst.amount}
+                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_1fr] items-center gap-2">
+                        <div className="text-xs font-medium text-muted-foreground">SGST</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-14">% </span>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={poData.taxes.sgst.percent}
+                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-14">Amount</span>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={poData.taxes.sgst.amount}
+                            onChange={(event) => setPoData((prev) => ({ ...prev, taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: sanitizeNumberInput(event.target.value) } }, source: "Manual" }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <Field label="Total Amount">
-                    <Input value={poData.totalAmount} onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: event.target.value, source: "Manual" }))} />
+                    <Input type="number" inputMode="decimal" step="any" value={poData.totalAmount} onChange={(event) => setPoData((prev) => ({ ...prev, totalAmount: sanitizeNumberInput(event.target.value), source: "Manual" }))} />
                   </Field>
                   <Field label="Delivery">
                     <Input value={poData.summary.delivery} onChange={(event) => setPoData((prev) => ({ ...prev, summary: { ...prev.summary, delivery: event.target.value }, source: "Manual" }))} />
@@ -490,12 +752,12 @@ export default function PurchaseOrders() {
                 </div>
 
                 <div className="manual-entry-actions">
-                  <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
-                    <Eye className="mr-2 h-4 w-4" /> Preview
+                  <Button onClick={handleSubmitPo} className="w-full sm:w-auto" disabled={submitting}>
+                    {submitting ? "Submitting..." : "Submit PO"}
                   </Button>
                   {!hasPreview ? (
                     <div className="text-xs text-muted-foreground sm:self-center">
-                      Add details to enable a richer preview.
+                      Add PO details and submit directly.
                     </div>
                   ) : null}
                 </div>

@@ -27,6 +27,7 @@ import VendorViewPrice from '@/pages/VendorViewPrice';
 import VendorPriceListView from '@/pages/VendorPriceListView';
 import Challans from '@/pages/Challans';
 import NewChallan from '@/pages/NewChallan';
+import ChallanItemDetail from '@/pages/ChallanItemDetail';
 import MER from '@/pages/MER';
 import MIR from '@/pages/MIR';
 import MIRPreview from '@/pages/MIRPreview';
@@ -65,6 +66,11 @@ function App() {
                 <Route path="/projects/inventory/add" element={
                   <ProtectedRoute>
                     <AddInventory />
+                  </ProtectedRoute>
+                } />
+                <Route path="/:projectId/challans/new/details" element={
+                  <ProtectedRoute>
+                    <ChallanItemDetail />
                   </ProtectedRoute>
                 } />
                 

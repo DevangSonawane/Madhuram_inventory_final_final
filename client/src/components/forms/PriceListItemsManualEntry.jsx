@@ -4,6 +4,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const MM_PER_INCH = 25.4;
+
+const formatSizeValue = (value) => {
+  if (!Number.isFinite(value)) return '';
+  return String(Number(value.toFixed(4)));
+};
+
+const inferUnit = (item = {}) => {
+  if (item.size_unit === 'inch' || item.size_unit === 'mm') return item.size_unit;
+  if (item.size_mm && !item.size_inch) return 'mm';
+  return 'inch';
+};
+
+const getValueForUnit = (item = {}, unit = 'inch') => {
+  return unit === 'mm' ? (item.size_mm ?? '') : (item.size_inch ?? '');
+};
 
 export function PriceListItemsManualEntry({
   items,
@@ -65,15 +83,83 @@ export function PriceListItemsManualEntry({
                 <Label>HSN Code</Label>
                 <Input value={item.hsn_code || ''} onChange={(e) => onChange(index, 'hsn_code', e.target.value)} />
               </div>
-              <div className="space-y-1">
-                <Label>Size (Inch)</Label>
-                <Input value={item.size_inch || ''} onChange={(e) => onChange(index, 'size_inch', e.target.value)} />
-              </div>
+              {(() => {
+                const selectedUnit = inferUnit(item);
+                const sizeValue = getValueForUnit(item, selectedUnit);
 
-              <div className="space-y-1">
-                <Label>Size (MM)</Label>
-                <Input value={item.size_mm || ''} onChange={(e) => onChange(index, 'size_mm', e.target.value)} />
-              </div>
+                const handleSizeValueChange = (rawValue) => {
+                  onChange(index, 'size_unit', selectedUnit);
+                  if (rawValue === '') {
+                    onChange(index, 'size_inch', '');
+                    onChange(index, 'size_mm', '');
+                    return;
+                  }
+
+                  const parsed = Number(rawValue);
+                  if (!Number.isFinite(parsed)) {
+                    if (selectedUnit === 'inch') {
+                      onChange(index, 'size_inch', rawValue);
+                      onChange(index, 'size_mm', '');
+                    } else {
+                      onChange(index, 'size_mm', rawValue);
+                      onChange(index, 'size_inch', '');
+                    }
+                    return;
+                  }
+
+                  if (selectedUnit === 'inch') {
+                    onChange(index, 'size_inch', rawValue);
+                    onChange(index, 'size_mm', formatSizeValue(parsed * MM_PER_INCH));
+                  } else {
+                    onChange(index, 'size_mm', rawValue);
+                    onChange(index, 'size_inch', formatSizeValue(parsed / MM_PER_INCH));
+                  }
+                };
+
+                const handleUnitChange = (nextUnit) => {
+                  const currentValue = getValueForUnit(item, selectedUnit);
+                  const parsed = Number(currentValue);
+
+                  onChange(index, 'size_unit', nextUnit);
+
+                  if (currentValue === '' || !Number.isFinite(parsed)) return;
+
+                  if (selectedUnit === 'inch' && nextUnit === 'mm') {
+                    const converted = formatSizeValue(parsed * MM_PER_INCH);
+                    onChange(index, 'size_mm', converted);
+                    onChange(index, 'size_inch', formatSizeValue(parsed));
+                  } else if (selectedUnit === 'mm' && nextUnit === 'inch') {
+                    const converted = formatSizeValue(parsed / MM_PER_INCH);
+                    onChange(index, 'size_inch', converted);
+                    onChange(index, 'size_mm', formatSizeValue(parsed));
+                  }
+                };
+
+                return (
+                  <div className="space-y-1 lg:max-w-[220px]">
+                    <Label>Size</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="any"
+                        className="h-9"
+                        value={sizeValue}
+                        onChange={(e) => handleSizeValueChange(e.target.value)}
+                        placeholder="Enter size"
+                      />
+                      <Select value={selectedUnit} onValueChange={handleUnitChange}>
+                        <SelectTrigger className="h-9 w-[92px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inch">Inch</SelectItem>
+                          <SelectItem value="mm">MM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="space-y-1">
                 <Label>Price Per Piece</Label>
                 <Input type="number" value={item.price_per_pic ?? ''} onChange={(e) => onChange(index, 'price_per_pic', e.target.value)} />

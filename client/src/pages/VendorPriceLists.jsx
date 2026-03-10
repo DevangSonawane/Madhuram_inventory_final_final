@@ -91,7 +91,7 @@ export default function VendorPriceLists() {
             <p className="mt-1 text-sm text-muted-foreground">Vendor: <span className="font-medium text-foreground">{vendor?.vendor_name || `Vendor Id ${vendorId}`}</span></p>
           </div>
           <Button onClick={() => navigate(`/${projectId}/vendors/${vendorId}/price-lists/create`)}>
-            <Plus className="mr-2 h-4 w-4" /> Create (New Page)
+            <Plus className="mr-2 h-4 w-4" /> Add price
           </Button>
         </div>
       </section>

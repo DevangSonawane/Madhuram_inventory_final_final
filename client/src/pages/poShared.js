@@ -3,6 +3,27 @@ const EMPTY_CONTACT = {
   phone: "",
 };
 
+export const sanitizeTextInput = (value) => String(value ?? "");
+
+export const sanitizePhoneInput = (value, maxLength = 15) =>
+  String(value ?? "")
+    .replace(/\D/g, "")
+    .slice(0, maxLength);
+
+export const sanitizeNumberInput = (value, { allowDecimal = true } = {}) => {
+  const raw = String(value ?? "");
+  if (!raw) return "";
+
+  const cleaned = raw.replace(/[^\d.]/g, "");
+  if (!allowDecimal) {
+    return cleaned.replace(/\./g, "");
+  }
+
+  const [integerPart = "", ...decimalParts] = cleaned.split(".");
+  if (decimalParts.length === 0) return integerPart;
+  return `${integerPart}.${decimalParts.join("")}`;
+};
+
 export const EMPTY_PO = {
   title: "Purchase Order",
   companyName: "",

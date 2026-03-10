@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ArrowLeft, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
@@ -35,6 +36,7 @@ const mapPoItemsForPreview = (po) => {
 
 export default function NewChallan() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { projectId: routeProjectId } = useParams();
   const { toast } = useToast();
   const { selectedProject } = useProject();
@@ -45,6 +47,7 @@ export default function NewChallan() {
   const [selectedPoItems, setSelectedPoItems] = useState([]);
   const [loadingPos, setLoadingPos] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [poItemsExpanded, setPoItemsExpanded] = useState(false);
   const [form, setForm] = useState({
     challan_number: "",
     po_id: "",
@@ -79,6 +82,12 @@ export default function NewChallan() {
 
     loadPos();
   }, [projectId]);
+
+  useEffect(() => {
+    const incomingItems = location.state?.deliveryItems;
+    if (!Array.isArray(incomingItems) || incomingItems.length === 0) return;
+    setForm((prev) => ({ ...prev, items: incomingItems }));
+  }, [location.state]);
 
   const selectPo = (selected) => {
     if (!selected) {
@@ -120,6 +129,17 @@ export default function NewChallan() {
       : projectPos.find((po) => String(po.order_no) === String(value));
 
     selectPo(selected);
+  };
+
+  const handleViewInDetail = () => {
+    if (!targetProjectId || selectedPoItems.length === 0) return;
+    navigate(`/${targetProjectId}/challans/new/details`, {
+      state: {
+        poItems: selectedPoItems,
+        deliveryItems: form.items,
+        returnPath: `/${targetProjectId}/challans/new`
+      }
+    });
   };
 
   const updateItem = (index, field, value) => {
@@ -260,37 +280,65 @@ export default function NewChallan() {
         </CardContent>
       </Card>
 
+      <div className="flex justify-center">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={selectedPoItems.length === 0}
+          onClick={handleViewInDetail}
+        >
+          View in Detail
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>PO Items (View Only)</CardTitle>
+          <CardTitle>PO Items</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Accordion
+            type="single"
+            collapsible
+            value={poItemsExpanded ? "po-items" : undefined}
+            onValueChange={(value) => setPoItemsExpanded(value === "po-items")}
+          >
+            <AccordionItem value="po-items">
+              <AccordionTrigger>PO Items (View Only)</AccordionTrigger>
+              <AccordionContent className="space-y-3 pt-2">
+                {selectedPoItems.length > 0 ? (
+                  <div className="hidden md:grid md:grid-cols-7 gap-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div>Name</div>
+                    <div className="md:col-span-2">Description</div>
+                    <div>Width</div>
+                    <div>Length</div>
+                    <div>Quantity</div>
+                    <div>Price</div>
+                  </div>
+                ) : null}
+                {selectedPoItems.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    Select a PO to view linked PO items.
+                  </div>
+                ) : (
+                  selectedPoItems.map((item, index) => (
+                    <div key={`po-item-${index}`} className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-7">
+                      <div className="text-sm font-medium">{item.name || "-"}</div>
+                      <div className="text-sm text-muted-foreground md:col-span-2">{item.description || "-"}</div>
+                      <div className="text-sm">{item.width || "-"}</div>
+                      <div className="text-sm">{item.length || "-"}</div>
+                      <div className="text-sm">{item.quantity || "-"}</div>
+                      <div className="text-sm">{item.price || "-"}</div>
+                    </div>
+                  ))
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
           {selectedPoItems.length > 0 ? (
-            <div className="hidden md:grid md:grid-cols-7 gap-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <div>Name</div>
-              <div className="md:col-span-2">Description</div>
-              <div>Width</div>
-              <div>Length</div>
-              <div>Quantity</div>
-              <div>Price</div>
+            <div className="text-xs text-muted-foreground">
+              View in Detail pre-fills challan items with 50% PO quantity for delivery. You can edit quantities before saving.
             </div>
           ) : null}
-          {selectedPoItems.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Select a PO to view linked PO items.
-            </div>
-          ) : (
-            selectedPoItems.map((item, index) => (
-              <div key={`po-item-${index}`} className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/20 p-3 md:grid-cols-7">
-                <div className="text-sm font-medium">{item.name || "-"}</div>
-                <div className="text-sm text-muted-foreground md:col-span-2">{item.description || "-"}</div>
-                <div className="text-sm">{item.width || "-"}</div>
-                <div className="text-sm">{item.length || "-"}</div>
-                <div className="text-sm">{item.quantity || "-"}</div>
-                <div className="text-sm">{item.price || "-"}</div>
-              </div>
-            ))
-          )}
         </CardContent>
       </Card>
 

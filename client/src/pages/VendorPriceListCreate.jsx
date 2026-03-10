@@ -5,14 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { vendorFlowStore } from '@/lib/vendorFlowStore';
 import { PriceListItemsManualEntry } from '@/components/forms/PriceListItemsManualEntry';
-
-const STATUS_VALUES = ['active', 'inactive', 'archived'];
-const toTitleCase = (value) => value.charAt(0).toUpperCase() + value.slice(1);
 
 const emptyItem = () => ({
   items_name: '',
@@ -28,8 +24,6 @@ const emptyItem = () => ({
 });
 
 const emptyForm = () => ({
-  version_name: '',
-  status: 'active',
   upload_file: null,
   filename: '',
   file_path: '',
@@ -114,23 +108,58 @@ export default function VendorPriceListCreate() {
     }
   };
 
+  const makeVersionPrefix = (vendorName) => {
+    const cleanedVendorName = String(vendorName || `vendor-${vendorId}`)
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9-_]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || `vendor-${vendorId}`;
+    const datePart = new Date().toISOString().slice(0, 10);
+    return `${cleanedVendorName}-${datePart}`;
+  };
+
+  const buildAutoVersionName = async () => {
+    const [vendorResult, listResult] = await Promise.all([
+      api.getVendorById(vendorId).catch(() => null),
+      api.getVendorPriceLists(vendorId).catch(() => null),
+    ]);
+
+    const localVendor = vendorFlowStore.getVendorById(vendorId);
+    const vendorName = vendorResult?.success
+      ? vendorResult.data?.vendor_name
+      : localVendor?.vendor_name;
+    const prefix = makeVersionPrefix(vendorName);
+
+    const apiLists = listResult?.success && Array.isArray(listResult.data) ? listResult.data : [];
+    const localLists = vendorFlowStore.listPriceLists(vendorId);
+    const allLists = [...apiLists, ...localLists];
+    const pattern = new RegExp(`^${prefix}-(\\d{3})$`);
+
+    const maxSeq = allLists.reduce((max, row) => {
+      const versionName = String(row?.version_name || '');
+      const match = versionName.match(pattern);
+      if (!match) return max;
+      const value = Number(match[1]);
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0);
+
+    return `${prefix}-${String(maxSeq + 1).padStart(3, '0')}`;
+  };
+
   const handleCreate = async () => {
-    if (!form.version_name.trim()) {
-      toast({ title: 'Version Name Is Required', variant: 'destructive' });
-      return;
-    }
-
-    const payload = {
-      vendor_id: Number(vendorId),
-      version_name: form.version_name.trim(),
-      status: form.status,
-      ...(form.filename ? { filename: form.filename } : {}),
-      ...(form.file_path ? { file_path: form.file_path } : {}),
-      items: form.items,
-    };
-
     try {
       setCreating(true);
+      const generatedVersionName = await buildAutoVersionName();
+      const payload = {
+        vendor_id: Number(vendorId),
+        version_name: generatedVersionName,
+        status: 'active',
+        ...(form.filename ? { filename: form.filename } : {}),
+        ...(form.file_path ? { file_path: form.file_path } : {}),
+        items: form.items,
+      };
+
       const result = await api.createVendorPriceList(payload);
       if (!result.success) {
         vendorFlowStore.createPriceList(vendorId, payload);
@@ -164,32 +193,6 @@ export default function VendorPriceListCreate() {
           </div>
         </div>
       </section>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Header</CardTitle>
-          <CardDescription>Fill the basic details for this version.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-4">
-          <div className="space-y-2">
-            <Label>Vendor Id</Label>
-            <Input value={String(vendorId)} disabled />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label>Version Name *</Label>
-            <Input value={form.version_name} onChange={(e) => setForm((p) => ({ ...p, version_name: e.target.value }))} />
-          </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={form.status} onValueChange={(value) => setForm((p) => ({ ...p, status: value }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {STATUS_VALUES.map((status) => <SelectItem key={`create-${status}`} value={status}>{toTitleCase(status)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
