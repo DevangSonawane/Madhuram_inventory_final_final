@@ -40,6 +40,9 @@ export default function ChallanItemDetail() {
 
   const poItems = Array.isArray(location.state?.poItems) ? location.state.poItems : [];
   const returnPath = location.state?.returnPath || `/${projectId}/challans/new`;
+  const challanDraft = location.state?.challanDraft && typeof location.state.challanDraft === "object"
+    ? location.state.challanDraft
+    : null;
 
   const [deliveryItems, setDeliveryItems] = useState(() => {
     const incoming = Array.isArray(location.state?.deliveryItems) ? location.state.deliveryItems : [];
@@ -72,11 +75,29 @@ export default function ChallanItemDetail() {
   };
 
   const applyAndReturn = () => {
-    navigate(returnPath, { state: { deliveryItems } });
+    navigate(returnPath, {
+      state: {
+        deliveryItems,
+        selectedPoItems: poItems,
+        challanDraft: {
+          ...(challanDraft || {}),
+          items: deliveryItems
+        }
+      }
+    });
   };
 
   const backToChallan = () => {
-    navigate(returnPath, { state: { deliveryItems } });
+    navigate(returnPath, {
+      state: {
+        deliveryItems,
+        selectedPoItems: poItems,
+        challanDraft: {
+          ...(challanDraft || {}),
+          items: deliveryItems
+        }
+      }
+    });
   };
 
   return (

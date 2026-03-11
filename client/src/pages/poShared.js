@@ -26,6 +26,7 @@ export const sanitizeNumberInput = (value, { allowDecimal = true } = {}) => {
 
 export const EMPTY_PO = {
   title: "Purchase Order",
+  sampleId: "",
   companyName: "",
   companySubtitle: "",
   companyAddress: "",
@@ -133,6 +134,7 @@ const buildVendorSection = (overrides = {}) => {
 const mapClientToPoData = (raw) => ({
   ...EMPTY_PO,
   ...raw,
+  sampleId: raw.sampleId != null ? String(raw.sampleId) : (raw.sample_id != null ? String(raw.sample_id) : EMPTY_PO.sampleId),
   vendor: buildVendorSection(raw.vendor),
   itemsGroup: { ...EMPTY_PO.itemsGroup, ...raw.itemsGroup },
   items: Array.isArray(raw.items) ? raw.items : [],
@@ -173,6 +175,7 @@ const mapServerToPoData = (raw) => {
     ...raw,
     po_id: raw.po_id,
     project_id: raw.project_id,
+    sampleId: raw.sample_id != null ? String(raw.sample_id) : (raw.sampleId ?? EMPTY_PO.sampleId),
     companyName: raw.company_name || raw.companyName || EMPTY_PO.companyName,
     companySubtitle: raw.company_subtitle || raw.companySubtitle || EMPTY_PO.companySubtitle,
     companyEmail: raw.company_email || raw.companyEmail || EMPTY_PO.companyEmail,

@@ -11,6 +11,10 @@ const PurchaseOrder = sequelize.define('PurchaseOrder', {
     type: DataTypes.INTEGER,
     allowNull: false
   },
+  sample_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   company_name: {
     type: DataTypes.STRING,
     allowNull: false

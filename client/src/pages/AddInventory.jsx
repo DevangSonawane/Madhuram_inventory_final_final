@@ -123,8 +123,8 @@ export default function AddInventory() {
         (stockFilter === 'out' && !item.stockin);
       const matchesBilling =
         billingFilter === 'all' ||
-        (billingFilter === 'billed' && item.billing) ||
-        (billingFilter === 'pending' && !item.billing);
+        (billingFilter === 'billing' && item.billing) ||
+        (billingFilter === 'non-billings' && !item.billing);
       return matchesSearch && matchesStock && matchesBilling;
     });
   }, [items, searchTerm, stockFilter, billingFilter]);
@@ -468,15 +468,15 @@ export default function AddInventory() {
               <div className="space-y-2">
                 <Label>Billing Status</Label>
                 <Select
-                  value={form.billing ? 'done' : 'pending'}
-                  onValueChange={(value) => setForm((prev) => ({ ...prev, billing: value === 'done' }))}
+                  value={form.billing ? 'billing' : 'non-billings'}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, billing: value === 'billing' }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="done">Billed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="billing">Billing</SelectItem>
+                    <SelectItem value="non-billings">Non Billings</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -526,8 +526,8 @@ export default function AddInventory() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Billing</SelectItem>
-                    <SelectItem value="billed">Billed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="billing">Billing</SelectItem>
+                    <SelectItem value="non-billings">Non Billings</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button variant="outline" size="icon" onClick={fetchItems} disabled={loading || !activeProjectId}>
@@ -610,7 +610,7 @@ export default function AddInventory() {
                           <div className="mb-2 flex items-center justify-between">
                             <p className="text-xs font-medium text-muted-foreground">Billing</p>
                             <Badge className={item.billing ? 'bg-blue-600 hover:bg-blue-600' : ''} variant={item.billing ? 'default' : 'secondary'}>
-                              {item.billing ? 'Billed' : 'Pending'}
+                              {item.billing ? 'Billing' : 'Non Billings'}
                             </Badge>
                           </div>
                           <div className="grid grid-cols-2 gap-1">
@@ -622,7 +622,7 @@ export default function AddInventory() {
                               onClick={() => toggleBilling(item, true)}
                               disabled={Boolean(rowPending[item.id]) || item.billing}
                             >
-                              Billed
+                              Billing
                             </Button>
                             <Button
                               type="button"
@@ -632,7 +632,7 @@ export default function AddInventory() {
                               onClick={() => toggleBilling(item, false)}
                               disabled={Boolean(rowPending[item.id]) || !item.billing}
                             >
-                              Pending
+                              Non Billings
                             </Button>
                           </div>
                         </div>
@@ -730,15 +730,15 @@ export default function AddInventory() {
               <div className="space-y-2">
                 <Label>Billing Status</Label>
                 <Select
-                  value={editForm.billing ? 'done' : 'pending'}
-                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, billing: value === 'done' }))}
+                  value={editForm.billing ? 'billing' : 'non-billings'}
+                  onValueChange={(value) => setEditForm((prev) => ({ ...prev, billing: value === 'billing' }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="done">Billed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="billing">Billing</SelectItem>
+                    <SelectItem value="non-billings">Non Billings</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

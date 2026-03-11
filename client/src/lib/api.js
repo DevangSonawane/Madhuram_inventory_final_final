@@ -1,5 +1,62 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'https://api.festmate.in').replace(/\/$/, '');
 
+const appendDynamicEntry = (dynamicField, key, value) => {
+  if (value === undefined || value === null || value === '') return;
+  const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+  dynamicField.push({ key, value: serialized });
+};
+
+const buildLegacyMirPayload = (data = {}) => {
+  const dynamicField = Array.isArray(data.dynamic_field) ? [...data.dynamic_field] : [];
+  appendDynamicEntry(dynamicField, 'challan_no', data.challan_no);
+  appendDynamicEntry(dynamicField, 'po_id', data.po_id);
+  appendDynamicEntry(dynamicField, 'items', data.items);
+
+  const payload = {
+    ...data,
+    dynamic_field: dynamicField,
+  };
+
+  delete payload.challan_no;
+  delete payload.po_id;
+  delete payload.items;
+  return payload;
+};
+
+const pickMirBaseFields = (data = {}) => {
+  const allowed = [
+    'project_name',
+    'project_code',
+    'client_name',
+    'pmc',
+    'contractor',
+    'vendor_code',
+    'mir_refrence_no',
+    'material_code',
+    'inspection_date_time',
+    'client_submission_date',
+    'refrence_docs_attached',
+    'mir_submited',
+    'dynamic_field',
+    'project_id',
+  ];
+  const payload = {};
+  allowed.forEach((k) => {
+    if (Object.prototype.hasOwnProperty.call(data, k)) payload[k] = data[k];
+  });
+  return payload;
+};
+
+const buildMinimalMirPayload = (data = {}) => {
+  const base = pickMirBaseFields(data);
+  return {
+    mir_refrence_no: base.mir_refrence_no || '',
+    project_id: base.project_id,
+    mir_submited: typeof base.mir_submited === 'boolean' ? base.mir_submited : false,
+    dynamic_field: Array.isArray(base.dynamic_field) ? base.dynamic_field : [],
+  };
+};
+
 export const api = {
   // Auth
   login: async (email, password) => {
@@ -469,15 +526,26 @@ export const api = {
   },
 
   createMir: async (data) => {
-    const response = await fetch(`${BASE_URL}/api/mir`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
+    const send = async (payload) => {
+      const response = await fetch(`${BASE_URL}/api/mir`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      return handleResponse(response);
+    };
+
+    let result = await send(data);
+    if (!result.success && result.status === 500) {
+      result = await send(buildLegacyMirPayload(data));
+    }
+    if (!result.success && result.status === 500) {
+      result = await send(buildMinimalMirPayload(data));
+    }
+    return result;
   },
 
   getMirs: async () => {
@@ -502,15 +570,26 @@ export const api = {
   },
 
   updateMir: async (id, data) => {
-    const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
-      method: 'PUT',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
+    const send = async (payload) => {
+      const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
+        method: 'PUT',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      return handleResponse(response);
+    };
+
+    let result = await send(data);
+    if (!result.success && result.status === 500) {
+      result = await send(buildLegacyMirPayload(data));
+    }
+    if (!result.success && result.status === 500) {
+      result = await send(buildMinimalMirPayload(data));
+    }
+    return result;
   },
 
   deleteMir: async (id) => {
@@ -571,6 +650,16 @@ export const api = {
       headers: getAuthHeaders(),
     });
     return handleResponse(response);
+  },
+
+  getRecentPoByProject: async (projectId) => {
+    const result = await api.getPosByProject(projectId);
+    if (!result?.success) return result;
+    const rows = Array.isArray(result.data) ? result.data : [];
+    return {
+      ...result,
+      data: rows[0] || null,
+    };
   },
 
   getPoById: async (id) => {
@@ -1073,7 +1162,7 @@ export const api = {
         ...getAuthHeaders(),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ stockin }),
+      body: JSON.stringify({ stockin: Boolean(stockin) }),
     });
     return handleResponse(response);
   },
@@ -1085,7 +1174,7 @@ export const api = {
         ...getAuthHeaders(),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ billing }),
+      body: JSON.stringify({ billing: Boolean(billing) }),
     });
     return handleResponse(response);
   },

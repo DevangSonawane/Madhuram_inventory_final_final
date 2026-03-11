@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, FileUp, PencilLine, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
@@ -74,6 +75,7 @@ const buildItemPayloads = (items) => {
 
 const buildPoPayload = (poData, projectId) => ({
   project_id: projectId,
+  sample_id: poData.sampleId === "" ? undefined : Number(poData.sampleId),
   company_name: poData.companyName || "",
   company_subtitle: poData.companySubtitle || "",
   company_email: poData.companyEmail || "",
@@ -117,19 +119,36 @@ export default function PurchaseOrders() {
   const [submitting, setSubmitting] = useState(false);
   const [recentPos, setRecentPos] = useState([]);
   const [loadingPos, setLoadingPos] = useState(false);
+  const [sampleOptions, setSampleOptions] = useState([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
+
+  const selectedSampleMissing = Boolean(
+    poData.sampleId && !sampleOptions.some((sample) => String(sample.sample_id || sample.id) === poData.sampleId)
+  );
 
   useEffect(() => {
     if (!projectId) {
       setLoadingPos(false);
+      setLoadingSamples(false);
+      setSampleOptions([]);
       setRecentPos([]);
       return;
     }
 
     const fetchPos = async () => {
       setLoadingPos(true);
+      setLoadingSamples(true);
       try {
         const result = await api.getPosByProject(projectId);
         if (result.success && Array.isArray(result.data)) {
+          const uniqueSampleIds = [...new Set(
+            result.data
+              .map((po) => po?.sample_id)
+              .filter((value) => value !== undefined && value !== null && value !== "")
+              .map((value) => String(value))
+          )];
+          setSampleOptions(uniqueSampleIds.map((sampleId) => ({ sample_id: sampleId })));
+
           const mapped = result.data.map((record) => {
             const normalized = normalizePoData(record);
             const id = normalized.orderNo || `PO-${record.po_id || Date.now()}`;
@@ -152,13 +171,16 @@ export default function PurchaseOrders() {
           if (result?.error) {
             toast({ title: "Error", description: result.error || "Failed to load purchase orders.", variant: "destructive" });
           }
+          setSampleOptions([]);
           setRecentPos([]);
         }
       } catch (error) {
         toast({ title: "Error", description: error?.message || "Failed to load purchase orders.", variant: "destructive" });
+        setSampleOptions([]);
         setRecentPos([]);
       } finally {
         setLoadingPos(false);
+        setLoadingSamples(false);
       }
     };
 
@@ -383,6 +405,11 @@ export default function PurchaseOrders() {
       return;
     }
 
+    if (!poData.sampleId) {
+      toast({ title: "Select sample", description: "Sample ID is required for purchase order.", variant: "destructive" });
+      return;
+    }
+
     const numericProjectId = Number(projectId);
     if (Number.isNaN(numericProjectId)) {
       toast({ title: "Select project", description: "Invalid project selected.", variant: "destructive" });
@@ -554,6 +581,31 @@ export default function PurchaseOrders() {
             <TabsContent value="manual">
               <div className="manual-entry-panel">
                 <div className="manual-entry-grid sm:grid-cols-2">
+                  <Field label="Sample ID">
+                    <Select
+                      value={poData.sampleId || undefined}
+                      onValueChange={(value) => setPoData((prev) => ({ ...prev, sampleId: value, source: "Manual" }))}
+                      disabled={!projectId || loadingSamples}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={projectId ? (loadingSamples ? "Loading samples..." : "Select sample (required)") : "Select project first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {selectedSampleMissing ? (
+                          <SelectItem value={poData.sampleId}>Sample #{poData.sampleId} (current)</SelectItem>
+                        ) : null}
+                        {sampleOptions.map((sample) => {
+                          const id = String(sample.sample_id || sample.id);
+                          const label = sample.work_done || sample.site_name || sample.building_name || `Sample #${id}`;
+                          return (
+                            <SelectItem key={id} value={id}>
+                              {`#${id} - ${label}`}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </Field>
                   <Field label="Company Name">
                     <Input value={poData.companyName} onChange={(event) => setPoData((prev) => ({ ...prev, companyName: event.target.value, source: "Manual" }))} />
                   </Field>
@@ -852,7 +904,7 @@ export default function PurchaseOrders() {
                 </div>
 
                 <div className="manual-entry-actions">
-                  <Button onClick={handleSubmitPo} className="w-full sm:w-auto" disabled={submitting}>
+                  <Button onClick={handleSubmitPo} className="w-full sm:w-auto" disabled={submitting || !poData.sampleId}>
                     {submitting ? "Submitting..." : "Submit PO"}
                   </Button>
                   {!hasPreview ? (

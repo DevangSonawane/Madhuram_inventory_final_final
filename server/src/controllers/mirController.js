@@ -30,6 +30,7 @@ const buildPayload = (body = {}, isUpdate = false) => {
     pmc: emptyToNull(body.pmc),
     contractor: emptyToNull(body.contractor),
     vendor_code: emptyToNull(body.vendor_code),
+    challan_no: emptyToNull(body.challan_no),
     mir_refrence_no: emptyToNull(body.mir_refrence_no),
     material_code: emptyToNull(body.material_code),
     inspection_date_time: emptyToNull(body.inspection_date_time),
@@ -37,6 +38,8 @@ const buildPayload = (body = {}, isUpdate = false) => {
     refrence_docs_attached: emptyToNull(body.refrence_docs_attached),
     mir_submited: toBool(body.mir_submited),
     dynamic_field: ensureArray(parseJsonLike(body.dynamic_field, []), []),
+    po_id: Object.prototype.hasOwnProperty.call(body, 'po_id') ? toInt(body.po_id) : undefined,
+    items: ensureArray(parseJsonLike(body.items, []), []),
     project_id: Object.prototype.hasOwnProperty.call(body, 'project_id') ? toInt(body.project_id) : undefined,
   };
 

@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Layers, Save, Copy, Upload, CheckCircle, FileText, Image as ImageIcon, ArrowRight, ArrowLeft, Eye, Loader2, Search, Filter, Download, Plus } from "lucide-react";
+import { Layers, Save, Copy, Upload, CheckCircle, FileText, Image as ImageIcon, ArrowRight, ArrowLeft, Eye, Loader2, Search, Filter, Download, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { extractImagesFromPdf, extractTextFromPdf } from "@/lib/pdfUtils";
@@ -65,17 +65,34 @@ export default function Samples() {
   const [itemFieldRowIndex, setItemFieldRowIndex] = useState(null);
   const [itemFieldKey, setItemFieldKey] = useState("");
   const [itemFieldValue, setItemFieldValue] = useState("");
+  const [inventoryPickerOpen, setInventoryPickerOpen] = useState(false);
+  const [projectInventory, setProjectInventory] = useState([]);
+  const [loadingProjectInventory, setLoadingProjectInventory] = useState(false);
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [addingInventoryId, setAddingInventoryId] = useState(null);
+  const [pendingInventoryQty, setPendingInventoryQty] = useState({});
   const [createForm, setCreateForm] = useState({
     building_name: "",
     site_name: "",
     work_done: "",
     sample_file: "",
     location: { floor: "", block: "", wing: "", coordinates: "" },
-    item_description: [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
+    item_description: [],
     add_fields: []
   });
 
   const getSelectedProjectId = () => selectedProject?.project_id || selectedProject?.id;
+
+  const normalizeInventory = (item = {}) => ({
+    inventory_id: item.inventory_id || item.id,
+    project_id: item.project_id,
+    brand: item.brand || "",
+    name: item.name || "",
+    quantity: Number(item.quantity) || 0,
+    price: Number(item.price) || 0,
+    stockin: Boolean(item.stockin),
+    billing: Boolean(item.billing),
+  });
 
   const refreshProjectSamples = async () => {
     const pid = getSelectedProjectId();
@@ -93,6 +110,24 @@ export default function Samples() {
     return arr;
   };
 
+  const refreshProjectInventory = async () => {
+    const pid = getSelectedProjectId();
+    if (!pid) {
+      setProjectInventory([]);
+      return [];
+    }
+
+    const res = await api.getInventoriesByProject(pid);
+    if (!res.success) {
+      setProjectInventory([]);
+      return [];
+    }
+
+    const arr = Array.isArray(res.data) ? res.data.map(normalizeInventory) : [];
+    setProjectInventory(arr);
+    return arr;
+  };
+
   useEffect(() => {
     const load = async () => {
       setLoadingServer(true);
@@ -106,6 +141,19 @@ export default function Samples() {
     };
     load();
   }, [selectedProject]);
+
+  useEffect(() => {
+    if (!showCreateForm) return;
+    const load = async () => {
+      setLoadingProjectInventory(true);
+      try {
+        await refreshProjectInventory();
+      } finally {
+        setLoadingProjectInventory(false);
+      }
+    };
+    load();
+  }, [showCreateForm, selectedProject]);
 
 
   const saveCreate = async () => {
@@ -132,7 +180,7 @@ export default function Samples() {
         work_done: "",
         sample_file: "",
         location: { floor: "", block: "", wing: "", coordinates: "" },
-        item_description: [{ sr_no: "", description: "", quantity: "", value: "", add_fields: [] }],
+        item_description: [],
         add_fields: []
       });
       toast({ title: "Created", description: "Sample created" });
@@ -206,9 +254,18 @@ export default function Samples() {
     }
 
     const next = [...createForm.item_description];
+    const existingIndex = (next[itemFieldRowIndex].add_fields || []).findIndex(
+      (field) => (field?.key || "").trim() === key
+    );
+    const nextFields = [...(next[itemFieldRowIndex].add_fields || [])];
+    if (existingIndex >= 0) {
+      nextFields[existingIndex] = { key, value };
+    } else {
+      nextFields.push({ key, value });
+    }
     next[itemFieldRowIndex] = {
       ...next[itemFieldRowIndex],
-      add_fields: [...(next[itemFieldRowIndex].add_fields || []), { key, value }]
+      add_fields: nextFields
     };
     setCreateForm({ ...createForm, item_description: next });
 
@@ -247,6 +304,163 @@ export default function Samples() {
     const id = sample.sample_id || sample.id;
     navigate(`preview/${id}`);
   };
+
+  const addInventoryToSampleItems = (inventoryItem, selectedQty) => {
+    const inventoryId = inventoryItem.inventory_id;
+    if (!inventoryId) return;
+
+    const alreadyAdded = createForm.item_description.some((row) =>
+      (row.add_fields || []).some((field) => field?.key === "inventory_id" && String(field?.value) === String(inventoryId))
+    );
+
+    if (alreadyAdded) {
+      toast({ title: "Already added", description: "This inventory item is already in the sample list." });
+      return;
+    }
+
+    const qtyToAdd = Number(selectedQty) || 0;
+    const nextRow = {
+      sr_no: String(createForm.item_description.length + 1),
+      description: `${inventoryItem.brand ? `${inventoryItem.brand} - ` : ""}${inventoryItem.name}`,
+      quantity: qtyToAdd ? String(qtyToAdd) : "",
+      value: inventoryItem.price ? String(inventoryItem.price) : "",
+      add_fields: [
+        { key: "inventory_id", value: String(inventoryId) },
+        { key: "project_id", value: String(inventoryItem.project_id || "") },
+        { key: "brand", value: String(inventoryItem.brand || "") },
+        { key: "name", value: String(inventoryItem.name || "") },
+        { key: "quantity", value: qtyToAdd ? String(qtyToAdd) : "" },
+        { key: "price", value: String(inventoryItem.price || "") },
+        { key: "stockin", value: String(Boolean(inventoryItem.stockin)) },
+        { key: "billing", value: String(Boolean(inventoryItem.billing)) },
+      ],
+    };
+
+    setCreateForm((prev) => ({
+      ...prev,
+      item_description: [...prev.item_description, nextRow],
+    }));
+  };
+
+  const openQuantitySelector = (inventoryItem) => {
+    const inventoryId = inventoryItem.inventory_id;
+    const available = Math.max(0, Math.floor(Number(inventoryItem.quantity) || 0));
+    if (!inventoryId || available <= 0) {
+      toast({ title: "Out of stock", description: "No quantity available for this inventory item.", variant: "destructive" });
+      return;
+    }
+    setPendingInventoryQty((prev) => ({ ...prev, [inventoryId]: prev[inventoryId] || 1 }));
+  };
+
+  const adjustPendingQty = (inventoryItem, delta) => {
+    const inventoryId = inventoryItem.inventory_id;
+    const available = Math.max(1, Math.floor(Number(inventoryItem.quantity) || 1));
+    setPendingInventoryQty((prev) => {
+      const current = Number(prev[inventoryId]) || 1;
+      const next = Math.max(1, Math.min(available, current + delta));
+      return { ...prev, [inventoryId]: next };
+    });
+  };
+
+  const setPendingQtyValue = (inventoryItem, rawValue) => {
+    const inventoryId = inventoryItem.inventory_id;
+    const cleaned = String(rawValue || "").replace(/[^\d]/g, "");
+    if (!cleaned) {
+      setPendingInventoryQty((prev) => ({ ...prev, [inventoryId]: "" }));
+      return;
+    }
+    setPendingInventoryQty((prev) => ({ ...prev, [inventoryId]: cleaned }));
+  };
+
+  const normalizePendingQty = (inventoryItem) => {
+    const inventoryId = inventoryItem.inventory_id;
+    const available = Math.max(1, Math.floor(Number(inventoryItem.quantity) || 1));
+    setPendingInventoryQty((prev) => {
+      const current = Number(prev[inventoryId]) || 1;
+      const next = Math.max(1, Math.min(available, current));
+      return { ...prev, [inventoryId]: String(next) };
+    });
+  };
+
+  const closeQuantitySelector = (inventoryId) => {
+    setPendingInventoryQty((prev) => {
+      const next = { ...prev };
+      delete next[inventoryId];
+      return next;
+    });
+  };
+
+  const confirmAddWithQuantity = async (inventoryItem) => {
+    const inventoryId = inventoryItem.inventory_id;
+    const available = Number(inventoryItem.quantity) || 0;
+    const selectedQty = Number(pendingInventoryQty[inventoryId]) || 0;
+
+    if (!inventoryId || selectedQty <= 0) {
+      toast({ title: "Invalid quantity", description: "Select a valid quantity.", variant: "destructive" });
+      return;
+    }
+
+    if (selectedQty > available) {
+      toast({ title: "Insufficient quantity", description: "Selected quantity exceeds available stock.", variant: "destructive" });
+      return;
+    }
+
+    const alreadyAdded = createForm.item_description.some((row) =>
+      (row.add_fields || []).some((field) => field?.key === "inventory_id" && String(field?.value) === String(inventoryId))
+    );
+    if (alreadyAdded) {
+      toast({ title: "Already added", description: "This inventory item is already in the sample list." });
+      return;
+    }
+
+    setAddingInventoryId(inventoryId);
+    try {
+      const remainingQuantity = available - selectedQty;
+      const res = await api.updateInventory(inventoryId, { quantity: remainingQuantity });
+      if (!res.success || !res.data) {
+        toast({ title: "Update failed", description: res.error || "Could not deduct inventory quantity.", variant: "destructive" });
+        return;
+      }
+
+      setProjectInventory((prev) =>
+        prev.map((row) => (row.inventory_id === inventoryId ? normalizeInventory(res.data) : row))
+      );
+
+      addInventoryToSampleItems(inventoryItem, selectedQty);
+      closeQuantitySelector(inventoryId);
+      toast({ title: "Item added", description: `Added ${selectedQty} and updated inventory.` });
+    } catch (error) {
+      toast({ title: "Update failed", description: error?.message || "Could not deduct inventory quantity.", variant: "destructive" });
+    } finally {
+      setAddingInventoryId(null);
+    }
+  };
+
+  const filteredProjectInventory = useMemo(() => {
+    const query = inventorySearch.trim().toLowerCase();
+    if (!query) return projectInventory;
+    return projectInventory.filter((item) => (
+      String(item.inventory_id || "").includes(query)
+      || String(item.brand || "").toLowerCase().includes(query)
+      || String(item.name || "").toLowerCase().includes(query)
+    ));
+  }, [projectInventory, inventorySearch]);
+
+  const inventoryTableKeys = useMemo(() => {
+    const preferredOrder = ["inventory_id", "brand", "name", "quantity", "price", "stockin", "billing", "project_id"];
+    const dynamicKeys = Array.from(
+      new Set(
+        createForm.item_description.flatMap((row) =>
+          (row.add_fields || [])
+            .map((field) => (field?.key || "").trim())
+            .filter(Boolean)
+        )
+      )
+    );
+    const ordered = preferredOrder.filter((key) => dynamicKeys.includes(key));
+    const extra = dynamicKeys.filter((key) => !preferredOrder.includes(key));
+    return [...ordered, ...extra];
+  }, [createForm.item_description]);
 
 
   const attachFileToSample = async (sample, path) => {
@@ -623,18 +837,6 @@ export default function Samples() {
     draftItems: samples.filter(s => s.status === "Draft").length,
   };
 
-  const createItemFieldKeys = useMemo(() => (
-    Array.from(
-      new Set(
-        createForm.item_description.flatMap((row) =>
-          (row.add_fields || [])
-            .map((field) => (field.key || "").trim())
-            .filter(Boolean)
-        )
-      )
-    )
-  ), [createForm.item_description]);
-
   const availableUploadedFiles = useMemo(() => (
     Array.from(
       new Set(
@@ -1002,93 +1204,98 @@ export default function Samples() {
             </div>
           </div>
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Item Description</div>
-              <Button size="sm" variant="outline" onClick={() => setCreateForm({ ...createForm, item_description: [...createForm.item_description, { sr_no: "", description: "", quantity: "", value: "", add_fields: [] }] })}>
-                <Plus className="mr-2 h-4 w-4" /> Add Row
-              </Button>
+            <div className="rounded-2xl border bg-gradient-to-r from-primary/10 via-background to-secondary/20 px-5 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between shadow-sm">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold tracking-wide">Item Description</div>
+                <div className="text-xs text-muted-foreground">
+                  Curated inventory rows selected for this sample.
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary" className="h-8 px-3 rounded-full border bg-background/80 backdrop-blur-sm">
+                  {createForm.item_description.length} row(s)
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="rounded-full px-4 shadow-sm"
+                  type="button"
+                  onClick={async () => {
+                    if (!getSelectedProjectId()) {
+                      toast({ title: "Select project", description: "Choose a project first.", variant: "destructive" });
+                      return;
+                    }
+                    setInventoryPickerOpen(true);
+                    setLoadingProjectInventory(true);
+                    try {
+                      await refreshProjectInventory();
+                    } finally {
+                      setLoadingProjectInventory(false);
+                    }
+                  }}
+                >
+                  <Layers className="mr-2 h-4 w-4" />
+                  View Items in Inventory
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full px-4"
+                  type="button"
+                  onClick={() => setCreateForm({ ...createForm, item_description: [] })}
+                  disabled={createForm.item_description.length === 0}
+                >
+                  Clear Table
+                </Button>
+              </div>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px]">Sr No</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="w-[160px]">Quantity</TableHead>
-                  <TableHead className="w-[160px]">Value</TableHead>
-                  {createItemFieldKeys.map((fieldKey) => (
-                    <TableHead key={fieldKey} className="w-[160px]">{fieldKey}</TableHead>
-                  ))}
-                  <TableHead className="w-[200px]">Add Fields</TableHead>
-                  <TableHead className="w-[80px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {createForm.item_description.map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>
-                      <Input value={row.sr_no} onChange={(e) => {
-                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], sr_no: e.target.value }; setCreateForm({ ...createForm, item_description: next });
-                      }} />
-                    </TableCell>
-                    <TableCell>
-                      <Input value={row.description} onChange={(e) => {
-                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], description: e.target.value }; setCreateForm({ ...createForm, item_description: next });
-                      }} />
-                    </TableCell>
-                    <TableCell>
-                      <Input value={row.quantity} onChange={(e) => {
-                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], quantity: e.target.value }; setCreateForm({ ...createForm, item_description: next });
-                      }} />
-                    </TableCell>
-                    <TableCell>
-                      <Input value={row.value} onChange={(e) => {
-                        const next = [...createForm.item_description]; next[idx] = { ...next[idx], value: e.target.value }; setCreateForm({ ...createForm, item_description: next });
-                      }} />
-                    </TableCell>
-                    {createItemFieldKeys.map((fieldKey) => {
-                      const field = (row.add_fields || []).find((f) => (f.key || "").trim() === fieldKey);
-                      return (
-                        <TableCell key={`${idx}-${fieldKey}`} className="text-sm">
-                          {field?.value || "-"}
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+              {createForm.item_description.length === 0 ? (
+                <div className="p-10 text-sm text-muted-foreground text-center bg-gradient-to-b from-muted/20 to-background">
+                  No items added yet. Use <span className="font-medium">View Items in Inventory</span> and click <span className="font-medium">Add</span>.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      {inventoryTableKeys.map((key) => (
+                        <TableHead key={key} className="whitespace-nowrap capitalize text-xs font-semibold tracking-wide text-muted-foreground">
+                          {key.replace(/_/g, " ")}
+                        </TableHead>
+                      ))}
+                      <TableHead className="w-[90px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {createForm.item_description.map((row, idx) => (
+                      <TableRow key={`${idx}-${row?.sr_no || "row"}`}>
+                        {inventoryTableKeys.map((key) => {
+                          const field = (row.add_fields || []).find((f) => (f?.key || "").trim() === key);
+                          return (
+                            <TableCell key={`${idx}-${key}`} className="text-sm font-medium">
+                              {field?.value ?? "-"}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-muted-foreground hover:text-foreground hover:bg-destructive/10"
+                            onClick={() => {
+                              const next = createForm.item_description.filter((_, i) => i !== idx);
+                              setCreateForm({ ...createForm, item_description: next });
+                            }}
+                          >
+                            Remove
+                          </Button>
                         </TableCell>
-                      );
-                    })}
-                    <TableCell>
-                      <div className="space-y-2">
-                        {row.add_fields.map((f, j) => (
-                          <div key={j} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="font-medium truncate">{f.key}</span>
-                              <span className="text-muted-foreground">:</span>
-                              <span className="truncate">{f.value}</span>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 px-2"
-                              onClick={() => removeItemFieldFromRow("create", idx, j)}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        ))}
-                        <Button size="sm" type="button" variant="outline" onClick={() => openItemFieldDialog("create", idx)}>
-                          <Plus className="mr-2 h-4 w-4" /> Add Item
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="destructive" onClick={() => {
-                        const next = createForm.item_description.filter((_, i) => i !== idx); setCreateForm({ ...createForm, item_description: next });
-                      }}>
-                        Delete
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
           </div>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -1236,6 +1443,176 @@ export default function Samples() {
           <DialogFooter>
             <Button variant="outline" onClick={closeItemFieldDialog}>Cancel</Button>
             <Button onClick={addItemFieldToRow}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={inventoryPickerOpen}
+        onOpenChange={(open) => {
+          setInventoryPickerOpen(open);
+          if (!open) setInventorySearch("");
+        }}
+      >
+        <DialogContent className="w-[98vw] max-w-[98vw] sm:!w-[98vw] sm:!max-w-[98vw] h-[94vh] sm:!max-h-[94vh] p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-primary/10 via-background to-secondary/20">
+            <DialogTitle className="text-xl tracking-tight">Project Inventory</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 p-6 h-[calc(94vh-86px)] overflow-auto">
+            <div className="rounded-2xl border bg-card shadow-sm p-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="relative w-full md:max-w-md">
+                <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  className="pl-9 rounded-full bg-muted/30"
+                  placeholder="Search by inventory id, brand, or item name"
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="rounded-full px-3 h-8">{filteredProjectInventory.length} item(s)</Badge>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full px-4"
+                onClick={async () => {
+                  setLoadingProjectInventory(true);
+                  try {
+                    await refreshProjectInventory();
+                  } finally {
+                    setLoadingProjectInventory(false);
+                  }
+                }}
+                disabled={loadingProjectInventory}
+              >
+                {loadingProjectInventory ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Refresh
+              </Button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="w-[120px] text-xs tracking-wide">Inventory ID</TableHead>
+                  <TableHead className="text-xs tracking-wide">Brand</TableHead>
+                  <TableHead className="text-xs tracking-wide">Item</TableHead>
+                  <TableHead className="w-[120px] text-xs tracking-wide">Quantity</TableHead>
+                  <TableHead className="w-[120px] text-xs tracking-wide">Price</TableHead>
+                  <TableHead className="w-[110px] text-xs tracking-wide">Stock</TableHead>
+                  <TableHead className="w-[110px] text-xs tracking-wide">Billing</TableHead>
+                  <TableHead className="w-[240px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingProjectInventory ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                      <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                      Loading project inventory...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredProjectInventory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                      No inventory assigned to this project.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredProjectInventory.map((item) => (
+                    <TableRow key={item.inventory_id}>
+                      <TableCell>{item.inventory_id}</TableCell>
+                      <TableCell className="font-medium">{item.brand || "-"}</TableCell>
+                      <TableCell className="font-medium">{item.name || "-"}</TableCell>
+                      <TableCell className="font-medium">{item.quantity}</TableCell>
+                      <TableCell className="font-medium">{item.price}</TableCell>
+                      <TableCell>
+                        <Badge variant={item.stockin ? "secondary" : "outline"} className="rounded-full">
+                          {item.stockin ? "In" : "Out"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={item.billing ? "secondary" : "outline"} className="rounded-full">
+                          {item.billing ? "Billed" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {Object.prototype.hasOwnProperty.call(pendingInventoryQty, item.inventory_id) ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <div className="h-9 rounded-full border bg-muted/20 p-1 flex items-center gap-1 shadow-inner">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-full"
+                                onClick={() => adjustPendingQty(item, -1)}
+                                disabled={addingInventoryId === item.inventory_id}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </Button>
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                value={pendingInventoryQty[item.inventory_id]}
+                                onChange={(e) => setPendingQtyValue(item, e.target.value)}
+                                onBlur={() => normalizePendingQty(item)}
+                                className="h-7 w-14 rounded-full border-0 bg-background text-center text-sm font-semibold px-1 focus-visible:ring-1 focus-visible:ring-primary"
+                                disabled={addingInventoryId === item.inventory_id}
+                              />
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 rounded-full"
+                                onClick={() => adjustPendingQty(item, 1)}
+                                disabled={addingInventoryId === item.inventory_id}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="rounded-full px-4 bg-primary text-primary-foreground"
+                              onClick={() => confirmAddWithQuantity(item)}
+                              disabled={addingInventoryId === item.inventory_id || !Number(pendingInventoryQty[item.inventory_id])}
+                            >
+                              {addingInventoryId === item.inventory_id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-full px-3"
+                              onClick={() => closeQuantitySelector(item.inventory_id)}
+                              disabled={addingInventoryId === item.inventory_id}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-full px-4"
+                            onClick={() => openQuantitySelector(item)}
+                            disabled={addingInventoryId === item.inventory_id || Number(item.quantity) <= 0}
+                          >
+                            {addingInventoryId === item.inventory_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="mr-1 h-3.5 w-3.5" />Add</>}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            </div>
+          </div>
+          <DialogFooter className="px-6 py-4 border-t bg-muted/20">
+            <Button type="button" variant="outline" className="rounded-full px-5" onClick={() => setInventoryPickerOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

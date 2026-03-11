@@ -14,6 +14,7 @@ const MIR = sequelize.define('MIR', {
   pmc: DataTypes.STRING,
   contractor: DataTypes.STRING,
   vendor_code: DataTypes.STRING,
+  challan_no: DataTypes.STRING,
   mir_refrence_no: DataTypes.STRING,
   material_code: DataTypes.STRING,
   inspection_date_time: DataTypes.STRING,
@@ -25,6 +26,11 @@ const MIR = sequelize.define('MIR', {
     defaultValue: false,
   },
   dynamic_field: jsonTextField(DataTypes, () => []),
+  po_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  items: jsonTextField(DataTypes, () => []),
   project_id: {
     type: DataTypes.INTEGER,
     allowNull: false,

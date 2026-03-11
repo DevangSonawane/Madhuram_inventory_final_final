@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
@@ -87,6 +88,7 @@ const buildItemPayloads = (items) => {
 
 const buildPoPayload = (poData, projectId) => ({
   project_id: projectId,
+  sample_id: poData.sampleId === "" ? undefined : Number(poData.sampleId),
   company_name: poData.companyName || "",
   company_subtitle: poData.companySubtitle || "",
   company_email: poData.companyEmail || "",
@@ -129,6 +131,41 @@ export default function PurchaseOrdersPreview() {
   const [editingPoId, setEditingPoId] = useState(() => location.state?.poId ?? location.state?.poData?.po_id ?? null);
   const [saving, setSaving] = useState(false);
   const [loadingPo, setLoadingPo] = useState(false);
+  const [sampleOptions, setSampleOptions] = useState([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
+
+  useEffect(() => {
+    const loadSamples = async () => {
+      if (!projectId) {
+        setSampleOptions([]);
+        return;
+      }
+      setLoadingSamples(true);
+      try {
+        const response = await api.getPosByProject(projectId);
+        if (response.success && Array.isArray(response.data)) {
+          const uniqueSampleIds = [...new Set(
+            response.data
+              .map((po) => po?.sample_id)
+              .filter((value) => value !== undefined && value !== null && value !== "")
+              .map((value) => String(value))
+          )];
+          setSampleOptions(uniqueSampleIds.map((sampleId) => ({ sample_id: sampleId })));
+        } else {
+          setSampleOptions([]);
+        }
+      } catch {
+        setSampleOptions([]);
+      } finally {
+        setLoadingSamples(false);
+      }
+    };
+    loadSamples();
+  }, [projectId]);
+
+  const selectedSampleMissing = Boolean(
+    poData.sampleId && !sampleOptions.some((sample) => String(sample.sample_id || sample.id) === poData.sampleId)
+  );
 
   useEffect(() => {
     if (!location.state) return;
@@ -345,6 +382,11 @@ export default function PurchaseOrdersPreview() {
       return;
     }
 
+    if (!poData.sampleId) {
+      toast({ title: "Select sample", description: "Sample ID is required for purchase order.", variant: "destructive" });
+      return;
+    }
+
     const numericProjectId = Number(projectId);
     if (Number.isNaN(numericProjectId)) {
       toast({ title: "Select project", description: "Invalid project selected.", variant: "destructive" });
@@ -393,7 +435,7 @@ export default function PurchaseOrdersPreview() {
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Review extracted fields and finalize the purchase order.</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || loadingPo || !hasPreview || !projectId}>
+          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || loadingPo || !hasPreview || !projectId || !poData.sampleId}>
             {saving ? (editingPoId ? "Updating..." : "Submitting...") : (editingPoId ? "Update PO" : "Submit PO")}
           </Button>
           <Button
@@ -428,14 +470,39 @@ export default function PurchaseOrdersPreview() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Sample ID">
+              <Select
+                value={poData.sampleId || undefined}
+                onValueChange={(value) => setPoData((prev) => ({ ...prev, sampleId: value }))}
+                disabled={!projectId || loadingSamples}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={projectId ? (loadingSamples ? "Loading samples..." : "Select sample (required)") : "Select project first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedSampleMissing ? (
+                    <SelectItem value={poData.sampleId}>Sample #{poData.sampleId} (current)</SelectItem>
+                  ) : null}
+                  {sampleOptions.map((sample) => {
+                    const id = String(sample.sample_id || sample.id);
+                    const label = sample.work_done || sample.site_name || sample.building_name || `Sample #${id}`;
+                    return (
+                      <SelectItem key={id} value={id}>
+                        {`#${id} - ${label}`}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </Field>
             <Field label="Company Name"><Input value={poData.companyName} onChange={(event) => setPoData((prev) => ({ ...prev, companyName: event.target.value }))} /></Field>
             <Field label="Company Subtitle"><Input value={poData.companySubtitle} onChange={(event) => setPoData((prev) => ({ ...prev, companySubtitle: event.target.value }))} /></Field>
             <Field label="Company Email"><Input value={poData.companyEmail} onChange={(event) => setPoData((prev) => ({ ...prev, companyEmail: event.target.value }))} /></Field>
             <Field label="Company GST No"><Input value={poData.companyGstNo} onChange={(event) => setPoData((prev) => ({ ...prev, companyGstNo: event.target.value }))} /></Field>
             <Field label="Indent No"><Input value={poData.indentNo} onChange={(event) => setPoData((prev) => ({ ...prev, indentNo: event.target.value }))} /></Field>
-            <Field label="Indent Date (DD/MM/YYYY or YYYY-MM-DD)"><Input value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value }))} /></Field>
+            <Field label="Indent Date"><Input type="date" value={poData.indentDate} onChange={(event) => setPoData((prev) => ({ ...prev, indentDate: event.target.value }))} /></Field>
             <Field label="Order No"><Input value={poData.orderNo} onChange={(event) => setPoData((prev) => ({ ...prev, orderNo: event.target.value }))} /></Field>
-            <Field label="PO Date (DD/MM/YYYY or YYYY-MM-DD)"><Input value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value }))} /></Field>
+            <Field label="PO Date"><Input type="date" value={poData.poDate} onChange={(event) => setPoData((prev) => ({ ...prev, poDate: event.target.value }))} /></Field>
           </div>
         </CardContent>
       </Card>

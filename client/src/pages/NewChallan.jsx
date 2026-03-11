@@ -13,6 +13,15 @@ import { api } from "@/lib/api";
 
 const NONE_VALUE = "__none__";
 const EMPTY_ITEM = { name: "", description: "", width: "", length: "", quantity: "", price: "" };
+const EMPTY_FORM = {
+  challan_number: "",
+  po_id: "",
+  po_number: "",
+  challan_date: "",
+  work_order_number: "",
+  order_date: "",
+  items: [{ ...EMPTY_ITEM }]
+};
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -48,15 +57,7 @@ export default function NewChallan() {
   const [loadingPos, setLoadingPos] = useState(false);
   const [saving, setSaving] = useState(false);
   const [poItemsExpanded, setPoItemsExpanded] = useState(false);
-  const [form, setForm] = useState({
-    challan_number: "",
-    po_id: "",
-    po_number: "",
-    challan_date: "",
-    work_order_number: "",
-    order_date: "",
-    items: [{ ...EMPTY_ITEM }]
-  });
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
   useEffect(() => {
     if (!projectId) {
@@ -84,9 +85,26 @@ export default function NewChallan() {
   }, [projectId]);
 
   useEffect(() => {
+    const incomingDraft = location.state?.challanDraft;
     const incomingItems = location.state?.deliveryItems;
-    if (!Array.isArray(incomingItems) || incomingItems.length === 0) return;
-    setForm((prev) => ({ ...prev, items: incomingItems }));
+    const incomingPoItems = location.state?.selectedPoItems;
+
+    if (incomingDraft && typeof incomingDraft === "object") {
+      const nextItems = Array.isArray(incomingDraft.items) && incomingDraft.items.length > 0
+        ? incomingDraft.items
+        : [{ ...EMPTY_ITEM }];
+      setForm({
+        ...EMPTY_FORM,
+        ...incomingDraft,
+        items: nextItems
+      });
+    } else if (Array.isArray(incomingItems) && incomingItems.length > 0) {
+      setForm((prev) => ({ ...prev, items: incomingItems }));
+    }
+
+    if (Array.isArray(incomingPoItems)) {
+      setSelectedPoItems(incomingPoItems);
+    }
   }, [location.state]);
 
   const selectPo = (selected) => {
@@ -127,6 +145,8 @@ export default function NewChallan() {
       state: {
         poItems: selectedPoItems,
         deliveryItems: form.items,
+        challanDraft: form,
+        selectedPoItems,
         returnPath: `/${targetProjectId}/challans/new`
       }
     });

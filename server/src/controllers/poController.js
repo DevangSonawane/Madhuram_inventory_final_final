@@ -110,6 +110,11 @@ const buildPayload = (body) => {
     payload.project_id = Number.isNaN(projectId) ? null : projectId;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'sample_id')) {
+    const sampleId = parseInt(body.sample_id, 10);
+    payload.sample_id = Number.isNaN(sampleId) ? null : sampleId;
+  }
+
   return payload;
 };
 
@@ -143,6 +148,10 @@ export const createPO = async (req, res) => {
 
     if (payload.project_id == null) {
       return res.status(400).json({ message: 'project_id is required' });
+    }
+
+    if (payload.sample_id == null) {
+      return res.status(400).json({ message: 'sample_id is required' });
     }
 
     const companyName = payload.company_name?.toString().trim();
@@ -188,7 +197,7 @@ export const getPOById = async (req, res) => {
       return res.status(400).json({ message: 'Invalid PO id' });
     }
 
-    const po = await PurchaseOrder.findByPk(poId);
+    const po = await PurchaseOrder.findOne({ where: { po_id: poId } });
     if (!po) {
       return res.status(404).json({ error: 'PO not found' });
     }
@@ -207,7 +216,7 @@ export const updatePO = async (req, res) => {
       return res.status(400).json({ message: 'Invalid PO id' });
     }
 
-    const po = await PurchaseOrder.findByPk(poId);
+    const po = await PurchaseOrder.findOne({ where: { po_id: poId } });
     if (!po) {
       return res.status(404).json({ error: 'PO not found' });
     }
@@ -215,6 +224,14 @@ export const updatePO = async (req, res) => {
     const payload = buildPayload(req.body);
     if (Object.keys(payload).length === 0) {
       return res.status(400).json({ message: 'No fields provided for update' });
+    }
+
+    // Enforce sample_id as mandatory in PO records.
+    if (Object.prototype.hasOwnProperty.call(payload, 'sample_id') && payload.sample_id == null) {
+      return res.status(400).json({ message: 'sample_id is required' });
+    }
+    if (!Object.prototype.hasOwnProperty.call(payload, 'sample_id') && po.sample_id == null) {
+      return res.status(400).json({ message: 'sample_id is required' });
     }
 
     await po.update(payload);
@@ -232,7 +249,7 @@ export const deletePO = async (req, res) => {
       return res.status(400).json({ message: 'Invalid PO id' });
     }
 
-    const po = await PurchaseOrder.findByPk(poId);
+    const po = await PurchaseOrder.findOne({ where: { po_id: poId } });
     if (!po) {
       return res.status(404).json({ error: 'PO not found' });
     }

@@ -102,7 +102,7 @@ export const MENU_CATEGORIES = [
         title: "MIR",
         path: "/mir",
         icon: Eye,
-        hidden: true,
+        hidden: false,
       },
       {
         title: "ITR",

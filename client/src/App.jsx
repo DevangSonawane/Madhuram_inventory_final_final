@@ -30,6 +30,8 @@ import NewChallan from '@/pages/NewChallan';
 import ChallanItemDetail from '@/pages/ChallanItemDetail';
 import MER from '@/pages/MER';
 import MIR from '@/pages/MIR';
+import MIRCreate from '@/pages/MIRCreate';
+import MIRView from '@/pages/MIRView';
 import MIRPreview from '@/pages/MIRPreview';
 import ITR from '@/pages/ITR';
 import ITRPreview from '@/pages/ITRPreview';
@@ -105,6 +107,9 @@ function App() {
                   <Route path="challans/new" element={<NewChallan />} />
                   <Route path="mer" element={<MER />} />
                   <Route path="mir" element={<MIR />} />
+                  <Route path="mir/create" element={<MIRCreate />} />
+                  <Route path="mir/:mirId/preview" element={<MIRView />} />
+                  <Route path="mir/:mirId/edit" element={<MIRCreate />} />
                   <Route path="mir/preview" element={<MIRPreview />} />
                   <Route path="itr" element={<ITR />} />
                   <Route path="itr/preview" element={<ITRPreview />} />
