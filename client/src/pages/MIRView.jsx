@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -97,6 +97,8 @@ export default function MIRView() {
     const dynamicItems = getDynamicValue(dynamicField, "items");
     return normalizeItems(mir?.items || dynamicItems);
   }, [dynamicField, mir]);
+  const inspectedCount = useMemo(() => items.filter((item) => Boolean(item?.inspected)).length, [items]);
+  const allItemsInspected = items.length > 0 && inspectedCount === items.length;
   const challanNo = useMemo(() => {
     if (mir?.challan_no) return mir.challan_no;
     const dynamicChallanNo = getDynamicValue(dynamicField, "challan_no");
@@ -187,6 +189,7 @@ export default function MIRView() {
                         <TableHead>Rate</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Remark</TableHead>
+                        <TableHead>Inspected</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -200,6 +203,9 @@ export default function MIRView() {
                           <TableCell>{item?.Rate ?? item?.rate ?? "-"}</TableCell>
                           <TableCell>{item?.Amount ?? item?.amount ?? "-"}</TableCell>
                           <TableCell>{item?.remark || "-"}</TableCell>
+                          <TableCell>
+                            {allItemsInspected || item?.inspected ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : "-"}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

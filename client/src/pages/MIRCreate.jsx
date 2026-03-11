@@ -83,9 +83,13 @@ const enrichMirItemsFromPo = (mirItems, poItems) => {
   });
 };
 
-const toPayloadNumber = (value) => {
+  const toPayloadNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+const toPositiveInteger = (value) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
 const parseDynamicField = (value) => {
@@ -295,18 +299,18 @@ export default function MIRCreate() {
       });
       return;
     }
-    if (form.project_id === "" || Number.isNaN(Number(form.project_id))) {
-      toast({
-        title: "Project ID required",
-        description: "Please provide a valid project ID.",
-        variant: "destructive",
-      });
-      return;
-    }
     if (!form.challan_no.trim()) {
       toast({
         title: "Challan required",
         description: "Select a delivery challan before creating MIR.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (form.po_id === "" || Number.isNaN(Number(form.po_id))) {
+      toast({
+        title: "PO required",
+        description: "Select a valid PO ID before creating MIR.",
         variant: "destructive",
       });
       return;
@@ -325,52 +329,47 @@ export default function MIRCreate() {
         Rate: rate,
         Amount: amountValue,
         remark: String(item.remark || ""),
+        inspected: Boolean(item.inspected),
       };
     });
 
     const dynamicField = [];
-    const projectIdValue = Number(form.project_id);
-
-    const payload = {
-      mir_refrence_no: form.mir_refrence_no.trim(),
-      project_id: projectIdValue,
-      challan_no: form.challan_no.trim(),
-      items,
-      mir_submited: true,
-      dynamic_field: dynamicField,
-    };
-
-    const addIfNotEmpty = (key, value) => {
-      if (value == null) return;
-      if (typeof value === "string" && value.trim() === "") return;
-      payload[key] = value;
-    };
-
-    addIfNotEmpty("project_name", form.project_name.trim());
-    addIfNotEmpty("project_code", form.project_code.trim());
-    addIfNotEmpty("client_name", form.client_name.trim());
-    addIfNotEmpty("pmc", form.pmc.trim());
-    addIfNotEmpty("contractor", form.contractor.trim());
-    addIfNotEmpty("vendor_code", form.vendor_code.trim());
-    addIfNotEmpty("material_code", form.material_code.trim());
-    addIfNotEmpty("refrence_docs_attached", form.add_attachment.trim());
-    addIfNotEmpty("client_submission_date", form.client_submission_date || undefined);
-    addIfNotEmpty("inspection_date_time", form.inspection_date_time ? `${form.inspection_date_time}T00:00:00.000Z` : undefined);
-    if (form.po_id !== "" && !Number.isNaN(Number(form.po_id))) {
-      payload.po_id = Number(form.po_id);
-    }
+    let projectIdValue = toPositiveInteger(form.project_id) ?? toPositiveInteger(projectId);
 
     try {
       setSubmitting(true);
-      const projectCheck = await api.getProjectById(projectIdValue);
-      if (!projectCheck.success || !projectCheck.data) {
-        toast({
-          title: "Invalid project",
-          description: "Project ID is not valid on the server.",
-          variant: "destructive",
-        });
-        return;
+      if (!isEditMode && !projectIdValue) {
+        const poCheck = await api.getPoById(Number(form.po_id));
+        if (!poCheck.success || !poCheck.data) {
+          toast({
+            title: "Invalid PO ID",
+            description: "PO ID does not exist on server.",
+            variant: "destructive",
+          });
+          return;
+        }
+        projectIdValue = toPositiveInteger(poCheck.data.project_id);
       }
+
+      const payload = {
+        project_name: form.project_name.trim(),
+        project_code: form.project_code.trim(),
+        client_name: form.client_name.trim(),
+        pmc: form.pmc.trim(),
+        contractor: form.contractor.trim(),
+        vendor_code: form.vendor_code.trim(),
+        challan_no: form.challan_no.trim(),
+        mir_refrence_no: form.mir_refrence_no.trim(),
+        material_code: form.material_code.trim(),
+        inspection_date_time: form.inspection_date_time ? `${form.inspection_date_time}T00:00:00.000Z` : "",
+        client_submission_date: form.client_submission_date || "",
+        refrence_docs_attached: (form.add_attachment || "").trim(),
+        mir_submited: true,
+        dynamic_field: dynamicField,
+        project_id: projectIdValue,
+        po_id: Number(form.po_id),
+        items,
+      };
 
       const result = isEditMode ? await api.updateMir(mirId, payload) : await api.createMir(payload);
       if (!result.success) {
@@ -458,6 +457,7 @@ export default function MIRCreate() {
   };
 
   const inspectedCount = (form.items || []).filter((item) => item?.inspected).length;
+  const allItemsInspected = (form.items || []).length > 0 && inspectedCount === (form.items || []).length;
 
   return (
     <div className="space-y-6">
@@ -665,7 +665,7 @@ export default function MIRCreate() {
                         <TableCell>{item.Amount}</TableCell>
                         <TableCell>{item.remark || "-"}</TableCell>
                         <TableCell>
-                          {item.inspected ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : "-"}
+                          {allItemsInspected || item.inspected ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : "-"}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -728,11 +728,15 @@ export default function MIRCreate() {
                 {(form.items || []).map((item, index) => (
                   <TableRow key={`inspection-item-${index}`}>
                     <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={!!item.inspected}
-                        onChange={(event) => toggleItemInspection(index, event.target.checked)}
-                      />
+                      {allItemsInspected ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={!!item.inspected}
+                          onChange={(event) => toggleItemInspection(index, event.target.checked)}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>{item.srno}</TableCell>
                     <TableCell>{item.hsn || "-"}</TableCell>

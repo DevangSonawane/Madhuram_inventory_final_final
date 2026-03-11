@@ -51,7 +51,7 @@ function loadStoredMir() {
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -93,6 +93,55 @@ function YesNoToggle({ id, label, value, onChange }) {
   );
 }
 
+const toTrimmedString = (value) => (value == null ? "" : String(value).trim());
+
+const toPositiveInteger = (value) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const toIsoDateTime = (value) => {
+  const raw = toTrimmedString(value);
+  if (!raw) return "";
+  if (raw.includes("T")) {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+  }
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+};
+
+const toDateOnly = (value) => {
+  const raw = toTrimmedString(value);
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeItemsForPayload = (items = []) => {
+  if (!Array.isArray(items)) return [];
+  return items.map((item, index) => {
+    const srno = Number(item?.srno);
+    const qty = Number(item?.qty);
+    const rate = Number(item?.Rate);
+    const amount = Number(item?.Amount);
+    const normalizedUom = toTrimmedString(item?.UOM ?? item?.uom ?? item?.unit ?? item?.Unit);
+    return {
+      srno: Number.isFinite(srno) && srno > 0 ? srno : index + 1,
+      hsn: toTrimmedString(item?.hsn),
+      description: toTrimmedString(item?.description),
+      qty: Number.isFinite(qty) ? qty : 0,
+      UOM: normalizedUom,
+      Rate: Number.isFinite(rate) ? rate : 0,
+      Amount: Number.isFinite(amount) ? amount : 0,
+      remark: toTrimmedString(item?.remark),
+      inspected: Boolean(item?.inspected),
+    };
+  });
+};
+
 export default function MIRPreview() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -110,13 +159,6 @@ export default function MIRPreview() {
   const hasPreview = useMemo(() => {
     return mirData.projectName || mirData.mirRefNo || mirData.requestSubmission.clientEmployer || mirData.contractorPart.description;
   }, [mirData]);
-
-  const setRequestSubmission = (key, value) => {
-    setMirData((prev) => ({
-      ...prev,
-      requestSubmission: { ...prev.requestSubmission, [key]: value },
-    }));
-  };
 
   const setContractorPart = (key, value) => {
     setMirData((prev) => ({
@@ -192,28 +234,57 @@ export default function MIRPreview() {
   };
 
   const handleSubmit = async () => {
-    if (!projectId) {
-      toast({ title: "Select project", description: "Choose a project before submitting a MIR.", variant: "destructive" });
-      return;
-    }
-
     setSaving(true);
     try {
+      const normalizedInspectionDateTime = toIsoDateTime(mirData.requestSubmission.engineerInspectionDateTime);
+      const normalizedSubmissionDate = toDateOnly(mirData.requestSubmission.clientSubmissionDateTime);
+      const normalizedPoId = toPositiveInteger(mirData.poId);
+      const normalizedChallanNo = toTrimmedString(mirData.challanNo || mirData.challan_no);
+      const normalizedMirRefNo = toTrimmedString(mirData.mirRefNo || mirData.mir_refrence_no);
+      const normalizedItems = normalizeItemsForPayload(mirData.items);
+      let resolvedProjectId = toPositiveInteger(
+        projectId ?? mirData.project_id ?? mirData.projectId ?? selectedProject?.project_id ?? selectedProject?.id
+      );
+
+      if (!normalizedMirRefNo) {
+        toast({ title: "MIR reference required", description: "Please enter MIR reference number.", variant: "destructive" });
+        return;
+      }
+      if (!normalizedChallanNo) {
+        toast({ title: "Challan required", description: "Please enter/select challan no.", variant: "destructive" });
+        return;
+      }
+      if (!normalizedPoId) {
+        toast({ title: "PO required", description: "Please enter/select a valid PO ID.", variant: "destructive" });
+        return;
+      }
+      const poCheck = await api.getPoById(normalizedPoId);
+      if (!poCheck.success || !poCheck.data) {
+        toast({ title: "Invalid PO ID", description: "PO ID does not exist on server.", variant: "destructive" });
+        return;
+      }
+      if (!resolvedProjectId) {
+        resolvedProjectId = toPositiveInteger(poCheck.data.project_id);
+      }
+
       const payload = {
-        project_name: mirData.projectName || selectedProject?.project_name || selectedProject?.name || "",
-        project_code: mirData.projectCode || "",
-        client_name: mirData.requestSubmission.clientEmployer || "",
-        pmc: mirData.requestSubmission.pmc || "",
-        contractor: mirData.requestSubmission.contractor || "",
-        vendor_code: mirData.requestSubmission.vendorCode || "",
-        mir_refrence_no: mirData.mirRefNo || "",
-        material_code: mirData.materialCode || "",
-        inspection_date_time: mirData.requestSubmission.engineerInspectionDateTime || null,
-        client_submission_date: mirData.requestSubmission.clientSubmissionDateTime || null,
-        refrence_docs_attached: mirData.requestSubmission.refDocAttached || "",
+        project_name: toTrimmedString(mirData.projectName || selectedProject?.project_name || selectedProject?.name),
+        project_code: toTrimmedString(mirData.projectCode || selectedProject?.project_code),
+        client_name: toTrimmedString(mirData.requestSubmission.clientEmployer || selectedProject?.client_name),
+        pmc: toTrimmedString(mirData.requestSubmission.pmc),
+        contractor: toTrimmedString(mirData.requestSubmission.contractor),
+        vendor_code: toTrimmedString(mirData.requestSubmission.vendorCode),
+        challan_no: normalizedChallanNo,
+        mir_refrence_no: normalizedMirRefNo,
+        material_code: toTrimmedString(mirData.materialCode),
+        inspection_date_time: normalizedInspectionDateTime,
+        client_submission_date: normalizedSubmissionDate,
+        refrence_docs_attached: toTrimmedString(mirData.requestSubmission.refDocAttached),
         mir_submited: true,
         dynamic_field: buildDynamicField(),
-        project_id: projectId,
+        project_id: resolvedProjectId,
+        po_id: normalizedPoId,
+        items: normalizedItems,
       };
 
       const res = mirData.mir_id ? await api.updateMir(mirData.mir_id, payload) : await api.createMir(payload);

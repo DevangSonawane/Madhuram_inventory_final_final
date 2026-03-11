@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Eye, FileText, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Eye, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -71,11 +71,6 @@ export default function MIR() {
       );
     });
   }, [mirs, query]);
-
-  const openDoc = (path) => {
-    if (!path) return;
-    window.open(api.getApiFileUrl(path), "_blank", "noopener,noreferrer");
-  };
 
   const handleEdit = (mirId) => {
     if (!mirId) return;
@@ -187,14 +182,6 @@ export default function MIR() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openDoc(item.refrence_docs_attached)}
-                          disabled={!item.refrence_docs_attached}
-                        >
-                          <FileText className="mr-2 h-4 w-4" /> View PDF
-                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

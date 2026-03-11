@@ -1,59 +1,197 @@
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'https://api.festmate.in').replace(/\/$/, '');
 
-const appendDynamicEntry = (dynamicField, key, value) => {
-  if (value === undefined || value === null || value === '') return;
-  const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-  dynamicField.push({ key, value: serialized });
+const MIR_STRING_FIELDS = [
+  'project_name',
+  'project_code',
+  'client_name',
+  'pmc',
+  'contractor',
+  'vendor_code',
+  'challan_no',
+  'mir_refrence_no',
+  'material_code',
+  'inspection_date_time',
+  'client_submission_date',
+  'refrence_docs_attached',
+];
+const MIR_ONLY_REQUIRED_FIELDS = new Set(['challan_no', 'mir_refrence_no']);
+
+const MIR_CREATE_REQUIRED_FIELDS = [
+  'challan_no',
+  'mir_refrence_no',
+  'po_id',
+];
+
+const isPlainObject = (value) => value != null && typeof value === 'object' && !Array.isArray(value);
+
+const toTrimmedString = (value) => {
+  if (value == null) return '';
+  return String(value).trim();
+};
+const todayDateOnly = () => new Date().toISOString().slice(0, 10);
+const nowIsoDateTime = () => new Date().toISOString();
+const withMirDefault = (field, value) => {
+  if (value) return value;
+  if (field === 'inspection_date_time') return nowIsoDateTime();
+  if (field === 'client_submission_date') return todayDateOnly();
+  if (MIR_ONLY_REQUIRED_FIELDS.has(field)) return value;
+  return '-';
 };
 
-const buildLegacyMirPayload = (data = {}) => {
-  const dynamicField = Array.isArray(data.dynamic_field) ? [...data.dynamic_field] : [];
-  appendDynamicEntry(dynamicField, 'challan_no', data.challan_no);
-  appendDynamicEntry(dynamicField, 'po_id', data.po_id);
-  appendDynamicEntry(dynamicField, 'items', data.items);
-
-  const payload = {
-    ...data,
-    dynamic_field: dynamicField,
-  };
-
-  delete payload.challan_no;
-  delete payload.po_id;
-  delete payload.items;
-  return payload;
+const toValidInteger = (value) => {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
 };
 
-const pickMirBaseFields = (data = {}) => {
-  const allowed = [
-    'project_name',
-    'project_code',
-    'client_name',
-    'pmc',
-    'contractor',
-    'vendor_code',
-    'mir_refrence_no',
-    'material_code',
-    'inspection_date_time',
-    'client_submission_date',
-    'refrence_docs_attached',
-    'mir_submited',
-    'dynamic_field',
-    'project_id',
-  ];
-  const payload = {};
-  allowed.forEach((k) => {
-    if (Object.prototype.hasOwnProperty.call(data, k)) payload[k] = data[k];
+const isIsoDate = (value) => {
+  if (typeof value !== 'string') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`));
+};
+
+const isIsoDateTime = (value) => {
+  if (typeof value !== 'string') return false;
+  if (!value.includes('T')) return false;
+  return !Number.isNaN(Date.parse(value));
+};
+
+const parseArrayLike = (value, fallback = []) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+};
+
+const normalizeDynamicField = (value) => {
+  const list = parseArrayLike(value, []);
+  return list
+    .filter((entry) => entry != null)
+    .map((entry) => {
+      if (!isPlainObject(entry)) return null;
+      const key = toTrimmedString(entry.key);
+      if (!key) return null;
+      const normalizedValue = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value ?? '');
+      return { key, value: normalizedValue };
+    })
+    .filter(Boolean);
+};
+
+const normalizeMirItems = (value) => {
+  const list = parseArrayLike(value, []);
+  return list.map((item, index) => {
+    if (!isPlainObject(item)) {
+      return {
+        srno: index + 1,
+        hsn: '',
+        description: '',
+        qty: 0,
+        UOM: '',
+        Rate: 0,
+        Amount: 0,
+        remark: '',
+      };
+    }
+
+    const srno = Number(item.srno);
+    const qty = Number(item.qty);
+    const rate = Number(item.Rate);
+    const amount = Number(item.Amount);
+    const hsn = toTrimmedString(item.hsn);
+    const description = toTrimmedString(item.description);
+    const uom = toTrimmedString(item.UOM ?? item.uom ?? item.unit ?? item.Unit);
+    const remark = item.remark == null ? '' : String(item.remark);
+    const inspected = Boolean(item.inspected);
+
+    return {
+      srno: Number.isFinite(srno) ? srno : index + 1,
+      hsn,
+      description,
+      qty: Number.isFinite(qty) ? qty : 0,
+      UOM: uom,
+      Rate: Number.isFinite(rate) ? rate : 0,
+      Amount: Number.isFinite(amount) ? amount : 0,
+      remark,
+      inspected,
+    };
   });
-  return payload;
 };
 
-const buildMinimalMirPayload = (data = {}) => {
-  const base = pickMirBaseFields(data);
+const validateMirPayload = (payload = {}, { strictRequired = false } = {}) => {
+  const errors = [];
+
+  MIR_STRING_FIELDS.forEach((field) => {
+    if (!toTrimmedString(payload[field])) {
+      if (strictRequired && MIR_CREATE_REQUIRED_FIELDS.includes(field)) {
+        errors.push(`${field} is required`);
+      }
+      return;
+    }
+
+    if (field === 'client_submission_date' && !isIsoDate(payload[field])) {
+      errors.push('client_submission_date must be in YYYY-MM-DD format');
+    }
+    if (field === 'inspection_date_time' && !isIsoDateTime(payload[field])) {
+      errors.push('inspection_date_time must be an ISO datetime string');
+    }
+  });
+
+  if (payload.project_id != null && toValidInteger(payload.project_id) == null) {
+    errors.push('project_id must be a positive integer when provided');
+  }
+  if (toValidInteger(payload.po_id) == null) {
+    if (strictRequired && MIR_CREATE_REQUIRED_FIELDS.includes('po_id')) {
+      errors.push('po_id must be a positive integer');
+    }
+  }
+
+  if (!Array.isArray(payload.dynamic_field)) {
+    errors.push('dynamic_field must be an array');
+  }
+  if (!Array.isArray(payload.items)) {
+    errors.push('items must be an array');
+  } else if (strictRequired && MIR_CREATE_REQUIRED_FIELDS.includes('items') && payload.items.length === 0) {
+    errors.push('items must contain at least one row');
+  }
+
+  return { valid: errors.length === 0, errors };
+};
+
+const normalizeMirPayload = (data = {}, options = {}) => {
+  const errors = [];
+  const payload = {};
+
+  MIR_STRING_FIELDS.forEach((field) => {
+    payload[field] = withMirDefault(field, toTrimmedString(data[field]));
+  });
+
+  payload.project_id = toValidInteger(data.project_id);
+  payload.po_id = toValidInteger(data.po_id);
+
+  const mirSubmited = data.mir_submited;
+  if (typeof mirSubmited === 'boolean') {
+    payload.mir_submited = mirSubmited;
+  } else if (mirSubmited === 'true' || mirSubmited === '1' || mirSubmited === 1) {
+    payload.mir_submited = true;
+  } else if (mirSubmited === 'false' || mirSubmited === '0' || mirSubmited === 0) {
+    payload.mir_submited = false;
+  } else {
+    payload.mir_submited = false;
+  }
+
+  payload.dynamic_field = normalizeDynamicField(data.dynamic_field);
+  payload.items = normalizeMirItems(data.items);
+
+  const fieldValidation = validateMirPayload(payload, options);
   return {
-    mir_refrence_no: base.mir_refrence_no || '',
-    project_id: base.project_id,
-    mir_submited: typeof base.mir_submited === 'boolean' ? base.mir_submited : false,
-    dynamic_field: Array.isArray(base.dynamic_field) ? base.dynamic_field : [],
+    payload,
+    errors: [...errors, ...fieldValidation.errors],
   };
 };
 
@@ -407,7 +545,9 @@ export const api = {
           return `${window.location.origin}/api-uploads/${pathAfterUploads}`;
         }
       }
-    } catch (_) {}
+    } catch {
+      return absoluteUrl;
+    }
     return absoluteUrl;
   },
 
@@ -525,27 +665,29 @@ export const api = {
     return handleResponse(response);
   },
 
-  createMir: async (data) => {
-    const send = async (payload) => {
-      const response = await fetch(`${BASE_URL}/api/mir`, {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      return handleResponse(response);
-    };
+  validateMirPayload: (payload, options = {}) => validateMirPayload(payload, options),
 
-    let result = await send(data);
-    if (!result.success && result.status === 500) {
-      result = await send(buildLegacyMirPayload(data));
+  createMir: async (data) => {
+    const { payload, errors } = normalizeMirPayload(data, { strictRequired: true });
+    if (errors.length > 0) {
+      return {
+        success: false,
+        status: 400,
+        error: `Invalid MIR payload: ${errors[0]}`,
+        validationErrors: errors,
+      };
     }
-    if (!result.success && result.status === 500) {
-      result = await send(buildMinimalMirPayload(data));
-    }
-    return result;
+    console.log('[MIR][POST] Final payload:', payload);
+
+    const response = await fetch(`${BASE_URL}/api/mir`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
   },
 
   getMirs: async () => {
@@ -570,26 +712,26 @@ export const api = {
   },
 
   updateMir: async (id, data) => {
-    const send = async (payload) => {
-      const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
-        method: 'PUT',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      return handleResponse(response);
-    };
+    const { payload, errors } = normalizeMirPayload(data, { strictRequired: true });
+    if (errors.length > 0) {
+      return {
+        success: false,
+        status: 400,
+        error: `Invalid MIR payload: ${errors[0]}`,
+        validationErrors: errors,
+      };
+    }
+    console.log(`[MIR][PUT] Final payload for id=${id}:`, payload);
 
-    let result = await send(data);
-    if (!result.success && result.status === 500) {
-      result = await send(buildLegacyMirPayload(data));
-    }
-    if (!result.success && result.status === 500) {
-      result = await send(buildMinimalMirPayload(data));
-    }
-    return result;
+    const response = await fetch(`${BASE_URL}/api/mir/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response);
   },
 
   deleteMir: async (id) => {
@@ -664,6 +806,7 @@ export const api = {
 
   getPoById: async (id) => {
     const response = await fetch(`${BASE_URL}/api/po/${id}`, {
+      cache: 'no-store',
       headers: getAuthHeaders(),
     });
     return handleResponse(response);
@@ -855,7 +998,9 @@ export const api = {
       if (payload[k] != null && typeof payload[k] !== 'string') {
         try {
           payload[k] = JSON.stringify(payload[k]);
-        } catch (_) {}
+        } catch {
+          payload[k] = String(payload[k]);
+        }
       }
     });
     const response = await fetch(`${BASE_URL}/api/sample/${id}`, {
@@ -883,7 +1028,9 @@ export const api = {
       if (payload[k] != null && typeof payload[k] !== 'string') {
         try {
           payload[k] = JSON.stringify(payload[k]);
-        } catch (_) {}
+        } catch {
+          payload[k] = String(payload[k]);
+        }
       }
     });
     const post = async (path) => {
@@ -1195,7 +1342,7 @@ const getToken = () => {
     try {
       const user = JSON.parse(userStr);
       return user.token;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -1231,7 +1378,7 @@ const handleResponse = async (response) => {
         data = text;
       }
     }
-  } catch (e) {
+  } catch {
     // Invalid JSON (e.g. HTML error page)
     if (!response.ok) {
       return { success: false, error: response.statusText || 'Invalid response', status: response.status };
