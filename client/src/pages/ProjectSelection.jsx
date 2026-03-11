@@ -407,12 +407,12 @@ export default function ProjectSelection() {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div className="space-y-2">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">Welcome, {user?.name}</h1>
-            <p className="text-lg text-gray-500">Select a project to continue to the dashboard.</p>
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Welcome, {user?.name}</h1>
+            <p className="text-lg text-muted-foreground">Select a project to continue to the dashboard.</p>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
@@ -679,7 +679,7 @@ export default function ProjectSelection() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={(e) => {
                           e.stopPropagation();
                           setProjectToDelete(project);
@@ -692,11 +692,11 @@ export default function ProjectSelection() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center text-sm text-gray-500">
+                <div className="flex items-center text-sm text-muted-foreground">
                   <MapPin className="mr-2 h-4 w-4" />
                   {project.location || 'No location specified'}
                 </div>
-                <div className="flex items-center text-sm text-gray-500">
+                <div className="flex items-center text-sm text-muted-foreground">
                   <Calendar className="mr-2 h-4 w-4" />
                   Started: {project.start_date || 'N/A'}
                 </div>
@@ -715,7 +715,7 @@ export default function ProjectSelection() {
           
           {projects.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-gray-500">No projects found. {isAdmin ? "Create one to get started." : "Please contact an administrator."}</p>
+              <p className="text-muted-foreground">No projects found. {isAdmin ? "Create one to get started." : "Please contact an administrator."}</p>
             </div>
           )}
         </div>

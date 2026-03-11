@@ -266,35 +266,42 @@ export default function SettingsAccessControl({ embedded = false }) {
                 const pageEnabled = Boolean(draftAccessControl.pages?.[page.pagePath]);
 
                 return (
-                  <AccordionItem value={page.pagePath} key={page.pagePath} className="rounded-2xl border bg-card px-5">
-                    <AccordionTrigger className="hover:no-underline py-5">
+                  <AccordionItem value={page.pagePath} key={page.pagePath} className="rounded-2xl border bg-card px-4 sm:px-5">
+                    <AccordionTrigger className="hover:no-underline py-4 sm:py-5">
                       <div className="text-left pr-4">
                         <p className="font-medium">{page.pageTitle}</p>
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{page.category} • {page.description}</p>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="space-y-3 pb-5">
-                      <div className="flex items-center justify-between rounded-xl bg-muted/40 p-4">
-                        <div>
-                          <Label className="font-medium">Page Access</Label>
-                          <p className="text-xs text-muted-foreground">Allow this page in sidebar and direct URL.</p>
+                      <div className="rounded-xl border bg-muted/30 p-4">
+                        <div className="grid grid-cols-[1fr_auto] items-start gap-x-3 gap-y-1">
+                          <Label className="text-sm font-semibold">Page Access</Label>
+                          <Switch
+                            className="mt-0.5 h-6 w-11 shrink-0 rounded-md sm:rounded-full"
+                            checked={pageEnabled}
+                            onCheckedChange={(value) => updatePageAccess(page.pagePath, value)}
+                          />
+                          <p className="col-span-2 text-xs text-muted-foreground">
+                            Allow this page in sidebar and direct URL.
+                          </p>
                         </div>
-                        <Switch checked={pageEnabled} onCheckedChange={(value) => updatePageAccess(page.pagePath, value)} />
                       </div>
 
                       {page.functions.map((fn) => {
                         const fnEnabled = Boolean(draftAccessControl.functions?.[fn.key]);
 
                         return (
-                          <div key={fn.key} className="flex items-center justify-between rounded-xl border bg-background p-4">
-                            <div className="pr-5">
+                          <div key={fn.key} className="rounded-xl border bg-background p-4">
+                            <div className="grid grid-cols-[1fr_auto] items-start gap-x-3 gap-y-1">
                               <p className="text-sm font-medium">{fn.label}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">{fn.description}</p>
+                              <Switch
+                                className="mt-0.5 h-6 w-11 shrink-0 rounded-md sm:rounded-full"
+                                checked={fnEnabled}
+                                onCheckedChange={(value) => updateFunctionAccess(fn.key, value, page.pagePath)}
+                              />
+                              <p className="col-span-2 text-xs text-muted-foreground">{fn.description}</p>
                             </div>
-                            <Switch
-                              checked={fnEnabled}
-                              onCheckedChange={(value) => updateFunctionAccess(fn.key, value, page.pagePath)}
-                            />
                           </div>
                         );
                       })}

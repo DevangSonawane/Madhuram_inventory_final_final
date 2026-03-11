@@ -98,10 +98,25 @@
 @layer base {
   * {
     @apply border-border;
+    min-width: 0;
+  }
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
   }
   
   /* Responsive Typography */
@@ -178,7 +193,7 @@
 
 @layer components {
   .content-shell {
-    @apply mx-auto w-full max-w-6xl space-y-6;
+    @apply mx-auto w-full max-w-6xl space-y-6 overflow-x-hidden;
   }
 
   .manual-entry-panel {

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Package, ShoppingCart, FlaskConical, ClipboardCheck, Users, Building2, RefreshCw, Activity } from 'lucide-react';
+import { Package, ShoppingCart, FlaskConical, ClipboardCheck, Building2, RefreshCw, Activity } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
@@ -138,7 +138,6 @@ export default function Dashboard() {
       { key: 'samples', label: 'Samples', icon: FlaskConical, ...metric('samples') },
       { key: 'mirs', label: 'MIRs', icon: Package, ...metric('mirs') },
       { key: 'itrs', label: 'ITRs', icon: ClipboardCheck, ...metric('itrs') },
-      { key: 'users', label: 'Users', icon: Users, ...metric('users') },
     ];
   }, [stats]);
 
@@ -189,7 +188,7 @@ export default function Dashboard() {
       <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {cardData.map((item) => (
           <motion.div variants={itemVariants} key={item.key}>
-            <Card className="shadow-sm border-none ring-1 ring-black/5 bg-card/60 backdrop-blur-sm">
+            <Card className="border border-border/50 shadow-sm ring-1 ring-border/40 bg-card/60 backdrop-blur-sm dark:border-border/80 dark:ring-border/80 dark:shadow-[0_0_24px_hsl(var(--primary)/0.10)]">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{item.label}</CardTitle>
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
@@ -211,7 +210,7 @@ export default function Dashboard() {
 
       <div className="grid items-start gap-8 grid-cols-1 lg:grid-cols-7">
         <motion.div className="col-span-1 lg:col-span-4" variants={itemVariants}>
-          <Card className="shadow-lg border-none ring-1 ring-black/5">
+          <Card className="border border-border/50 shadow-lg ring-1 ring-border/40 dark:border-border/80 dark:ring-border/80 dark:shadow-[0_0_28px_hsl(var(--primary)/0.10)]">
             <CardHeader>
               <CardTitle>Entity Overview</CardTitle>
               <CardDescription>Totals by module based on current dashboard scope.</CardDescription>
@@ -237,7 +236,7 @@ export default function Dashboard() {
         </motion.div>
 
         <motion.div className="col-span-1 lg:col-span-3" variants={itemVariants}>
-          <Card className="shadow-lg border-none ring-1 ring-black/5">
+          <Card className="border border-border/50 shadow-lg ring-1 ring-border/40 dark:border-border/80 dark:ring-border/80 dark:shadow-[0_0_28px_hsl(var(--primary)/0.10)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <div className="p-2 bg-primary/10 rounded-lg">

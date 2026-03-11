@@ -28,6 +28,21 @@ const emptyItem = () => ({
   net_price: '',
 });
 
+const toNumberOrNull = (value) => {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const calculateNetPrice = (pricePerPieceValue, discountValue) => {
+  const pricePerPiece = toNumberOrNull(pricePerPieceValue);
+  const discountPrice = toNumberOrNull(discountValue);
+
+  if (pricePerPiece === null && discountPrice === null) return '';
+  const netValue = (pricePerPiece ?? 0) - (discountPrice ?? 0);
+  return String(Number(netValue.toFixed(4)));
+};
+
 export default function VendorPriceListView() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -85,7 +100,14 @@ export default function VendorPriceListView() {
   const addItem = () => setItems((prev) => [...prev, emptyItem()]);
   const removeItem = (index) => setItems((prev) => prev.filter((_, idx) => idx !== index));
   const updateItem = (index, key, value) => {
-    setItems((prev) => prev.map((item, idx) => (idx === index ? { ...item, [key]: value } : item)));
+    setItems((prev) => prev.map((item, idx) => {
+      if (idx !== index) return item;
+      const nextItem = { ...item, [key]: value };
+      if (key === 'price_per_pic' || key === 'discount_price') {
+        nextItem.net_price = calculateNetPrice(nextItem.price_per_pic, nextItem.discount_price);
+      }
+      return nextItem;
+    }));
   };
 
   const handlePatchStatus = async () => {
@@ -142,7 +164,7 @@ export default function VendorPriceListView() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border bg-gradient-to-r from-sky-50 via-cyan-50 to-white p-6 md:p-8">
+      <section className="rounded-2xl border border-border bg-gradient-to-r from-sky-50 via-cyan-50 to-white p-6 md:p-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-3 flex gap-2">

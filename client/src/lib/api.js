@@ -975,6 +975,34 @@ export const api = {
     return handleResponse(response);
   },
 
+  compareVendorPriceListItems: async (params = {}) => {
+    const query = new URLSearchParams();
+    const allowedParams = [
+      'q',
+      'item_name',
+      'product_name',
+      'category',
+      'vendor_id',
+      'vendor_ids',
+      'project_id',
+      'status',
+      'limit',
+      'offset',
+    ];
+
+    allowedParams.forEach((key) => {
+      const value = params[key];
+      if (value === undefined || value === null || value === '') return;
+      query.set(key, String(value));
+    });
+
+    const queryString = query.toString();
+    const response = await fetch(`${BASE_URL}/api/vendor-price-list/compare${queryString ? `?${queryString}` : ''}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   createInventory: async (data) => {
     const payload = {
       project_id: data.project_id,

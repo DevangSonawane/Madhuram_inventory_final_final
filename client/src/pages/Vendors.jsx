@@ -353,7 +353,7 @@ export default function Vendors() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border bg-gradient-to-r from-cyan-50 via-sky-50 to-white p-6 md:p-8">
+      <section className="rounded-2xl border border-border bg-gradient-to-r from-cyan-50 via-sky-50 to-white p-6 md:p-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Vendors</h1>
@@ -637,11 +637,16 @@ export default function Vendors() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={submitting}>
+          <DialogFooter className="flex-row gap-3 sm:gap-2">
+            <Button
+              className="flex-1 sm:flex-none"
+              variant="outline"
+              onClick={() => setIsDialogOpen(false)}
+              disabled={submitting}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={submitting}>
+            <Button className="flex-1 sm:flex-none" onClick={handleSave} disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...

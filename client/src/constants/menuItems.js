@@ -11,8 +11,8 @@ import {
   BarChart3, 
   History,
   Briefcase,
-  ClipboardList,
-  CheckSquare,
+  // ClipboardList,
+  // CheckSquare,
   Layers,
   Truck,
   FileCheck,
@@ -41,16 +41,16 @@ export const MENU_CATEGORIES = [
         path: "/projects",
         icon: Briefcase,
       },
-      {
-        title: "BOQ Management",
-        path: "/boq",
-        icon: ClipboardList,
-      },
-      {
-        title: "MAS",
-        path: "/mas",
-        icon: CheckSquare,
-      },
+      // {
+      //   title: "BOQ Management",
+      //   path: "/boq",
+      //   icon: ClipboardList,
+      // },
+      // {
+      //   title: "MAS",
+      //   path: "/mas",
+      //   icon: CheckSquare,
+      // },
     ]
   },
   {
@@ -71,7 +71,6 @@ export const MENU_CATEGORIES = [
         title: "Vendor Comparison",
         path: "/vendor-comparison",
         icon: ArrowRightLeft,
-        hidden: true,
       },
       {
         title: "Purchase Orders",

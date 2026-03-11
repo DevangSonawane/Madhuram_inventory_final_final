@@ -93,21 +93,6 @@ export function Sidebar({ className, isCollapsed, toggleSidebar }) {
         </div>
       </ScrollArea>
       
-      {!collapsed && (
-        <div className="p-4 mt-auto">
-            <div className="bg-sidebar-accent/50 rounded-xl p-4 border border-sidebar-border/50 backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-sidebar-primary to-purple-500 flex items-center justify-center text-white font-bold text-xs shadow-inner">
-                        V1
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-sm font-medium text-sidebar-foreground">Inventory System</span>
-                        <span className="text-xs text-sidebar-foreground/50">v1.0.0</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-      )}
     </div>
   );
 }

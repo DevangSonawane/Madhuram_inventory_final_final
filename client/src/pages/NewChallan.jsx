@@ -327,7 +327,11 @@ export default function NewChallan() {
             <div>Price</div>
           </div>
           {form.items.map((item, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-7 gap-2">
+            <div
+              key={index}
+              className={`grid grid-cols-1 gap-2 md:grid-cols-7 ${index > 0 ? "border-t pt-3 md:border-t-0 md:pt-0" : ""}`}
+            >
+              <div className="text-xs font-medium text-muted-foreground md:hidden">Sr.No {index + 1}</div>
               <Input className="h-11 text-base" placeholder="Name" value={item.name} onChange={(e) => updateItem(index, 'name', e.target.value)} />
               <Textarea className="md:col-span-2 text-base" rows={2} placeholder="Description" value={item.description} onChange={(e) => updateItem(index, 'description', e.target.value)} />
               <Input className="h-11 text-base" placeholder="Width" value={item.width} onChange={(e) => updateItem(index, 'width', e.target.value)} />

@@ -76,7 +76,7 @@ export default function VendorPriceLists() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border bg-gradient-to-r from-amber-50 via-orange-50 to-white p-6 md:p-8">
+      <section className="rounded-2xl border border-border bg-gradient-to-r from-amber-50 via-orange-50 to-white p-6 md:p-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-3 flex gap-2">

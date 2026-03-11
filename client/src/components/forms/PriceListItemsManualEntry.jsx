@@ -171,7 +171,7 @@ export function PriceListItemsManualEntry({
 
               <div className="space-y-1 md:col-span-2 lg:col-span-1">
                 <Label>Net Price</Label>
-                <Input type="number" value={item.net_price ?? ''} onChange={(e) => onChange(index, 'net_price', e.target.value)} />
+                <Input type="number" value={item.net_price ?? ''} readOnly />
               </div>
             </div>
           </div>

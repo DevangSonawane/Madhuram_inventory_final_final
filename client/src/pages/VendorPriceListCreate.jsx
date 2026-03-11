@@ -3,8 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { vendorFlowStore } from '@/lib/vendorFlowStore';
@@ -30,6 +28,21 @@ const emptyForm = () => ({
   items: [emptyItem()],
 });
 
+const toNumberOrNull = (value) => {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const calculateNetPrice = (pricePerPieceValue, discountValue) => {
+  const pricePerPiece = toNumberOrNull(pricePerPieceValue);
+  const discountPrice = toNumberOrNull(discountValue);
+
+  if (pricePerPiece === null && discountPrice === null) return '';
+  const netValue = (pricePerPiece ?? 0) - (discountPrice ?? 0);
+  return String(Number(netValue.toFixed(4)));
+};
+
 export default function VendorPriceListCreate() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -52,7 +65,14 @@ export default function VendorPriceListCreate() {
   const updateItem = (index, key, value) => {
     setForm((prev) => ({
       ...prev,
-      items: prev.items.map((item, idx) => (idx === index ? { ...item, [key]: value } : item)),
+      items: prev.items.map((item, idx) => {
+        if (idx !== index) return item;
+        const nextItem = { ...item, [key]: value };
+        if (key === 'price_per_pic' || key === 'discount_price') {
+          nextItem.net_price = calculateNetPrice(nextItem.price_per_pic, nextItem.discount_price);
+        }
+        return nextItem;
+      }),
     }));
   };
 
@@ -250,16 +270,6 @@ export default function VendorPriceListCreate() {
                 </Button>
               </div>
             ) : null}
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <Label>File Name</Label>
-              <Input value={form.filename} onChange={(e) => setForm((p) => ({ ...p, filename: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label>File Path</Label>
-              <Input value={form.file_path} onChange={(e) => setForm((p) => ({ ...p, file_path: e.target.value }))} />
-            </div>
           </div>
         </CardContent>
       </Card>
