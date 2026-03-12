@@ -7,9 +7,6 @@ import { cn } from "@/lib/utils";
 import { useProject } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { hasPageAccess, normalizeProjectRoutePath } from '@/lib/accessControl';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { AlertCircle } from 'lucide-react';
 
 export function MainLayout() {
   const location = useLocation();
@@ -50,18 +47,21 @@ export function MainLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const currentPagePath = normalizeProjectRoutePath(location.pathname);
   const isCurrentPageAllowed = hasPageAccess(user, currentPagePath);
+  const shouldShowSidebar = isCurrentPageAllowed;
 
   return (
     <div className="min-h-screen w-full flex bg-muted/30">
-      <div className={cn(
-        "hidden md:block fixed inset-y-0 z-50 transition-all duration-300",
-        isSidebarCollapsed ? "w-20" : "w-72"
-      )}>
-        <Sidebar isCollapsed={isSidebarCollapsed} toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
-      </div>
+      {shouldShowSidebar && (
+        <div className={cn(
+          "hidden md:block fixed inset-y-0 z-50 transition-all duration-300",
+          isSidebarCollapsed ? "w-20" : "w-72"
+        )}>
+          <Sidebar isCollapsed={isSidebarCollapsed} toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
+        </div>
+      )}
       <div className={cn(
         "flex-1 flex flex-col transition-all duration-300 min-w-0",
-        isSidebarCollapsed ? "md:pl-20" : "md:pl-72"
+        shouldShowSidebar ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-72") : "md:pl-0"
       )}>
         <Header />
         <main className="flex-1 p-3 sm:p-4 md:p-8 overflow-y-auto overflow-x-hidden">
@@ -78,16 +78,10 @@ export function MainLayout() {
                 {isCurrentPageAllowed ? (
                   <Outlet />
                 ) : (
-                  <div className="max-w-xl">
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        You do not have access to this page. Contact an administrator to request access.
-                      </AlertDescription>
-                    </Alert>
-                    <Button className="mt-4" onClick={() => navigate(projectId ? `/${projectId}` : '/projects')}>
-                      Go to dashboard
-                    </Button>
+                  <div className="h-full w-full flex items-center justify-center">
+                    <p className="text-center text-2xl md:text-3xl font-semibold text-destructive">
+                      Please contact admin to get access
+                    </p>
                   </div>
                 )}
               </motion.div>

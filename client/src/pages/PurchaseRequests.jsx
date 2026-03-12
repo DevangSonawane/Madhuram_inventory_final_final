@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
-import { DataTable } from "@/components/ui/data-table";
-import { Card, CardContent } from "@/components/ui/card";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  CalendarDays,
+  Eye,
+  FileSignature,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCcw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { useProject } from "@/contexts/ProjectContext";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Eye, Calendar as CalendarIcon, Check, ChevronsRight, Upload, FileText, Keyboard, FileSpreadsheet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +29,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -23,589 +37,1089 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const initialData = [
-  {
-    id: "PR-2023-101",
-    requester: "John Doe",
-    date: "2023-10-25",
-    priority: "High",
-    status: "Pending Approval",
-    items: 3
-  },
-  {
-    id: "PR-2023-102",
-    requester: "Jane Smith",
-    date: "2023-10-26",
-    priority: "Medium",
-    status: "Approved",
-    items: 5
-  },
-  {
-    id: "PR-2023-103",
-    requester: "Mike Johnson",
-    date: "2023-10-27",
-    priority: "Low",
-    status: "Draft",
-    items: 2
-  },
-];
+const URGENCY_OPTIONS = ["High", "Medium", "Low"];
 
-function CreatePRDialog({ open, onOpenChange, onSubmit }) {
-    const [step, setStep] = useState(1);
-    const [date, setDate] = useState(new Date());
-    const [formData, setFormData] = useState({
-        requester: "",
-        priority: "medium",
-        remarks: "",
-        items: [],
-        file: null
+const createEmptyItem = () => ({
+  material_description: "",
+  unit: "NOS",
+  req_qty: "",
+  make: "",
+  place_of_utilisation: "",
+});
+
+const createEmptyForm = () => ({
+  project_id: "",
+  sample_id: "",
+  project_name: "",
+  workorder_no: "",
+  location: "",
+  mirno: "",
+  urgency: "Medium",
+  date: new Date().toISOString().slice(0, 10),
+  approved_by: "",
+  remarks: "",
+  pr_file_path: "",
+  signature_file_path: "",
+  prFile: null,
+  signatureFile: null,
+  items: [createEmptyItem()],
+});
+
+const parseIntegerOrNull = (value) => {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+};
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+};
+
+const formatPrNumber = (pr = {}) => {
+  const sourceDate = pr.date || pr.created_at || new Date().toISOString();
+  const parsed = new Date(sourceDate);
+  const yyyy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+  const datePart = Number.isNaN(parsed.getTime()) ? "0000-00-00" : `${yyyy}-${mm}-${dd}`;
+  const sequence = pr.pr_id || pr.id || "0";
+  const project = pr.project_id || pr.projectId || "0";
+  return `PR-${datePart}-${sequence}-${project}`;
+};
+
+const normalizePr = (item = {}) => ({
+  ...item,
+  pr_id: item.pr_id || item.id,
+  project_id: item.project_id || item.projectId || null,
+  sample_id: item.sample_id || item.sampleId || null,
+  project_name: item.project_name || "-",
+  workorder_no: item.workorder_no || "-",
+  location: item.location || "-",
+  mirno: item.mirno || "-",
+  urgency: item.urgency || "Medium",
+  date: item.date || item.created_at || null,
+  approved_by: item.approved_by || "-",
+  pr_file_path: item.pr_file_path || "",
+  signature_file_path: item.signature_file_path || "",
+  remarks: item.remarks || "",
+  items: Array.isArray(item.items) ? item.items : [],
+});
+
+function PrFormDialog({
+  open,
+  onOpenChange,
+  mode,
+  form,
+  setForm,
+  onSubmit,
+  submitting,
+  selectedProject,
+  sampleOptions,
+  loadingSamples,
+  mirOptions,
+  loadingMirs,
+}) {
+  const title = mode === "edit" ? "Edit Purchase Request" : "Create Purchase Request";
+  const selectedSampleMissing = Boolean(
+    form.sample_id && !sampleOptions.some((sample) => String(sample.sample_id || sample.id) === form.sample_id)
+  );
+  const selectedMirMissing = Boolean(
+    form.mirno && !mirOptions.some((mir) => String(mir.mir_refrence_no || mir.mir_id || mir.id) === form.mirno)
+  );
+
+  const setField = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const setItemField = (index, field, value) => {
+    setForm((prev) => {
+      const next = [...prev.items];
+      next[index] = { ...next[index], [field]: value };
+      return { ...prev, items: next };
     });
-    const [currentItem, setCurrentItem] = useState({ name: "", quantity: "", unit: "bags" });
-    const [entryMethod, setEntryMethod] = useState(null); // 'manual' or 'upload'
+  };
 
-    const handleInputChange = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
+  const addItem = () => {
+    setForm((prev) => ({ ...prev, items: [...prev.items, createEmptyItem()] }));
+  };
 
-    const handleAddItem = () => {
-        if (currentItem.name && currentItem.quantity) {
-            setFormData(prev => ({
-                ...prev,
-                items: [...prev.items, { ...currentItem, id: Date.now() }]
-            }));
-            setCurrentItem({ name: "", quantity: "", unit: "bags" });
-        }
-    };
+  const removeItem = (index) => {
+    setForm((prev) => {
+      if (prev.items.length <= 1) return prev;
+      return { ...prev, items: prev.items.filter((_, i) => i !== index) };
+    });
+  };
 
-    const handleRemoveItem = (id) => {
-        setFormData(prev => ({
-            ...prev,
-            items: prev.items.filter(item => item.id !== id)
-        }));
-    };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            Fill PR header details, upload optional files, and add item rows.
+          </DialogDescription>
+        </DialogHeader>
 
-    const handleFileUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setFormData(prev => ({ ...prev, file: file }));
-        }
-    };
+        <div className="grid gap-4 py-2 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Project ID *</Label>
+            <Input
+              value={form.project_id}
+              onChange={(e) => setField("project_id", e.target.value)}
+              placeholder="e.g. 5"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Project Name *</Label>
+            <Input
+              value={form.project_name}
+              onChange={(e) => setField("project_name", e.target.value)}
+              placeholder={selectedProject?.project_name || "Project name"}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Sample ID</Label>
+            <Select
+              value={form.sample_id || "none"}
+              onValueChange={(value) => setField("sample_id", value === "none" ? "" : value)}
+              disabled={loadingSamples}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={loadingSamples ? "Loading samples..." : "Optional"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {selectedSampleMissing ? (
+                  <SelectItem value={form.sample_id}>Sample #{form.sample_id} (current)</SelectItem>
+                ) : null}
+                {sampleOptions.map((sample) => {
+                  const id = String(sample.sample_id || sample.id);
+                  const label = sample.work_done || sample.site_name || sample.building_name || `Sample #${id}`;
+                  return (
+                    <SelectItem key={id} value={id}>
+                      {`#${id} - ${label}`}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Work Order No</Label>
+            <Input
+              value={form.workorder_no}
+              onChange={(e) => setField("workorder_no", e.target.value)}
+              placeholder="WO number"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>MIR No</Label>
+            <Select value={form.mirno || "none"} onValueChange={(value) => setField("mirno", value === "none" ? "" : value)}>
+              <SelectTrigger>
+                <SelectValue placeholder={loadingMirs ? "Loading MIR..." : "Select MIR No"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {selectedMirMissing ? (
+                  <SelectItem value={form.mirno}>MIR {form.mirno} (current)</SelectItem>
+                ) : null}
+                {mirOptions.map((mir) => {
+                  const ref = String(mir.mir_refrence_no || mir.mir_id || mir.id);
+                  const label = mir.material_code || mir.project_name || `MIR ${ref}`;
+                  return (
+                    <SelectItem key={ref} value={ref}>
+                      {`${ref} - ${label}`}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Urgency</Label>
+            <Select value={form.urgency} onValueChange={(value) => setField("urgency", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select urgency" />
+              </SelectTrigger>
+              <SelectContent>
+                {URGENCY_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Date</Label>
+            <Input value={form.date} onChange={(e) => setField("date", e.target.value)} type="date" />
+          </div>
+          <div className="space-y-2">
+            <Label>Approved By</Label>
+            <Input
+              value={form.approved_by}
+              onChange={(e) => setField("approved_by", e.target.value)}
+              placeholder="Approver name"
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Location</Label>
+            <Input
+              value={form.location}
+              onChange={(e) => setField("location", e.target.value)}
+              placeholder="Site / location"
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Remarks</Label>
+            <Textarea
+              value={form.remarks}
+              onChange={(e) => setField("remarks", e.target.value)}
+              placeholder="Optional notes"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>PR File</Label>
+            <Input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv"
+              onChange={(e) => setField("prFile", e.target.files?.[0] || null)}
+            />
+            {form.pr_file_path ? (
+              <p className="text-xs text-muted-foreground">Current path: {form.pr_file_path}</p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label>Signature File</Label>
+            <Input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              onChange={(e) => setField("signatureFile", e.target.files?.[0] || null)}
+            />
+            {form.signature_file_path ? (
+              <p className="text-xs text-muted-foreground">Current path: {form.signature_file_path}</p>
+            ) : null}
+          </div>
+        </div>
 
-    const handleSubmit = () => {
-        onSubmit({
-            ...formData,
-            date: format(date, "yyyy-MM-dd"),
-            itemsCount: formData.items.length || (formData.file ? 1 : 0),
-            entryMethod
-        });
-        resetForm();
-    };
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Label className="text-base">PR Items</Label>
+            <Button type="button" variant="outline" size="sm" onClick={addItem}>
+              <Plus className="mr-2 h-4 w-4" /> Add Row
+            </Button>
+          </div>
 
-    const resetForm = () => {
-        setStep(1);
-        setEntryMethod(null);
-        setFormData({
-            requester: "",
-            priority: "medium",
-            remarks: "",
-            items: [],
-            file: null
-        });
-    };
+          <div className="space-y-3">
+            {form.items.map((item, index) => (
+              <Card key={`item-${index}`}>
+                <CardContent className="grid gap-3 p-4 md:grid-cols-12">
+                  <div className="md:col-span-4">
+                    <Label className="mb-1 block text-xs">Material Description *</Label>
+                    <Input
+                      value={item.material_description}
+                      onChange={(e) => setItemField(index, "material_description", e.target.value)}
+                      placeholder="Material"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="mb-1 block text-xs">Unit</Label>
+                    <Input
+                      value={item.unit}
+                      onChange={(e) => setItemField(index, "unit", e.target.value)}
+                      placeholder="NOS"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="mb-1 block text-xs">Req Qty *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.req_qty}
+                      onChange={(e) => setItemField(index, "req_qty", e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="mb-1 block text-xs">Make</Label>
+                    <Input
+                      value={item.make}
+                      onChange={(e) => setItemField(index, "make", e.target.value)}
+                      placeholder="Brand / make"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="mb-1 block text-xs">Place of Utilisation</Label>
+                    <Input
+                      value={item.place_of_utilisation}
+                      onChange={(e) => setItemField(index, "place_of_utilisation", e.target.value)}
+                      placeholder="Usage area"
+                    />
+                  </div>
+                  <div className="md:col-span-12 flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeItem(index)}
+                      disabled={form.items.length <= 1}
+                    >
+                      <X className="mr-2 h-4 w-4" /> Remove
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
 
-    const nextStep = () => setStep(step + 1);
-    const prevStep = () => {
-        if (step === 2 && entryMethod) {
-            setEntryMethod(null);
-        } else {
-            setStep(step - 1);
-        }
-    };
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={onSubmit} disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+              </>
+            ) : mode === "edit" ? (
+              "Update PR"
+            ) : (
+              "Create PR"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-    return (
-        <Dialog open={open} onOpenChange={(val) => {
-            onOpenChange(val);
-            if (!val) resetForm();
-        }}>
-            <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                    <DialogTitle>Create Purchase Request</DialogTitle>
-                    <DialogDescription>
-                        Step {step} of 3
-                    </DialogDescription>
-                </DialogHeader>
-                
-                <div className="py-4">
-                    {/* Progress Indicator */}
-                    <div className="flex items-center justify-between mb-6 px-2">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="flex items-center">
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium border-2 transition-colors",
-                                    step >= i ? "border-primary bg-primary text-primary-foreground" : "border-muted text-muted-foreground"
-                                )}>
-                                    {step > i ? <Check className="h-4 w-4" /> : i}
-                                </div>
-                                {i < 3 && <div className={cn("w-24 h-0.5 mx-2 transition-colors", step > i ? "bg-primary" : "bg-muted")} />}
-                            </div>
-                        ))}
-                    </div>
+function PrViewDialog({ open, onOpenChange, pr }) {
+  if (!pr) return null;
 
-                    {step === 1 && (
-                        <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="requester">Requester Name</Label>
-                                    <Input 
-                                        id="requester" 
-                                        placeholder="Enter name" 
-                                        value={formData.requester}
-                                        onChange={(e) => handleInputChange("requester", e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="priority">Priority</Label>
-                                    <Select value={formData.priority} onValueChange={(val) => handleInputChange("priority", val)}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select priority" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="High">High</SelectItem>
-                                            <SelectItem value="Medium">Medium</SelectItem>
-                                            <SelectItem value="Low">Low</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2 flex flex-col">
-                                    <Label>Required Date</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant={"outline"}
-                                                className={cn(
-                                                    "w-full justify-start text-left font-normal",
-                                                    !date && "text-muted-foreground"
-                                                )}
-                                            >
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {date ? format(date, "PPP") : <span>Pick a date</span>}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                            <Calendar
-                                                mode="single"
-                                                selected={date}
-                                                onSelect={setDate}
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+  const prFileUrl = pr.pr_file_path ? api.getApiFileUrl(pr.pr_file_path) : "";
+  const signatureUrl = pr.signature_file_path ? api.getApiFileUrl(pr.signature_file_path) : "";
 
-                    {step === 2 && (
-                        <div className="space-y-4">
-                            {!entryMethod ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div 
-                                        className="border-2 border-dashed rounded-lg p-6 hover:bg-muted/50 transition-colors cursor-pointer flex flex-col items-center justify-center text-center space-y-4 h-[200px]"
-                                        onClick={() => setEntryMethod('manual')}
-                                    >
-                                        <div className="p-4 bg-primary/10 rounded-full">
-                                            <Keyboard className="h-8 w-8 text-primary" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold">Manual Entry</h3>
-                                            <p className="text-sm text-muted-foreground">Type items one by one</p>
-                                        </div>
-                                    </div>
-                                    <div 
-                                        className="border-2 border-dashed rounded-lg p-6 hover:bg-muted/50 transition-colors cursor-pointer flex flex-col items-center justify-center text-center space-y-4 h-[200px]"
-                                        onClick={() => setEntryMethod('upload')}
-                                    >
-                                        <div className="p-4 bg-primary/10 rounded-full">
-                                            <Upload className="h-8 w-8 text-primary" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold">Upload File</h3>
-                                            <p className="text-sm text-muted-foreground">Excel, PDF, or CSV</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="flex items-center justify-between mb-4">
-                                        <Label className="text-base">
-                                            {entryMethod === 'manual' ? "Items List" : "Upload Document"}
-                                        </Label>
-                                        <Button variant="ghost" size="sm" onClick={() => setEntryMethod(null)}>
-                                            Change Method
-                                        </Button>
-                                    </div>
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>{formatPrNumber(pr)}</DialogTitle>
+          <DialogDescription>Request details and uploaded documents.</DialogDescription>
+        </DialogHeader>
 
-                                    {entryMethod === 'manual' ? (
-                                        <div className="border rounded-md p-4 space-y-4">
-                                            <div className="hidden md:grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground mb-2">
-                                                <div className="col-span-5">Item Name</div>
-                                                <div className="col-span-3">Quantity</div>
-                                                <div className="col-span-3">Unit</div>
-                                                <div className="col-span-1"></div>
-                                            </div>
-                                            {/* New Item Input */}
-                                            <div className="flex flex-col md:grid md:grid-cols-12 gap-2 items-start md:items-center border-b md:border-0 pb-4 md:pb-0">
-                                                <div className="w-full md:col-span-5">
-                                                    <Input 
-                                                        placeholder="Item name" 
-                                                        value={currentItem.name}
-                                                        onChange={(e) => setCurrentItem({...currentItem, name: e.target.value})}
-                                                    />
-                                                </div>
-                                                <div className="flex w-full gap-2 md:contents">
-                                                    <div className="flex-1 md:col-span-3">
-                                                        <Input 
-                                                            type="number" 
-                                                            value={currentItem.quantity}
-                                                            onChange={(e) => setCurrentItem({...currentItem, quantity: e.target.value})}
-                                                        />
-                                                    </div>
-                                                    <div className="flex-1 md:col-span-3">
-                                                        <Select value={currentItem.unit} onValueChange={(val) => setCurrentItem({...currentItem, unit: val})}>
-                                                            <SelectTrigger>
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="bags">Bags</SelectItem>
-                                                                <SelectItem value="kg">Kg</SelectItem>
-                                                                <SelectItem value="nos">Nos</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="md:col-span-1 text-center">
-                                                        <Button size="sm" variant="outline" onClick={handleAddItem}>
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            {/* List of added items */}
-                                            {formData.items.map((item) => (
-                                                <div key={item.id} className="flex flex-col md:grid md:grid-cols-12 gap-2 items-start md:items-center border-t pt-2">
-                                                    <div className="w-full md:col-span-5 text-sm">{item.name}</div>
-                                                    <div className="flex-1 md:col-span-3 text-sm">{item.quantity}</div>
-                                                    <div className="flex-1 md:col-span-3 text-sm">{item.unit}</div>
-                                                    <div className="md:col-span-1 text-center">
-                                                        <Button variant="destructive" size="sm" onClick={() => handleRemoveItem(item.id)}>
-                                                            Delete
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 transition-colors text-center relative">
-                                            <Input 
-                                                type="file" 
-                                                accept=".xlsx,.xls,.pdf,.csv" 
-                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                onChange={handleFileUpload}
-                                            />
-                                            <div className="flex flex-col items-center gap-2">
-                                                {formData.file ? (
-                                                    <>
-                                                        <FileSpreadsheet className="h-10 w-10 text-green-600" />
-                                                        <span className="font-medium text-lg">{formData.file.name}</span>
-                                                        <span className="text-sm text-muted-foreground">{(formData.file.size / 1024).toFixed(2)} KB</span>
-                                                        <Button variant="outline" size="sm" className="mt-2" onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setFormData(prev => ({ ...prev, file: null }));
-                                                        }}>
-                                                            Remove File
-                                                        </Button>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Upload className="h-10 w-10 text-muted-foreground" />
-                                                        <h3 className="font-semibold text-lg mt-2">Upload your file</h3>
-                                                        <p className="text-sm text-muted-foreground">Drag and drop or click to upload</p>
-                                                        <p className="text-xs text-muted-foreground mt-1">Supports Excel, PDF, CSV</p>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    )}
+        <div className="grid gap-3 text-sm md:grid-cols-3">
+          <div>
+            <p className="text-muted-foreground">Project</p>
+            <p className="font-medium">{pr.project_name}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Work Order</p>
+            <p className="font-medium">{pr.workorder_no}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">MIR No</p>
+            <p className="font-medium">{pr.mirno}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Date</p>
+            <p className="font-medium">{formatDate(pr.date)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Urgency</p>
+            <p className="font-medium">{pr.urgency}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Approved By</p>
+            <p className="font-medium">{pr.approved_by}</p>
+          </div>
+          <div className="md:col-span-3">
+            <p className="text-muted-foreground">Location</p>
+            <p className="font-medium">{pr.location}</p>
+          </div>
+          {pr.remarks ? (
+            <div className="md:col-span-3">
+              <p className="text-muted-foreground">Remarks</p>
+              <p className="font-medium">{pr.remarks}</p>
+            </div>
+          ) : null}
+        </div>
 
-                    {step === 3 && (
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="remarks">Justification / Remarks</Label>
-                                <Textarea 
-                                    id="remarks" 
-                                    placeholder="Enter reason for purchase request..." 
-                                    value={formData.remarks}
-                                    onChange={(e) => handleInputChange("remarks", e.target.value)}
-                                />
-                            </div>
-                            <div className="rounded-lg bg-muted p-4 text-sm">
-                                <h4 className="font-semibold mb-2">Summary</h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <span className="text-muted-foreground">Requester:</span>
-                                    <span>{formData.requester}</span>
-                                    <span className="text-muted-foreground">Priority:</span>
-                                    <span className="capitalize">{formData.priority}</span>
-                                    <span className="text-muted-foreground">Input Method:</span>
-                                    <span className="capitalize">{entryMethod}</span>
-                                    {entryMethod === 'manual' ? (
-                                        <>
-                                            <span className="text-muted-foreground">Items:</span>
-                                            <span>{formData.items.length} Item(s)</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-muted-foreground">File:</span>
-                                            <span>{formData.file ? formData.file.name : "No file uploaded"}</span>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
+        <div className="flex flex-wrap gap-2">
+          {prFileUrl ? (
+            <Button asChild variant="outline" size="sm">
+              <a href={prFileUrl} target="_blank" rel="noreferrer">
+                <FileText className="mr-2 h-4 w-4" /> View PR File
+              </a>
+            </Button>
+          ) : null}
+          {signatureUrl ? (
+            <Button asChild variant="outline" size="sm">
+              <a href={signatureUrl} target="_blank" rel="noreferrer">
+                <FileSignature className="mr-2 h-4 w-4" /> View Signature
+              </a>
+            </Button>
+          ) : null}
+        </div>
 
-                <DialogFooter>
-                    {step > 1 && (
-                        <Button variant="outline" onClick={prevStep}>Previous</Button>
-                    )}
-                    {step < 3 ? (
-                        <Button 
-                            onClick={nextStep} 
-                            disabled={step === 2 && !entryMethod}
-                        >
-                            Next <ChevronsRight className="ml-2 h-4 w-4" />
-                        </Button>
-                    ) : (
-                        <Button onClick={handleSubmit}>Submit Request</Button>
-                    )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Items ({pr.items.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Qty</TableHead>
+                  <TableHead>Make</TableHead>
+                  <TableHead>Place</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pr.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-16 text-center text-muted-foreground">
+                      No items.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  pr.items.map((item, idx) => (
+                    <TableRow key={`${item.pr_item_id || idx}`}>
+                      <TableCell>{item.material_description || "-"}</TableCell>
+                      <TableCell>{item.unit || "-"}</TableCell>
+                      <TableCell>{item.req_qty ?? "-"}</TableCell>
+                      <TableCell>{item.make || "-"}</TableCell>
+                      <TableCell>{item.place_of_utilisation || "-"}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function PurchaseRequests() {
-  const [data, setData] = useState(initialData);
-  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const { projectId } = useParams();
+  const { selectedProject } = useProject();
   const { toast } = useToast();
-  const { user } = useAuth();
 
-  const handleCreateRequest = (newRequest) => {
-    const request = {
-      id: `PR-2023-${100 + data.length + 1}`,
-      requester: user?.name || newRequest.requester,
-      date: newRequest.date,
-      priority: newRequest.priority,
-      status: "Pending Approval",
-      items: newRequest.itemsCount
+  const [prs, setPrs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [sampleFilter, setSampleFilter] = useState("");
+  const [urgencyFilter, setUrgencyFilter] = useState("all");
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [editingPrId, setEditingPrId] = useState(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [deletingPrId, setDeletingPrId] = useState(null);
+  const [selectedPr, setSelectedPr] = useState(null);
+  const [form, setForm] = useState(createEmptyForm());
+  const [sampleOptions, setSampleOptions] = useState([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
+  const [mirOptions, setMirOptions] = useState([]);
+  const [loadingMirs, setLoadingMirs] = useState(false);
+
+  const effectiveProjectId = useMemo(
+    () => parseIntegerOrNull(projectId) || parseIntegerOrNull(selectedProject?.project_id || selectedProject?.id),
+    [projectId, selectedProject]
+  );
+
+  const loadPrs = async ({ mode = "auto", sampleId } = {}) => {
+    try {
+      setLoading(true);
+
+      let result;
+      if (mode === "sample" && sampleId) {
+        result = await api.getPrsBySample(sampleId);
+      } else if (mode === "all") {
+        result = await api.getPrs();
+      } else {
+        const scopedProjectId = parseIntegerOrNull(projectId);
+        result = scopedProjectId ? await api.getPrsByProject(scopedProjectId) : await api.getPrs();
+      }
+
+      if (!result.success) {
+        setPrs([]);
+        toast({
+          title: "Failed to load PRs",
+          description: result.error || "Could not fetch purchase requests.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const rows = Array.isArray(result.data) ? result.data : [];
+      setPrs(rows.map(normalizePr));
+    } catch {
+      setPrs([]);
+      toast({
+        title: "Failed to load PRs",
+        description: "Could not fetch purchase requests.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPrs();
+  }, [projectId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSampleOptions = async () => {
+      setLoadingSamples(true);
+      try {
+        const result = effectiveProjectId
+          ? await api.getSamplesByProject(effectiveProjectId)
+          : await api.getSamples();
+
+        if (!mounted) return;
+        if (!result.success || !Array.isArray(result.data)) {
+          setSampleOptions([]);
+          return;
+        }
+
+        const byId = new Map();
+        result.data.forEach((sample) => {
+          const id = sample?.sample_id ?? sample?.id;
+          if (id == null || id === "") return;
+          byId.set(String(id), sample);
+        });
+        setSampleOptions(Array.from(byId.values()));
+      } catch {
+        if (mounted) setSampleOptions([]);
+      } finally {
+        if (mounted) setLoadingSamples(false);
+      }
     };
-    
-    setData([...data, request]);
-    setOpen(false);
-    toast({
-        title: "Success",
-        description: "Purchase Request created successfully.",
+
+    loadSampleOptions();
+    return () => {
+      mounted = false;
+    };
+  }, [effectiveProjectId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadMirOptions = async () => {
+      setLoadingMirs(true);
+      try {
+        const result = effectiveProjectId
+          ? await api.getMirsByProject(effectiveProjectId)
+          : await api.getMirs();
+
+        if (!mounted) return;
+        if (!result.success || !Array.isArray(result.data)) {
+          setMirOptions([]);
+          return;
+        }
+
+        const byRef = new Map();
+        result.data.forEach((mir) => {
+          const ref = mir?.mir_refrence_no || mir?.mir_id || mir?.id;
+          if (ref == null || ref === "") return;
+          byRef.set(String(ref), mir);
+        });
+        setMirOptions(Array.from(byRef.values()));
+      } catch {
+        if (mounted) setMirOptions([]);
+      } finally {
+        if (mounted) setLoadingMirs(false);
+      }
+    };
+
+    loadMirOptions();
+    return () => {
+      mounted = false;
+    };
+  }, [effectiveProjectId]);
+
+  const totalItems = useMemo(
+    () => prs.reduce((sum, pr) => sum + (Array.isArray(pr.items) ? pr.items.length : 0), 0),
+    [prs]
+  );
+
+  const highUrgencyCount = useMemo(
+    () => prs.filter((pr) => String(pr.urgency).toLowerCase() === "high").length,
+    [prs]
+  );
+
+  const filteredPrs = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return prs.filter((pr) => {
+      if (urgencyFilter !== "all" && String(pr.urgency).toLowerCase() !== urgencyFilter) {
+        return false;
+      }
+
+      if (!normalizedQuery) return true;
+
+      const haystack = [
+        pr.pr_id,
+        pr.project_name,
+        pr.workorder_no,
+        pr.location,
+        pr.mirno,
+        pr.approved_by,
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+
+      return haystack.includes(normalizedQuery);
     });
+  }, [prs, query, urgencyFilter]);
+
+  const openEditDialog = (pr) => {
+    setEditingPrId(pr.pr_id);
+    setForm({
+      project_id: pr.project_id ? String(pr.project_id) : "",
+      sample_id: pr.sample_id ? String(pr.sample_id) : "",
+      project_name: pr.project_name === "-" ? "" : pr.project_name,
+      workorder_no: pr.workorder_no === "-" ? "" : pr.workorder_no,
+      location: pr.location === "-" ? "" : pr.location,
+      mirno: pr.mirno === "-" ? "" : pr.mirno,
+      urgency: pr.urgency || "Medium",
+      date: pr.date ? String(pr.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      approved_by: pr.approved_by === "-" ? "" : pr.approved_by,
+      remarks: pr.remarks || "",
+      pr_file_path: pr.pr_file_path || "",
+      signature_file_path: pr.signature_file_path || "",
+      prFile: null,
+      signatureFile: null,
+      items: Array.isArray(pr.items) && pr.items.length > 0
+        ? pr.items.map((item) => ({
+            material_description: item.material_description || "",
+            unit: item.unit || "NOS",
+            req_qty: item.req_qty ?? "",
+            make: item.make || "",
+            place_of_utilisation: item.place_of_utilisation || "",
+          }))
+        : [createEmptyItem()],
+    });
+    setFormOpen(true);
   };
 
-  const handleStatusChange = (id, newStatus) => {
-    setData(data.map(item => 
-        item.id === id ? { ...item, status: newStatus } : item
-    ));
-    toast({
-        title: "Status Updated",
-        description: `Request ${id} marked as ${newStatus}`,
-    });
+  const openViewDialog = async (prId) => {
+    const id = parseIntegerOrNull(prId);
+    if (!id) return;
+
+    const result = await api.getPrById(id);
+    if (!result.success) {
+      toast({
+        title: "Failed to load PR",
+        description: result.error || "Could not fetch PR details.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSelectedPr(normalizePr(result.data || {}));
+    setViewOpen(true);
   };
 
+  const handleSubmitForm = async () => {
+    const normalizedProjectId = parseIntegerOrNull(form.project_id);
+    if (!normalizedProjectId) {
+      toast({
+        title: "Validation failed",
+        description: "Project ID is required and must be a positive integer.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const columns = [
-    {
-      accessorKey: "id",
-      header: "PR Number",
-      cell: ({ row }) => <span className="font-medium">{row.getValue("id")}</span>
-    },
-    {
-      accessorKey: "requester",
-      header: "Requester",
-    },
-    {
-      accessorKey: "date",
-      header: "Date",
-    },
-    {
-      accessorKey: "priority",
-      header: "Priority",
-      cell: ({ row }) => {
-          const priority = row.getValue("priority");
-          let className = "";
-          if (priority === "High") className = "text-red-600 bg-red-100 border-red-200";
-          if (priority === "Medium") className = "text-yellow-600 bg-yellow-100 border-yellow-200";
-          if (priority === "Low") className = "text-blue-600 bg-blue-100 border-blue-200";
-          return <Badge variant="outline" className={className}>{priority}</Badge>
+    if (!String(form.project_name || "").trim()) {
+      toast({
+        title: "Validation failed",
+        description: "Project name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const cleanedItems = form.items
+      .map((item) => ({
+        material_description: String(item.material_description || "").trim(),
+        unit: String(item.unit || "").trim() || "NOS",
+        req_qty: Number(item.req_qty),
+        make: String(item.make || "").trim(),
+        place_of_utilisation: String(item.place_of_utilisation || "").trim(),
+      }))
+      .filter((item) => item.material_description && Number.isFinite(item.req_qty) && item.req_qty > 0);
+
+    if (cleanedItems.length === 0) {
+      toast({
+        title: "Validation failed",
+        description: "Add at least one item with description and quantity.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setFormSubmitting(true);
+
+      let prFilePath = form.pr_file_path;
+      let signatureFilePath = form.signature_file_path;
+
+      if (form.prFile instanceof File) {
+        const uploadResult = await api.uploadPrFile(form.prFile);
+        if (!uploadResult.success) {
+          toast({
+            title: "PR file upload failed",
+            description: uploadResult.error || "Could not upload PR file.",
+            variant: "destructive",
+          });
+          return;
+        }
+        prFilePath = uploadResult.data?.filePath || "";
       }
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => {
-          const status = row.getValue("status");
-          let className = "";
-          if (status === "Approved") className = "bg-green-100 text-green-800 hover:bg-green-100 border-green-200";
-          if (status === "Pending Approval") className = "bg-orange-100 text-orange-800 hover:bg-orange-100 border-orange-200";
-          if (status === "Draft") className = "bg-gray-100 text-gray-800 hover:bg-gray-100 border-gray-200";
-  
-          return <Badge variant="outline" className={className}>{status}</Badge>
+
+      if (form.signatureFile instanceof File) {
+        const signatureResult = await api.uploadPrSignature(form.signatureFile);
+        if (!signatureResult.success) {
+          toast({
+            title: "Signature upload failed",
+            description: signatureResult.error || "Could not upload signature file.",
+            variant: "destructive",
+          });
+          return;
+        }
+        signatureFilePath = signatureResult.data?.filePath || "";
       }
-    },
-    {
-      id: "actions",
-      cell: ({ row }) => {
-        const request = row.original;
-        const isAdmin = user?.role === 'admin';
-        return (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
-                <Eye className="h-4 w-4" />
-            </Button>
-            {isAdmin && request.status === 'Pending Approval' && (
-                <>
-                    <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
-                        onClick={() => handleStatusChange(request.id, 'Approved')}
-                    >
-                        Approve
-                    </Button>
-                    <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                        onClick={() => handleStatusChange(request.id, 'Rejected')}
-                    >
-                        Reject
-                    </Button>
-                </>
-            )}
-          </div>
-        )
-      },
-    },
-  ]
+
+      const payload = {
+        project_id: normalizedProjectId,
+        sample_id: parseIntegerOrNull(form.sample_id),
+        project_name: String(form.project_name || "").trim(),
+        workorder_no: String(form.workorder_no || "").trim(),
+        location: String(form.location || "").trim(),
+        mirno: String(form.mirno || "").trim(),
+        urgency: form.urgency || "Medium",
+        date: form.date || new Date().toISOString().slice(0, 10),
+        approved_by: String(form.approved_by || "").trim(),
+        remarks: String(form.remarks || "").trim(),
+        pr_file_path: prFilePath,
+        signature_file_path: signatureFilePath,
+        items: cleanedItems,
+      };
+
+      const response = editingPrId
+        ? await api.updatePr(editingPrId, payload)
+        : await api.createPr(payload);
+
+      if (!response.success) {
+        toast({
+          title: editingPrId ? "Update failed" : "Create failed",
+          description: response.error || "Unable to save PR.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: editingPrId ? "PR updated" : "PR created",
+        description: editingPrId
+          ? "Purchase request updated successfully."
+          : `Purchase request created successfully. ${formatPrNumber(response.data || { ...payload, pr_id: "new" })}`,
+      });
+
+      setFormOpen(false);
+      setEditingPrId(null);
+      await loadPrs({ mode: sampleFilter ? "sample" : "auto", sampleId: sampleFilter });
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleDeletePr = async (prId) => {
+    const id = parseIntegerOrNull(prId);
+    if (!id) return;
+
+    const confirmed = window.confirm("Delete this purchase request?");
+    if (!confirmed) return;
+
+    try {
+      setDeletingPrId(id);
+      const result = await api.deletePr(id);
+      if (!result.success) {
+        toast({
+          title: "Delete failed",
+          description: result.error || "Could not delete PR.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({ title: "PR deleted", description: "Purchase request removed successfully." });
+      await loadPrs({ mode: sampleFilter ? "sample" : "auto", sampleId: sampleFilter });
+    } finally {
+      setDeletingPrId(null);
+    }
+  };
+
+  const applySampleFilter = async () => {
+    const normalizedSampleId = parseIntegerOrNull(sampleFilter);
+    if (!normalizedSampleId) {
+      toast({
+        title: "Invalid Sample ID",
+        description: "Enter a valid numeric sample ID to filter.",
+        variant: "destructive",
+      });
+      return;
+    }
+    await loadPrs({ mode: "sample", sampleId: normalizedSampleId });
+  };
+
+  const clearSampleFilter = async () => {
+    setSampleFilter("");
+    await loadPrs({ mode: "auto" });
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
+      <section className="rounded-2xl border border-border bg-gradient-to-r from-emerald-50 via-teal-50 to-white p-6 md:p-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
             <h1 className="text-3xl font-bold tracking-tight">Purchase Requests</h1>
-            <p className="text-muted-foreground">Create and manage material purchase requests.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage PR lifecycle with project and sample scoped API endpoints.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button variant="outline" onClick={() => loadPrs({ mode: sampleFilter ? "sample" : "auto", sampleId: sampleFilter })}>
+              <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
+            </Button>
+            <Button onClick={() => navigate("create")}>
+              <Plus className="mr-2 h-4 w-4" /> Create PR
+            </Button>
+          </div>
         </div>
-        <Button onClick={() => setOpen(true)} className="w-full sm:w-auto">
-            <Plus className="mr-2 h-4 w-4" /> Create Request
-        </Button>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total PRs</CardDescription>
+            <CardTitle className="text-2xl">{prs.length}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>High Urgency</CardDescription>
+            <CardTitle className="text-2xl">{highUrgencyCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Items</CardDescription>
+            <CardTitle className="text-2xl">{totalItems}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
-      <div className="hidden md:block">
-        <DataTable columns={columns} data={data} searchKey="requester" />
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>
+            Use project-scoped loading by default; optionally fetch using sample endpoint.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-12">
+          <div className="relative md:col-span-5">
+            <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by PR ID, project, WO, location, MIR..."
+            />
+          </div>
 
-      {/* Mobile Card View */}
-      <div className="grid grid-cols-1 gap-4 md:hidden">
-        {data.map((request) => (
-          <Card key={request.id}>
-            <CardContent className="p-4 space-y-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-medium text-base">{request.id}</div>
-                  <div className="text-sm text-muted-foreground mt-1">{request.requester}</div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <Badge variant="outline" className={
-                    request.status === "Approved" ? "bg-green-100 text-green-800 border-green-200" :
-                    request.status === "Pending Approval" ? "bg-orange-100 text-orange-800 border-orange-200" :
-                    "bg-gray-100 text-gray-800 border-gray-200"
-                  }>
-                    {request.status}
-                  </Badge>
-                  <Badge variant="outline" className={
-                    request.priority === "High" ? "text-red-600 bg-red-100 border-red-200" :
-                    request.priority === "Medium" ? "text-yellow-600 bg-yellow-100 border-yellow-200" :
-                    "text-blue-600 bg-blue-100 border-blue-200"
-                  }>
-                    {request.priority}
-                  </Badge>
-                </div>
-              </div>
+          <div className="md:col-span-2">
+            <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Urgency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Urgency</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-              <div className="space-y-2 text-sm border-t pt-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Date:</span>
-                  <span>{request.date}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Items:</span>
-                  <span>{request.items}</span>
-                </div>
-              </div>
+          <div className="md:col-span-2">
+            <Input
+              value={sampleFilter}
+              onChange={(e) => setSampleFilter(e.target.value)}
+              placeholder="Sample ID"
+            />
+          </div>
 
-              <div className="pt-2 flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Eye className="h-4 w-4 mr-2" /> View Details
-                </Button>
-                {user?.role === 'admin' && request.status === 'Pending Approval' && (
-                  <>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
-                      onClick={() => handleStatusChange(request.id, 'Approved')}
-                    >
-                      Approve
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                      onClick={() => handleStatusChange(request.id, 'Rejected')}
-                    >
-                      Reject
-                    </Button>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+          <div className="flex gap-2 md:col-span-3">
+            <Button variant="outline" className="flex-1" onClick={applySampleFilter}>
+              Apply Sample
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={clearSampleFilter}>
+              Reset
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-      <CreatePRDialog open={open} onOpenChange={setOpen} onSubmit={handleCreateRequest} />
+      <Card>
+        <CardHeader>
+          <CardTitle>PR List</CardTitle>
+          <CardDescription>All purchase requests for the selected scope.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>PR</TableHead>
+                <TableHead>Project</TableHead>
+                <TableHead>Work Order</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Urgency</TableHead>
+                <TableHead>Items</TableHead>
+                <TableHead>Files</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading purchase requests...
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ) : filteredPrs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    No purchase requests found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredPrs.map((pr) => {
+                  const urgency = String(pr.urgency || "").toLowerCase();
+                  const urgencyClass =
+                    urgency === "high"
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : urgency === "medium"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-sky-200 bg-sky-50 text-sky-700";
+
+                  return (
+                    <TableRow key={pr.pr_id}>
+                      <TableCell className="font-medium">{formatPrNumber(pr)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{pr.project_name}</div>
+                        <div className="text-xs text-muted-foreground">ID: {pr.project_id || "-"}</div>
+                      </TableCell>
+                      <TableCell>{pr.workorder_no}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1">
+                          <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" /> {formatDate(pr.date)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={urgencyClass}>
+                          {pr.urgency}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{pr.items.length}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {pr.pr_file_path ? (
+                            <Badge variant="secondary">
+                              <FileText className="mr-1 h-3 w-3" /> PR
+                            </Badge>
+                          ) : null}
+                          {pr.signature_file_path ? (
+                            <Badge variant="secondary">
+                              <FileSignature className="mr-1 h-3 w-3" /> Sign
+                            </Badge>
+                          ) : null}
+                          {!pr.pr_file_path && !pr.signature_file_path ? (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => openViewDialog(pr.pr_id)}>
+                            <Eye className="mr-2 h-4 w-4" /> View
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openEditDialog(pr)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeletePr(pr.pr_id)}
+                            disabled={deletingPrId === pr.pr_id}
+                          >
+                            {deletingPrId === pr.pr_id ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <PrFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        mode={editingPrId ? "edit" : "create"}
+        form={form}
+        setForm={setForm}
+        submitting={formSubmitting}
+        onSubmit={handleSubmitForm}
+        selectedProject={selectedProject}
+        sampleOptions={sampleOptions}
+        loadingSamples={loadingSamples}
+        mirOptions={mirOptions}
+        loadingMirs={loadingMirs}
+      />
+
+      <PrViewDialog open={viewOpen} onOpenChange={setViewOpen} pr={selectedPr} />
     </div>
   );
 }

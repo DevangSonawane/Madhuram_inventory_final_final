@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   User,
   Search,
@@ -60,8 +61,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import SettingsAccessControl from '@/pages/SettingsAccessControl';
+import { hasFunctionAccess } from '@/lib/accessControl';
 
 export default function Profile() {
+  const navigate = useNavigate();
+  const { projectId } = useParams();
   const { user: currentUser } = useAuth();
   const { theme, setTheme } = useTheme();
   const [users, setUsers] = useState([]);
@@ -73,6 +77,10 @@ export default function Profile() {
   const { toast } = useToast();
 
   const isAdmin = currentUser?.role === 'admin';
+  const isOperationalManager = currentUser?.role === 'operational_manager';
+  const canManageUsersByRole = isAdmin || isOperationalManager;
+  const canViewUserManagementTab = canManageUsersByRole && hasFunctionAccess(currentUser, 'settings.user_management');
+  const canViewAccessControlTab = canManageUsersByRole && hasFunctionAccess(currentUser, 'settings.access_control');
 
   const [formData, setFormData] = useState({
     name: "",
@@ -86,12 +94,12 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canViewUserManagementTab) {
       fetchUsers();
     } else {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [canViewUserManagementTab]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -150,10 +158,10 @@ export default function Profile() {
         email: formData.email,
         phone_number: formData.phone_number,
         role: formData.role,
-        project: formData.project.length > 0 ? formData.project : ["Default Project"],
+        project: Array.isArray(formData.project) ? formData.project : [],
         password: formData.password
       };
-      const result = await api.signup(signupData);
+      const result = await api.createUser(signupData);
       if (result.success) {
         toast({ title: "User created", description: `${formData.name} has been added successfully.` });
         setIsAddOpen(false);
@@ -288,10 +296,14 @@ export default function Profile() {
               <DropdownMenuItem onClick={() => handleEditClick(user)}>
                 <Edit className="mr-2 h-4 w-4" /> Edit
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteUser(user)}>
-                Delete
-              </DropdownMenuItem>
+              {isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeleteUser(user)}>
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -331,13 +343,13 @@ export default function Profile() {
             <Monitor className="mr-2 h-4 w-4" />
             Settings
           </TabsTrigger>
-          {isAdmin && (
+          {canViewUserManagementTab && (
             <TabsTrigger value="users" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-2">
               <Shield className="mr-2 h-4 w-4" />
               User Management
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {canViewAccessControlTab && (
             <TabsTrigger value="access-control" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-2">
               <Shield className="mr-2 h-4 w-4" />
               Access Control
@@ -442,15 +454,31 @@ export default function Profile() {
                 </div>
               </CardContent>
             </Card>
+
+            {isOperationalManager && (
+              <Card className="border-0 shadow-sm ring-1 ring-border/50 bg-card/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle>Operational Manager</CardTitle>
+                  <CardDescription>
+                    You are logged in as Operational Manager. Open the ITR module to manage ITR workflow.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button onClick={() => navigate(projectId ? `/${projectId}/itr` : '/projects')}>
+                    Open ITR Module
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
         </TabsContent>
 
-        {isAdmin && (
+        {canViewUserManagementTab && (
           <TabsContent value="users" className="space-y-6 mt-0">
             <div className="space-y-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">User Management</h2>
-                  <p className="text-sm text-muted-foreground">Manage system users and roles. Admin only.</p>
+                  <p className="text-sm text-muted-foreground">Manage system users and roles.</p>
                 </div>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                   <DialogTrigger asChild>
@@ -576,7 +604,7 @@ export default function Profile() {
           </TabsContent>
         )}
 
-        {isAdmin && (
+        {canViewAccessControlTab && (
           <TabsContent value="access-control" className="space-y-6 mt-0">
             <SettingsAccessControl embedded />
           </TabsContent>

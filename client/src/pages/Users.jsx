@@ -49,6 +49,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { hasFunctionAccess } from "@/lib/accessControl";
 
 export default function Users() {
   const { user } = useAuth();
@@ -61,6 +62,8 @@ export default function Users() {
   const { toast } = useToast();
 
   const isAdmin = user?.role === 'admin';
+  const canManageUsersByRole = isAdmin || user?.role === 'operational_manager';
+  const canManageUsers = canManageUsersByRole && hasFunctionAccess(user, 'settings.user_management');
 
   const [formData, setFormData] = useState({
     name: "",
@@ -74,8 +77,12 @@ export default function Users() {
   });
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (canManageUsers) {
+      fetchUsers();
+    } else {
+      setLoading(false);
+    }
+  }, [canManageUsers]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -137,11 +144,11 @@ export default function Users() {
         email: formData.email,
         phone_number: formData.phone_number,
         role: formData.role,
-        project: formData.project.length > 0 ? formData.project : ["Default Project"], // Simple default
+        project: Array.isArray(formData.project) ? formData.project : [],
         password: formData.password
       };
 
-      const result = await api.signup(signupData);
+      const result = await api.createUser(signupData);
       
       if (result.success) {
         toast({
@@ -311,10 +318,14 @@ export default function Users() {
               <DropdownMenuItem onClick={() => handleEditClick(user)}>
                 <Edit className="mr-2 h-4 w-4" /> Edit Details
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(user)}>
-                Delete User
-              </DropdownMenuItem>
+              {isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(user)}>
+                    Delete User
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -322,13 +333,13 @@ export default function Users() {
     },
   ];
 
-  if (!isAdmin) {
+  if (!canManageUsers) {
     return (
       <div className="space-y-6">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You do not have permission to access this page. Only administrators can manage users.
+            You do not have permission to access this page.
           </AlertDescription>
         </Alert>
       </div>

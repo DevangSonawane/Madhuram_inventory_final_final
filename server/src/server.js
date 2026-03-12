@@ -46,11 +46,41 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+const ensureUserRoleEnum = async () => {
+  const [rows] = await sequelize.query(
+    `SELECT COLUMN_TYPE
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'app_users'
+       AND COLUMN_NAME = 'role'
+     LIMIT 1`
+  );
+
+  const columnType = rows?.[0]?.COLUMN_TYPE || '';
+  if (!columnType) return;
+  const targetEnum = "enum('admin','operational_manager','po_officer','labour')";
+  const normalizedType = String(columnType).toLowerCase().replace(/\s+/g, '');
+  if (normalizedType === targetEnum) return;
+
+  // Migrate legacy role value before shrinking enum.
+  await sequelize.query(
+    `UPDATE app_users SET role = 'operational_manager' WHERE role = 'itr_staff'`
+  );
+
+  await sequelize.query(
+    `ALTER TABLE app_users
+     MODIFY COLUMN role ENUM('admin', 'operational_manager', 'po_officer', 'labour') NOT NULL`
+  );
+  console.log('✅ Updated app_users.role enum and migrated legacy itr_staff to operational_manager.');
+};
+
 // Database Sync and Server Start
 const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ Database connected.');
+
+    await ensureUserRoleEnum();
     
     // Sync models (alter: true updates schema if needed, force: false preserves data)
     // Using alter to ensure new columns like project_list and username are added

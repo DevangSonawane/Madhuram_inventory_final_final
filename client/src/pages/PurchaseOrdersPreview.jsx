@@ -321,6 +321,23 @@ export default function PurchaseOrdersPreview() {
     };
   };
 
+  const updateLinkedTax = (taxKey, field, value, mode) => {
+    const linkedTaxKey = taxKey === "cgst" ? "sgst" : "cgst";
+    setPoData((prev) =>
+      recalculatePoAmounts({
+        ...prev,
+        taxes: {
+          ...prev.taxes,
+          [taxKey]: { ...prev.taxes[taxKey], [field]: value },
+          [linkedTaxKey]: { ...prev.taxes[linkedTaxKey], [field]: value },
+        },
+      }, {
+        [`${taxKey}Mode`]: mode,
+        [`${linkedTaxKey}Mode`]: mode,
+      })
+    );
+  };
+
   const updateVendor = (key, value) => {
     setPoData((prev) => ({
       ...prev,
@@ -614,53 +631,25 @@ export default function PurchaseOrdersPreview() {
             <Field label="CGST %">
               <Input
                 value={poData.taxes.cgst.percent}
-                onChange={(event) =>
-                  setPoData((prev) =>
-                    recalculatePoAmounts({
-                      ...prev,
-                      taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: event.target.value } },
-                    }, { cgstMode: "percent" })
-                  )
-                }
+                onChange={(event) => updateLinkedTax("cgst", "percent", event.target.value, "percent")}
               />
             </Field>
             <Field label="CGST Amount">
               <Input
                 value={poData.taxes.cgst.amount}
-                onChange={(event) =>
-                  setPoData((prev) =>
-                    recalculatePoAmounts({
-                      ...prev,
-                      taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: event.target.value } },
-                    }, { cgstMode: "amount" })
-                  )
-                }
+                onChange={(event) => updateLinkedTax("cgst", "amount", event.target.value, "amount")}
               />
             </Field>
             <Field label="SGST %">
               <Input
                 value={poData.taxes.sgst.percent}
-                onChange={(event) =>
-                  setPoData((prev) =>
-                    recalculatePoAmounts({
-                      ...prev,
-                      taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: event.target.value } },
-                    }, { sgstMode: "percent" })
-                  )
-                }
+                onChange={(event) => updateLinkedTax("sgst", "percent", event.target.value, "percent")}
               />
             </Field>
             <Field label="SGST Amount">
               <Input
                 value={poData.taxes.sgst.amount}
-                onChange={(event) =>
-                  setPoData((prev) =>
-                    recalculatePoAmounts({
-                      ...prev,
-                      taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: event.target.value } },
-                    }, { sgstMode: "amount" })
-                  )
-                }
+                onChange={(event) => updateLinkedTax("sgst", "amount", event.target.value, "amount")}
               />
             </Field>
             <Field label="Total Amount"><Input value={poData.totalAmount} readOnly /></Field>

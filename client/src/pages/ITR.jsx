@@ -8,15 +8,36 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, FileUp, PencilLine, Eye } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, FileUp, PencilLine, Eye, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { DISCIPLINE_OPTIONS, EMPTY_ITR, YES_NO_NA_OPTIONS } from "@/pages/itrShared";
 import { api } from "@/lib/api";
 import { useProject } from "@/contexts/ProjectContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const STORAGE_KEY = "itrPreview";
 const RECENT_KEY = "itrRecent";
+const API_STATUS_OPTIONS = ["DRAFT", "SUBMITTED", "UNDER_INSPECTION", "APPROVED", "REJECTED", "RESUBMITTED", "CLOSED"];
+const API_INSPECTION_CODE_OPTIONS = [
+  { value: "CODE_1", label: "Work may proceed" },
+  { value: "CODE_2", label: "Conditionally approved. Work may proceed and resubmit incorporating comments" },
+  { value: "CODE_3", label: "Revise and Resubmit. Work may NOT proceed" },
+  { value: "CODE_4", label: "For information and records only. Work may proceed" },
+];
+const DISCIPLINE_LABEL_TO_API = {
+  "Structural / Civil": "STRUCTURAL_CIVIL",
+  "Arch / Finishing": "ARCH_FINISHING",
+  Mechanical: "MECHANICAL",
+  Electrical: "ELECTRICAL",
+  Landscape: "LANDSCAPE",
+  Plumbing: "PLUMBING",
+  Facade: "FACADE",
+  Others: "OTHERS",
+  ID: "ID",
+  Surveying: "SURVEYING",
+};
 
 const SAMPLE_EXTRACTED = {
   ...EMPTY_ITR,
@@ -86,6 +107,163 @@ const normalizeSnakeKeys = (value) => {
   return value;
 };
 
+const convertToSnakeKeys = (value) => {
+  if (value == null) return value;
+  if (Array.isArray(value)) {
+    return value.map(convertToSnakeKeys);
+  }
+  if (typeof value === "object") {
+    return Object.entries(value).reduce((acc, [key, val]) => {
+      const snakeKey = key.replace(/([A-Z])/g, (_, char) => `_${char.toLowerCase()}`);
+      acc[snakeKey] = convertToSnakeKeys(val);
+      return acc;
+    }, {});
+  }
+  return value;
+};
+
+const buildDynamicField = (itrData) => {
+  const fields = [];
+  const pushField = (key, value) => {
+    if (value == null) return;
+    if (typeof value === "string" && value.trim() === "") return;
+    if (Array.isArray(value) && value.length === 0) return;
+    if (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0) return;
+    fields.push({ key, value: typeof value === "object" ? JSON.stringify(value) : value });
+  };
+
+  pushField("Contractor Part", itrData.contractorPart);
+  pushField("Lodha PMC", itrData.lodhaPmc);
+  pushField("Source", itrData.source);
+  pushField("Source File", itrData.sourceFileName);
+  return fields;
+};
+
+const buildItrPayload = (itrData, projectId, user) => {
+  const selectedDisciplineLabel = Array.isArray(itrData.contractorPart.discipline)
+    ? itrData.contractorPart.discipline[0]
+    : itrData.contractorPart.discipline;
+  const selectedDisciplineApi = DISCIPLINE_LABEL_TO_API[selectedDisciplineLabel] || selectedDisciplineLabel || "OTHERS";
+
+  const signoffRows = [
+    {
+      section: "MEP Clearance",
+      ...convertToSnakeKeys(itrData.contractorPart.clearances.mep),
+      signed_date: itrData.contractorPart.clearances.mep?.date || "",
+      signature_url: itrData.contractorPart.clearances.mep?.signature || "",
+    },
+    {
+      section: "Surveyor Clearance",
+      ...convertToSnakeKeys(itrData.contractorPart.clearances.surveyor),
+      signed_date: itrData.contractorPart.clearances.surveyor?.date || "",
+      signature_url: itrData.contractorPart.clearances.surveyor?.signature || "",
+    },
+    {
+      section: "Interface Clearance",
+      ...convertToSnakeKeys(itrData.contractorPart.clearances.interface),
+      signed_date: itrData.contractorPart.clearances.interface?.date || "",
+      signature_url: itrData.contractorPart.clearances.interface?.signature || "",
+    },
+  ];
+
+  return {
+    project_id: projectId,
+    project_info: {
+      project_name: itrData.projectName || "",
+      project_code: itrData.projectCode || "",
+      client_employer: itrData.clientEmployer || "",
+      pmc_engineer: itrData.pmcEngineer || "",
+      contractor: itrData.contractor || "",
+      vendor_code: itrData.vendorCode || "",
+      material_code: itrData.materialCode || "",
+      work_order_no: itrData.workOrderNo || "",
+    },
+    itr_header: {
+      itr_ref_no: itrData.itrRefNo || "",
+      rev_no: itrData.revNo || "",
+      submission_datetime: itrData.wirItrSubmissionDateTime || "",
+      inspection_datetime: itrData.inspectionDateTime || "",
+      submitted_to: itrData.submittedTo || "",
+      submitted_by: itrData.submittedBy || "",
+    },
+    location: {
+      tower_block_ref: itrData.contractorPart.locationRef || "",
+      floor_level: itrData.contractorPart.floorLevel || "",
+      room_area_ref: itrData.contractorPart.areaRef || "",
+      grid_reference: itrData.contractorPart.gridReference || "",
+    },
+    discipline: selectedDisciplineApi,
+    quantity: {
+      previous_qty: Number(itrData.contractorPart.measurement.previousQty || 0),
+      current_qty: Number(itrData.contractorPart.measurement.currentQty || 0),
+      unit: itrData.contractorPart.measurement.unit || "",
+    },
+    description_of_work: itrData.contractorPart.descriptionOfWorks || "",
+    work_items: Array.isArray(itrData.workItems) ? itrData.workItems : [],
+    shaft_details: Array.isArray(itrData.shaftDetails) ? itrData.shaftDetails : [],
+    attachments: {
+      drawing_attached: itrData.contractorPart.attachments.drawingAttached || "NO",
+      drawing_ref_no: itrData.contractorPart.attachments.specificDrawingRefNo || "",
+      method_statement_attached: itrData.contractorPart.attachments.methodStatementAttached || "NO",
+      test_certificates_attached: itrData.contractorPart.attachments.attachedTestCerts || "NO",
+      checklist_attached: itrData.contractorPart.attachments.checklistAttached || "NO",
+      joint_measurement_attached: itrData.contractorPart.attachments.jointMeasurementAttached || "NO",
+    },
+    part_a_contractor: {
+      comments: itrData.contractorPart.contractorManagerComments || "",
+      ready_for_inspection_date: itrData.contractorPart.readyForInspectionDate || "",
+      ready_for_inspection_time: itrData.contractorPart.readyForInspectionTime || "",
+      signed_by: itrData.contractorPart.readySignedBy || "",
+      other_section_signoffs: signoffRows,
+    },
+    part_b_lodha_pmc: {
+      comments: itrData.lodhaPmc.comments || "",
+      inspection_code: itrData.lodhaPmc.resultCode || "",
+      signoffs: [
+        {
+          role: "Engineer/Manager-CIVIL",
+          name: itrData.lodhaPmc.signOffs.engineerManagerCivil?.name || "",
+          signature_url: itrData.lodhaPmc.signOffs.engineerManagerCivil?.signature || "",
+          signed_date: itrData.lodhaPmc.signOffs.engineerManagerCivil?.date || "",
+        },
+        {
+          role: "Engineer/Manager-MEP",
+          name: itrData.lodhaPmc.signOffs.engineerManagerMep?.name || "",
+          signature_url: itrData.lodhaPmc.signOffs.engineerManagerMep?.signature || "",
+          signed_date: itrData.lodhaPmc.signOffs.engineerManagerMep?.date || "",
+        },
+        {
+          role: "Tower Incharge",
+          name: itrData.lodhaPmc.signOffs.towerIncharge?.name || "",
+          signature_url: itrData.lodhaPmc.signOffs.towerIncharge?.signature || "",
+          signed_date: itrData.lodhaPmc.signOffs.towerIncharge?.date || "",
+        },
+        {
+          role: "QAA Department",
+          name: itrData.lodhaPmc.signOffs.qaaDepartment?.name || "",
+          signature_url: itrData.lodhaPmc.signOffs.qaaDepartment?.signature || "",
+          signed_date: itrData.lodhaPmc.signOffs.qaaDepartment?.date || "",
+        },
+      ],
+    },
+    status: itrData.status || "DRAFT",
+    allowed_values: {
+      discipline: Object.values(DISCIPLINE_LABEL_TO_API),
+      status: API_STATUS_OPTIONS,
+      attachments: ["YES", "NO", "NA"],
+      inspection_code: {
+        CODE_1: "Work may proceed",
+        CODE_2: "Conditionally approved. Work may proceed and resubmit incorporating comments",
+        CODE_3: "Revise and Resubmit. Work may NOT proceed",
+        CODE_4: "For information and records only. Work may proceed",
+      },
+    },
+    dynamic_field: buildDynamicField(itrData),
+    user_id: user?.id ?? user?.user_id ?? user?.userId ?? null,
+    user_name: user?.name ?? user?.full_name ?? user?.username ?? user?.email ?? "",
+  };
+};
+
 const mapApiItrToForm = (rawItem = {}, normalizedItem = null) => {
   const normalized = normalizedItem || normalizeSnakeKeys(rawItem);
   const resolvedItrId =
@@ -97,9 +275,23 @@ const mapApiItrToForm = (rawItem = {}, normalizedItem = null) => {
     normalized.id ??
     rawItem?.id ??
     null;
+  const projectInfo = normalized.projectInfo || {};
+  const itrHeader = normalized.itrHeader || {};
+  const location = normalized.location || {};
+  const quantity = normalized.quantity || {};
+  const attachments = normalized.attachments || {};
+  const partAContractor = normalized.partAContractor || {};
+  const partBLodhaPmc = normalized.partBLodhaPmc || {};
   const contractorPart = normalized.contractorPart || {};
   const contractorClearances = contractorPart.clearances || {};
-  const disciplineField = Array.isArray(contractorPart.discipline)
+  const disciplineSource = contractorPart.discipline || normalized.discipline;
+  const disciplineField = Array.isArray(disciplineSource)
+    ? disciplineSource
+    : typeof disciplineSource === "string" && disciplineSource.includes(",")
+    ? disciplineSource.split(",").map((entry) => entry.trim()).filter(Boolean)
+    : disciplineSource
+    ? [disciplineSource]
+    : Array.isArray(contractorPart.discipline)
     ? contractorPart.discipline
     : contractorPart.discipline
     ? [contractorPart.discipline]
@@ -108,60 +300,104 @@ const mapApiItrToForm = (rawItem = {}, normalizedItem = null) => {
   const clearances = {
     ...EMPTY_ITR.contractorPart.clearances,
     ...contractorClearances,
-    mep: { ...EMPTY_ITR.contractorPart.clearances.mep, ...contractorClearances.mep },
-    surveyor: { ...EMPTY_ITR.contractorPart.clearances.surveyor, ...contractorClearances.surveyor },
-    interface: { ...EMPTY_ITR.contractorPart.clearances.interface, ...contractorClearances.interface },
+    mep: { ...EMPTY_ITR.contractorPart.clearances.mep, ...contractorClearances.mep, ...normalized.mepClearance },
+    surveyor: { ...EMPTY_ITR.contractorPart.clearances.surveyor, ...contractorClearances.surveyor, ...normalized.surveyorClearance },
+    interface: { ...EMPTY_ITR.contractorPart.clearances.interface, ...contractorClearances.interface, ...normalized.interfaceClearance },
   };
 
   const contractorSection = {
     ...EMPTY_ITR.contractorPart,
     ...contractorPart,
+    locationRef: contractorPart.locationRef || location.towerBlockRef || "",
+    floorLevel: contractorPart.floorLevel || location.floorLevel || "",
+    gridReference: contractorPart.gridReference || location.gridReference || "",
+    areaRef: contractorPart.areaRef || location.roomAreaRef || "",
     discipline: disciplineField,
-    measurement: { ...EMPTY_ITR.contractorPart.measurement, ...contractorPart.measurement },
-    attachments: { ...EMPTY_ITR.contractorPart.attachments, ...contractorPart.attachments },
+    measurement: {
+      ...EMPTY_ITR.contractorPart.measurement,
+      ...contractorPart.measurement,
+      previousQty: contractorPart.measurement?.previousQty || quantity.previousQty || "",
+      currentQty: contractorPart.measurement?.currentQty || quantity.currentQty || "",
+      cumulativeQty:
+        contractorPart.measurement?.cumulativeQty || quantity.cumulativeQty || String((Number(quantity.previousQty) || 0) + (Number(quantity.currentQty) || 0) || ""),
+      unit: contractorPart.measurement?.unit || quantity.unit || "",
+    },
+    attachments: {
+      ...EMPTY_ITR.contractorPart.attachments,
+      ...contractorPart.attachments,
+      drawingAttached: contractorPart.attachments?.drawingAttached || attachments.drawingAttached || "",
+      attachedTestCerts: contractorPart.attachments?.attachedTestCerts || attachments.testCertificatesAttached || "",
+      methodStatementAttached:
+        contractorPart.attachments?.methodStatementAttached ||
+        attachments.methodStatementAttached ||
+        "",
+      checklistAttached: contractorPart.attachments?.checklistAttached || attachments.checklistAttached || "",
+      jointMeasurementAttached: contractorPart.attachments?.jointMeasurementAttached || attachments.jointMeasurementAttached || "",
+      specificDrawingRefNo: contractorPart.attachments?.specificDrawingRefNo || attachments.drawingRefNo || "",
+    },
     clearances,
+    descriptionOfWorks: contractorPart.descriptionOfWorks || normalized.descriptionOfWork || "",
+    contractorManagerComments: contractorPart.contractorManagerComments || partAContractor.comments || normalized.contractManager?.comments || "",
+    readyForInspectionDate: contractorPart.readyForInspectionDate || partAContractor.readyForInspectionDate || normalized.contractManager?.readyForInspectionDate || "",
+    readyForInspectionTime: contractorPart.readyForInspectionTime || partAContractor.readyForInspectionTime || normalized.contractManager?.readyForInspectionTime || "",
+    readySignedBy: contractorPart.readySignedBy || partAContractor.signedBy || normalized.contractManager?.signedBy || "",
   };
 
   const lodhaRaw = normalized.lodhaPmc || {};
   const lodhaSignOffs = {
     ...EMPTY_ITR.lodhaPmc.signOffs,
     ...lodhaRaw.signOffs,
-    engineerManagerCivil: { ...EMPTY_ITR.lodhaPmc.signOffs.engineerManagerCivil, ...lodhaRaw.signOffs?.engineerManagerCivil },
-    engineerManagerMep: { ...EMPTY_ITR.lodhaPmc.signOffs.engineerManagerMep, ...lodhaRaw.signOffs?.engineerManagerMep },
-    towerIncharge: { ...EMPTY_ITR.lodhaPmc.signOffs.towerIncharge, ...lodhaRaw.signOffs?.towerIncharge },
-    qaaDepartment: { ...EMPTY_ITR.lodhaPmc.signOffs.qaaDepartment, ...lodhaRaw.signOffs?.qaaDepartment },
+    engineerManagerCivil: { ...EMPTY_ITR.lodhaPmc.signOffs.engineerManagerCivil, ...lodhaRaw.signOffs?.engineerManagerCivil, ...normalized.engineerCivil },
+    engineerManagerMep: { ...EMPTY_ITR.lodhaPmc.signOffs.engineerManagerMep, ...lodhaRaw.signOffs?.engineerManagerMep, ...normalized.engineerMep },
+    towerIncharge: { ...EMPTY_ITR.lodhaPmc.signOffs.towerIncharge, ...lodhaRaw.signOffs?.towerIncharge, ...normalized.towerIncharge },
+    qaaDepartment: { ...EMPTY_ITR.lodhaPmc.signOffs.qaaDepartment, ...lodhaRaw.signOffs?.qaaDepartment, ...normalized.qaaDepartment },
   };
 
   const lodhaSection = {
     ...EMPTY_ITR.lodhaPmc,
     ...lodhaRaw,
+    comments: lodhaRaw.comments || partBLodhaPmc.comments || normalized.pmcComments || "",
+    resultCode: lodhaRaw.resultCode || partBLodhaPmc.inspectionCode || normalized.resultCode || "",
     signOffs: lodhaSignOffs,
   };
 
   return {
     ...EMPTY_ITR,
     itr_id: resolvedItrId,
-    projectName: normalized.projectName || normalized.project || "",
-    projectCode: normalized.projectCode || "",
-    clientEmployer: normalized.clientEmployer || normalized.clientName || normalized.client || "",
-    pmcEngineer: normalized.pmcEngineer || normalized.pmc || "",
-    contractor: normalized.contractor || "",
-    vendorCode: normalized.vendorCode || "",
-    materialCode: normalized.materialCode || "",
-    itrRefNo: normalized.itrRefNo || normalized.itrRef || "",
-    wirItrSubmissionDateTime: normalized.wirItrSubmissionDateTime || "",
-    inspectionDateTime: normalized.inspectionDateTime || normalized.inspectionDate || "",
-    submittedTo: normalized.submittedTo || "",
-    submittedBy: normalized.submittedBy || "",
+    project_id: normalized.projectId || normalized.project_id || projectInfo.projectId || "",
+    po_id: normalized.poId || normalized.po_id || "",
+    mir_id: normalized.mirId || normalized.mir_id || "",
+    projectName: normalized.projectName || projectInfo.projectName || normalized.project || "",
+    projectCode: normalized.projectCode || projectInfo.projectCode || "",
+    clientEmployer: normalized.clientEmployer || normalized.clientName || normalized.client || projectInfo.clientEmployer || "",
+    pmcEngineer: normalized.pmcEngineer || normalized.pmc || projectInfo.pmcEngineer || "",
+    contractor: normalized.contractor || projectInfo.contractor || "",
+    vendorCode: normalized.vendorCode || projectInfo.vendorCode || "",
+    materialCode: normalized.materialCode || projectInfo.materialCode || "",
+    workOrderNo: normalized.workOrderNo || projectInfo.workOrderNo || "",
+    itrRefNo: normalized.itrRefNo || normalized.itrRef || itrHeader.itrRefNo || "",
+    revNo: normalized.revNo || itrHeader.revNo || "",
+    wirItrSubmissionDateTime: normalized.wirItrSubmissionDateTime || itrHeader.submissionDatetime || "",
+    inspectionDateTime: normalized.inspectionDateTime || normalized.inspectionDate || itrHeader.inspectionDatetime || "",
+    submittedTo: normalized.submittedTo || itrHeader.submittedTo || "",
+    submittedBy: normalized.submittedBy || itrHeader.submittedBy || "",
+    workItems: Array.isArray(normalized.workItems) ? normalized.workItems : [],
+    shaftDetails: Array.isArray(normalized.shaftDetails) ? normalized.shaftDetails : [],
     contractorPart: contractorSection,
     lodhaPmc: lodhaSection,
     source: normalized.source || "Manual",
     sourceFileName: normalized.sourceFileName || normalized.sourceFile || "",
+    sourceFilePath: normalized.sourceFilePath || normalized.sourceFileName || normalized.sourceFile || "",
+    status: normalized.status || "DRAFT",
+    inspectionCode: normalized.inspectionCode || lodhaSection.resultCode || "",
     title: normalized.title || EMPTY_ITR.title,
   };
 };
 
 const mapStatusFromApi = (normalizedItem = {}) => {
+  if (normalizedItem.status) return normalizedItem.status;
+  const resultCode = normalizedItem.resultCode;
+  if (resultCode) return resultCode;
   const status = normalizedItem.status || normalizedItem.statusCode || normalizedItem.state || normalizedItem.itrStatus;
   if (status) return status;
   const submitted = normalizedItem.itrSubmitted ?? normalizedItem.submitted ?? normalizedItem.itrSubmited;
@@ -174,12 +410,14 @@ const mapApiItrToListItem = (rawItem) => {
   const normalized = normalizeSnakeKeys(rawItem);
   const formData = mapApiItrToForm(rawItem, normalized);
   const id = formData.itrRefNo || formData.itr_id || `ITR-${formData.itr_id || Date.now()}`;
+  const inspectionCode = normalized.partBLodhaPmc?.inspectionCode || formData.lodhaPmc?.resultCode || "";
   return {
     id,
     date: formData.inspectionDateTime || formData.wirItrSubmissionDateTime || normalized.createdAt || "",
     project: formData.projectName || "",
     location: formData.contractorPart.areaRef || formData.contractorPart.floorLevel || formData.contractorPart.locationRef || "",
     status: mapStatusFromApi(normalized),
+    inspectionCode,
     itr_id: formData.itr_id,
     payload: formData,
   };
@@ -190,7 +428,7 @@ function loadStoredItr() {
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (_) {
+  } catch {
     return null;
   }
 }
@@ -200,7 +438,7 @@ function loadRecentItrs() {
   try {
     const raw = window.localStorage.getItem(RECENT_KEY);
     return raw ? JSON.parse(raw) : [];
-  } catch (_) {
+  } catch {
     return [];
   }
 }
@@ -233,7 +471,7 @@ function setPathValue(base, path, value) {
 }
 
 function extractValueFromLine(line, regex) {
-  const match = line.match(new RegExp(`${regex.source}\\s*[:\-]?\\s*(.+)$`, regex.flags));
+  const match = line.match(new RegExp(`${regex.source}\\s*[:-]?\\s*(.+)$`, regex.flags));
   if (match && match[1]) return match[1].trim();
   return "";
 }
@@ -301,7 +539,6 @@ function parseSheetToFields(rows) {
     if (!row || row.length === 0) return;
     const [label, value] = row;
     if (!label || value == null) return;
-    const line = `${label} ${value}`.trim();
     LABEL_MAP.forEach(({ re, path }) => {
       if (re.test(String(label))) {
         next = setPathValue(next, path, String(value).trim());
@@ -329,8 +566,16 @@ export default function ITR() {
   const [uploading, setUploading] = useState(false);
   const [recentItrs, setRecentItrs] = useState(() => loadRecentItrs());
   const [loadingItrs, setLoadingItrs] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [statusDrafts, setStatusDrafts] = useState({});
+  const [updatingStatusIds, setUpdatingStatusIds] = useState({});
+  const [projectOptions, setProjectOptions] = useState([]);
+  const [poOptions, setPoOptions] = useState([]);
+  const [mirOptions, setMirOptions] = useState([]);
   const { selectedProject } = useProject();
+  const { user } = useAuth();
   const projectId = selectedProject?.id ?? selectedProject?.project_id ?? null;
+  const effectiveProjectId = Number(itrData.project_id || projectId || 0) || null;
 
   useEffect(() => {
     saveRecentItrs(recentItrs);
@@ -343,6 +588,19 @@ export default function ITR() {
       if (res.success && Array.isArray(res.data)) {
         const mapped = res.data.map(mapApiItrToListItem);
         setRecentItrs(mapped);
+        setStatusDrafts((prev) => {
+          const next = { ...prev };
+          mapped.forEach((item) => {
+            if (!item?.itr_id) return;
+            const key = String(item.itr_id);
+            next[key] = {
+              status: next[key]?.status || item.status || "DRAFT",
+              inspectionCode: next[key]?.inspectionCode || item.inspectionCode || "",
+              lodhaPmcComments: next[key]?.lodhaPmcComments || "",
+            };
+          });
+          return next;
+        });
       } else {
         if (res?.error) {
           toast({ title: "Error", description: res.error, variant: "destructive" });
@@ -361,6 +619,54 @@ export default function ITR() {
   useEffect(() => {
     fetchItrs();
   }, [fetchItrs]);
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      try {
+        const res = await api.getProjects();
+        if (!active) return;
+        if (res?.success && Array.isArray(res.data)) {
+          setProjectOptions(res.data);
+        }
+      } catch {
+        if (active) setProjectOptions([]);
+      }
+    };
+    run();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      if (!effectiveProjectId) {
+        setPoOptions([]);
+        setMirOptions([]);
+        return;
+      }
+
+      try {
+        const [poRes, mirRes] = await Promise.all([
+          api.getPosByProject(effectiveProjectId),
+          api.getMirsByProject(effectiveProjectId),
+        ]);
+        if (!active) return;
+        setPoOptions(poRes?.success && Array.isArray(poRes.data) ? poRes.data : []);
+        setMirOptions(mirRes?.success && Array.isArray(mirRes.data) ? mirRes.data : []);
+      } catch {
+        if (!active) return;
+        setPoOptions([]);
+        setMirOptions([]);
+      }
+    };
+    run();
+    return () => {
+      active = false;
+    };
+  }, [effectiveProjectId]);
 
   const hasPreview = useMemo(() => {
     return itrData.projectName || itrData.itrRefNo || itrData.contractorPart.descriptionOfWorks;
@@ -393,6 +699,84 @@ export default function ITR() {
     }));
   };
 
+  const setClearance = (key, field, value) => {
+    setItrData((prev) => ({
+      ...prev,
+      contractorPart: {
+        ...prev.contractorPart,
+        clearances: {
+          ...prev.contractorPart.clearances,
+          [key]: { ...prev.contractorPart.clearances[key], [field]: value },
+        },
+      },
+    }));
+  };
+
+  const setSignOff = (key, field, value) => {
+    setItrData((prev) => ({
+      ...prev,
+      lodhaPmc: {
+        ...prev.lodhaPmc,
+        signOffs: {
+          ...prev.lodhaPmc.signOffs,
+          [key]: { ...prev.lodhaPmc.signOffs[key], [field]: value },
+        },
+      },
+    }));
+  };
+
+  const setInspectionCode = (value) => {
+    setItrData((prev) => ({
+      ...prev,
+      inspectionCode: value,
+      lodhaPmc: { ...prev.lodhaPmc, resultCode: value },
+    }));
+  };
+
+  const updateWorkItem = (index, field, value) => {
+    setItrData((prev) => {
+      const current = Array.isArray(prev.workItems) ? [...prev.workItems] : [];
+      current[index] = { ...(current[index] || {}), [field]: value };
+      return { ...prev, workItems: current };
+    });
+  };
+
+  const addWorkItem = () => {
+    setItrData((prev) => ({
+      ...prev,
+      workItems: [...(Array.isArray(prev.workItems) ? prev.workItems : []), { item_description: "", size: "", quantity: 0, unit: "" }],
+    }));
+  };
+
+  const removeWorkItem = (index) => {
+    setItrData((prev) => ({
+      ...prev,
+      workItems: (Array.isArray(prev.workItems) ? prev.workItems : []).filter((_, idx) => idx !== index),
+    }));
+  };
+
+  const updateShaftDetail = (index, field, value) => {
+    setItrData((prev) => {
+      const current = Array.isArray(prev.shaftDetails) ? [...prev.shaftDetails] : [];
+      current[index] = { ...(current[index] || {}), [field]: value };
+      return { ...prev, shaftDetails: current };
+    });
+  };
+
+  const addShaftDetail = () => {
+    setItrData((prev) => ({
+      ...prev,
+      shaftDetails: [...(Array.isArray(prev.shaftDetails) ? prev.shaftDetails : []), { shaft_no: "", staff_id: "", staff_name: "", staff_number: "" }],
+    }));
+  };
+
+  const removeShaftDetail = (index) => {
+    setItrData((prev) => ({
+      ...prev,
+      shaftDetails: (Array.isArray(prev.shaftDetails) ? prev.shaftDetails : []).filter((_, idx) => idx !== index),
+    }));
+  };
+
   const handleDisciplineToggle = (item) => {
     setItrData((prev) => {
       const exists = prev.contractorPart.discipline.includes(item);
@@ -412,6 +796,15 @@ export default function ITR() {
     try {
       const isSample = file.name.toLowerCase().includes("wir 47");
       let next = isSample ? { ...SAMPLE_EXTRACTED } : { ...EMPTY_ITR, source: "Extracted", sourceFileName: file.name };
+      let uploadedPath = "";
+
+      const uploadRes = await api.uploadItrReference(file, {
+        user_id: user?.id ?? user?.user_id ?? user?.userId ?? "",
+        user_name: user?.name ?? user?.username ?? user?.full_name ?? user?.fullName ?? user?.email ?? "",
+      });
+      if (uploadRes?.success) {
+        uploadedPath = uploadRes?.data?.filePath || uploadRes?.data?.path || "";
+      }
 
       const ext = file.name.toLowerCase();
       if (ext.endsWith(".pdf")) {
@@ -431,6 +824,7 @@ export default function ITR() {
         ...next,
         source: "Extracted",
         sourceFileName: file.name,
+        sourceFilePath: uploadedPath || next.sourceFilePath || "",
       };
 
       setItrData(next);
@@ -457,6 +851,61 @@ export default function ITR() {
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(itrData));
     }
     navigate("preview");
+  };
+
+  const handleSubmit = async () => {
+    if (!effectiveProjectId) {
+      toast({
+        title: "Select project",
+        description: "Choose a project before submitting an ITR.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = buildItrPayload(itrData, effectiveProjectId, user);
+      const updateId = itrData.itr_id ?? null;
+      const response = updateId ? await api.updateItr(updateId, payload) : await api.createItr(payload);
+
+      if (!response.success) {
+        toast({ title: "Error", description: response.error || "Failed to submit ITR.", variant: "destructive" });
+        return;
+      }
+
+      const savedItrId = response?.data?.itr_id ?? response?.data?.id ?? updateId ?? null;
+      setItrData((prev) => ({
+        ...prev,
+        itr_id: savedItrId,
+        status: prev.status || "DRAFT",
+      }));
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            ...itrData,
+            itr_id: savedItrId,
+            status: itrData.status || "DRAFT",
+          }),
+        );
+      }
+
+      toast({
+        title: "ITR saved",
+        description: updateId ? "Your ITR has been updated." : "Your ITR has been submitted.",
+      });
+      await fetchItrs();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to submit ITR.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClear = () => {
@@ -495,6 +944,54 @@ export default function ITR() {
       toast({ title: "ITR removed", description: "The local ITR record was removed." });
     }
   };
+
+  const handleStatusDraftChange = (itrId, field, value) => {
+    if (!itrId) return;
+    const key = String(itrId);
+    setStatusDrafts((prev) => ({
+      ...prev,
+      [key]: {
+        status: prev[key]?.status || "DRAFT",
+        inspectionCode: prev[key]?.inspectionCode || "",
+        lodhaPmcComments: prev[key]?.lodhaPmcComments || "",
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleUpdateStatus = async (item) => {
+    const itrId = item?.itr_id;
+    if (!itrId) return;
+    const key = String(itrId);
+    const draft = statusDrafts[key] || {};
+
+    if (!draft.status) {
+      toast({ title: "Missing status", description: "Select a workflow status first.", variant: "destructive" });
+      return;
+    }
+
+    setUpdatingStatusIds((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await api.updateItrStatus(itrId, {
+        status: draft.status,
+        inspection_code: draft.inspectionCode || "",
+        lodha_pmc_comments: draft.lodhaPmcComments || "",
+        user_id: user?.id ?? user?.user_id ?? user?.userId ?? null,
+        user_name: user?.name ?? user?.full_name ?? user?.username ?? user?.email ?? "",
+      });
+      if (!res.success) {
+        toast({ title: "Error", description: res.error || "Failed to update ITR status.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Status updated", description: "Approval workflow status updated." });
+      await fetchItrs();
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to update ITR status.", variant: "destructive" });
+    } finally {
+      setUpdatingStatusIds((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
 
   const handleEditRecent = async (item) => {
     if (!item) return;
@@ -540,7 +1037,7 @@ export default function ITR() {
     if (raw) {
       try {
         setItrData(JSON.parse(raw));
-      } catch (_) {
+      } catch {
         setItrData(EMPTY_ITR);
       }
     }
@@ -553,9 +1050,14 @@ export default function ITR() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Installation Test Reports (ITR)</h1>
           <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">Upload and manage work inspection requests.</p>
         </div>
-        <Button variant="outline" className="w-full sm:w-auto" onClick={handlePreview}>
-          <Eye className="mr-2 h-4 w-4" /> Preview
-        </Button>
+        <div className="flex w-full sm:w-auto gap-2">
+          <Button className="w-full sm:w-auto" onClick={handleSubmit} disabled={saving || !hasPreview}>
+            {saving ? "Submitting..." : "Submit ITR"}
+          </Button>
+          <Button variant="outline" className="w-full sm:w-auto" onClick={handlePreview}>
+            <Eye className="mr-2 h-4 w-4" /> Preview
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -640,6 +1142,99 @@ export default function ITR() {
             <TabsContent value="manual">
               <div className="manual-entry-panel">
                 <div className="manual-entry-grid sm:grid-cols-2">
+                  <Field label="project_id">
+                    <Select
+                      value={itrData.project_id ? String(itrData.project_id) : undefined}
+                      onValueChange={(value) => {
+                        const selected = projectOptions.find((item) => String(item.project_id ?? item.id) === value);
+                        setItrData((prev) => ({
+                          ...prev,
+                          project_id: value,
+                          po_id: "",
+                          mir_id: "",
+                          projectName: selected?.project_name || selected?.projectName || prev.projectName,
+                          projectCode: selected?.project_code || selected?.projectCode || prev.projectCode,
+                          source: "Manual",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select project_id" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projectOptions.map((item) => {
+                          const id = item.project_id ?? item.id;
+                          const name = item.project_name || item.projectName || `Project ${id}`;
+                          return (
+                            <SelectItem key={`itr-project-${id}`} value={String(id)}>
+                              {id} - {name}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="po_id">
+                    <Select
+                      value={itrData.po_id ? String(itrData.po_id) : undefined}
+                      onValueChange={(value) => setItrData((prev) => ({ ...prev, po_id: value, source: "Manual" }))}
+                      disabled={!effectiveProjectId || poOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={effectiveProjectId ? "Select po_id" : "Select project first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {poOptions.map((item) => {
+                          const id = item.po_id ?? item.id;
+                          const label = item.order_no || item.indent_no || item.vendor_name || `PO ${id}`;
+                          return (
+                            <SelectItem key={`itr-po-${id}`} value={String(id)}>
+                              {id} - {label}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="mir_id">
+                    <Select
+                      value={itrData.mir_id ? String(itrData.mir_id) : undefined}
+                      onValueChange={(value) => setItrData((prev) => ({ ...prev, mir_id: value, source: "Manual" }))}
+                      disabled={!effectiveProjectId || mirOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={effectiveProjectId ? "Select mir_id" : "Select project first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mirOptions.map((item) => {
+                          const id = item.mir_id ?? item.id;
+                          const label = item.mir_refrence_no || item.challan_no || `MIR ${id}`;
+                          return (
+                            <SelectItem key={`itr-mir-${id}`} value={String(id)}>
+                              {id} - {label}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Status">
+                    <Select
+                      value={itrData.status || "DRAFT"}
+                      onValueChange={(value) => setItrData((prev) => ({ ...prev, status: value, source: "Manual" }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {API_STATUS_OPTIONS.map((status) => (
+                          <SelectItem key={`manual-status-${status}`} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
                   <Field label="Project Name">
                     <Input
                       value={itrData.projectName}
@@ -682,10 +1277,22 @@ export default function ITR() {
                       onChange={(event) => setItrData((prev) => ({ ...prev, materialCode: event.target.value, source: "Manual" }))}
                     />
                   </Field>
+                  <Field label="Work Order No">
+                    <Input
+                      value={itrData.workOrderNo || ""}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, workOrderNo: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
                   <Field label="WIR/ITR Ref. No">
                     <Input
                       value={itrData.itrRefNo}
                       onChange={(event) => setItrData((prev) => ({ ...prev, itrRefNo: event.target.value, source: "Manual" }))}
+                    />
+                  </Field>
+                  <Field label="Revision No">
+                    <Input
+                      value={itrData.revNo || ""}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, revNo: event.target.value, source: "Manual" }))}
                     />
                   </Field>
                   <Field label="WIR/ITR Submission (Date & Time)">
@@ -741,7 +1348,7 @@ export default function ITR() {
                   </Field>
                 </div>
 
-                <div className="manual-entry-grid sm:grid-cols-3">
+                <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-4">
                   <Field label="Previous Qty">
                     <Input
                       value={itrData.contractorPart.measurement.previousQty}
@@ -758,6 +1365,13 @@ export default function ITR() {
                     <Input
                       value={itrData.contractorPart.measurement.cumulativeQty}
                       onChange={(event) => setMeasurement("cumulativeQty", event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Quantity Unit">
+                    <Input
+                      value={itrData.contractorPart.measurement.unit || ""}
+                      onChange={(event) => setMeasurement("unit", event.target.value)}
+                      placeholder="NOS"
                     />
                   </Field>
                 </div>
@@ -807,7 +1421,157 @@ export default function ITR() {
                   ))}
                 </div>
 
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="manual-section-title">work_items</div>
+                    <Button type="button" size="sm" variant="outline" onClick={addWorkItem}>Add Item</Button>
+                  </div>
+                  {(Array.isArray(itrData.workItems) ? itrData.workItems : []).length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No work items added.</div>
+                  ) : (
+                    (Array.isArray(itrData.workItems) ? itrData.workItems : []).map((row, index) => (
+                      <div key={`manual-work-item-${index}`} className="rounded-md border p-3 space-y-3">
+                        <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-4">
+                          <Field label="Item Description"><Input value={row.item_description || ""} onChange={(event) => updateWorkItem(index, "item_description", event.target.value)} /></Field>
+                          <Field label="Size"><Input value={row.size || ""} onChange={(event) => updateWorkItem(index, "size", event.target.value)} /></Field>
+                          <Field label="Quantity"><Input value={row.quantity ?? ""} onChange={(event) => updateWorkItem(index, "quantity", event.target.value)} /></Field>
+                          <Field label="Unit"><Input value={row.unit || ""} onChange={(event) => updateWorkItem(index, "unit", event.target.value)} /></Field>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button type="button" size="sm" variant="destructive" onClick={() => removeWorkItem(index)}>Remove</Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="manual-section-title">shaft_details</div>
+                    <Button type="button" size="sm" variant="outline" onClick={addShaftDetail}>Add Shaft Row</Button>
+                  </div>
+                  {(Array.isArray(itrData.shaftDetails) ? itrData.shaftDetails : []).length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No shaft rows added.</div>
+                  ) : (
+                    (Array.isArray(itrData.shaftDetails) ? itrData.shaftDetails : []).map((row, index) => (
+                      <div key={`manual-shaft-row-${index}`} className="rounded-md border p-3 space-y-3">
+                        <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-4">
+                          <Field label="Shaft No"><Input value={row.shaft_no ?? ""} onChange={(event) => updateShaftDetail(index, "shaft_no", event.target.value)} /></Field>
+                          <Field label="Staff ID"><Input value={row.staff_id ?? ""} onChange={(event) => updateShaftDetail(index, "staff_id", event.target.value)} /></Field>
+                          <Field label="Staff Name"><Input value={row.staff_name || ""} onChange={(event) => updateShaftDetail(index, "staff_name", event.target.value)} /></Field>
+                          <Field label="Staff Number"><Input value={row.staff_number || ""} onChange={(event) => updateShaftDetail(index, "staff_number", event.target.value)} /></Field>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button type="button" size="sm" variant="destructive" onClick={() => removeShaftDetail(index)}>Remove</Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="manual-section-title">Clearances & Sign-off (Part A)</div>
+                  {[
+                    { key: "mep", label: "MEP Clearance" },
+                    { key: "surveyor", label: "Surveyor Clearance" },
+                    { key: "interface", label: "Interface Clearance" },
+                  ].map((item) => (
+                    <div key={item.key} className="space-y-3">
+                      <div className="text-sm font-medium">{item.label}</div>
+                      <div className="manual-entry-grid sm:grid-cols-2 lg:grid-cols-5">
+                        <Field label="Name"><Input value={itrData.contractorPart.clearances[item.key].name} onChange={(event) => setClearance(item.key, "name", event.target.value)} /></Field>
+                        <Field label="Date"><Input value={itrData.contractorPart.clearances[item.key].date} onChange={(event) => setClearance(item.key, "date", event.target.value)} /></Field>
+                        <Field label="Designation"><Input value={itrData.contractorPart.clearances[item.key].designation} onChange={(event) => setClearance(item.key, "designation", event.target.value)} /></Field>
+                        <Field label="Signature"><Input value={itrData.contractorPart.clearances[item.key].signature} onChange={(event) => setClearance(item.key, "signature", event.target.value)} /></Field>
+                        <Field label="Comments"><Input value={itrData.contractorPart.clearances[item.key].comments} onChange={(event) => setClearance(item.key, "comments", event.target.value)} /></Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="manual-section-title">Contractor Section</div>
+                  <Field label="Contractor Manager / Engineer Comments">
+                    <Textarea
+                      value={itrData.contractorPart.contractorManagerComments}
+                      onChange={(event) => setContractorPart("contractorManagerComments", event.target.value)}
+                    />
+                  </Field>
+                  <div className="manual-entry-grid sm:grid-cols-3">
+                    <Field label="Ready for Inspection Date">
+                      <Input
+                        value={itrData.contractorPart.readyForInspectionDate}
+                        onChange={(event) => setContractorPart("readyForInspectionDate", event.target.value)}
+                      />
+                    </Field>
+                    <Field label="Ready for Inspection Time">
+                      <Input
+                        value={itrData.contractorPart.readyForInspectionTime}
+                        onChange={(event) => setContractorPart("readyForInspectionTime", event.target.value)}
+                      />
+                    </Field>
+                    <Field label="Signed By">
+                      <Input
+                        value={itrData.contractorPart.readySignedBy}
+                        onChange={(event) => setContractorPart("readySignedBy", event.target.value)}
+                      />
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="manual-section-title">PMC Section</div>
+                  <Field label="Comments">
+                    <Textarea
+                      value={itrData.lodhaPmc.comments}
+                      onChange={(event) => setItrData((prev) => ({ ...prev, lodhaPmc: { ...prev.lodhaPmc, comments: event.target.value } }))}
+                    />
+                  </Field>
+                  {[
+                    { key: "engineerManagerCivil", label: "Engineer/Manager - Civil" },
+                    { key: "engineerManagerMep", label: "Engineer/Manager - MEP" },
+                    { key: "towerIncharge", label: "Tower Incharge" },
+                    { key: "qaaDepartment", label: "QAA Department" },
+                  ].map((item) => (
+                    <div key={item.key} className="space-y-2">
+                      <div className="text-sm font-medium">{item.label}</div>
+                      <div className="manual-entry-grid sm:grid-cols-3">
+                        <Field label="Name"><Input value={itrData.lodhaPmc.signOffs[item.key].name} onChange={(event) => setSignOff(item.key, "name", event.target.value)} /></Field>
+                        <Field label="Signature"><Input value={itrData.lodhaPmc.signOffs[item.key].signature} onChange={(event) => setSignOff(item.key, "signature", event.target.value)} /></Field>
+                        <Field label="Date"><Input value={itrData.lodhaPmc.signOffs[item.key].date} onChange={(event) => setSignOff(item.key, "date", event.target.value)} /></Field>
+                      </div>
+                    </div>
+                  ))}
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">Inspection Code</div>
+                    <div className="mt-2">
+                      <Select
+                        value={itrData.lodhaPmc.resultCode || itrData.inspectionCode || ""}
+                        onValueChange={setInspectionCode}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select inspection code" />
+                        </SelectTrigger>
+                        <SelectContent className="max-w-[min(92vw,40rem)]">
+                          {API_INSPECTION_CODE_OPTIONS.map((option) => (
+                            <SelectItem
+                              key={`manual-inspection-code-${option.value}`}
+                              value={option.value}
+                              className="whitespace-normal break-words leading-snug"
+                            >
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="manual-entry-actions">
+                  <Button onClick={handleSubmit} disabled={saving || !hasPreview} className="w-full sm:w-auto">
+                    {saving ? "Submitting..." : "Submit ITR"}
+                  </Button>
                   <Button variant="outline" onClick={handlePreview} className="w-full sm:w-auto">
                     <Eye className="mr-2 h-4 w-4" /> Preview
                   </Button>
@@ -841,7 +1605,7 @@ export default function ITR() {
                       <div className="font-medium">{item.id}</div>
                       <div className="text-xs text-muted-foreground">{item.date}</div>
                     </div>
-                    <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>{item.status}</Badge>
+                    <Badge variant={String(item.status || "").toUpperCase() === "SUBMITTED" ? "default" : "secondary"}>{item.status}</Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-sm border-t pt-2">
                     <div className="col-span-2">
@@ -852,7 +1616,59 @@ export default function ITR() {
                       <div className="text-muted-foreground text-xs">Location</div>
                       <div>{item.location}</div>
                     </div>
+                    <div className="col-span-2">
+                      <div className="text-muted-foreground text-xs">Inspection Code</div>
+                      <div>{statusDrafts[String(item.itr_id)]?.inspectionCode || item.inspectionCode || "-"}</div>
+                    </div>
                   </div>
+                  {item.itr_id ? (
+                    <div className="grid grid-cols-1 gap-2 border-t pt-2">
+                      <Select
+                        value={statusDrafts[String(item.itr_id)]?.status || item.status || "DRAFT"}
+                        onValueChange={(value) => handleStatusDraftChange(item.itr_id, "status", value)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {API_STATUS_OPTIONS.map((status) => (
+                            <SelectItem key={`${item.id}-${status}`} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={statusDrafts[String(item.itr_id)]?.inspectionCode || ""}
+                        onValueChange={(value) => handleStatusDraftChange(item.itr_id, "inspectionCode", value)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Inspection code" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {API_INSPECTION_CODE_OPTIONS.map((option) => (
+                            <SelectItem key={`${item.id}-${option.value}`} value={option.value} className="whitespace-normal break-words leading-snug">
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="PMC comments"
+                        value={statusDrafts[String(item.itr_id)]?.lodhaPmcComments || ""}
+                        onChange={(event) => handleStatusDraftChange(item.itr_id, "lodhaPmcComments", event.target.value)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleUpdateStatus(item)}
+                        disabled={Boolean(updatingStatusIds[String(item.itr_id)])}
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        {updatingStatusIds[String(item.itr_id)] ? "Updating..." : "Update Status"}
+                      </Button>
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" onClick={() => handleEditRecent(item)}>
                       <PencilLine className="mr-2 h-4 w-4" /> Edit
@@ -879,13 +1695,15 @@ export default function ITR() {
                 <TableHead>Project</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Inspection Code</TableHead>
+                <TableHead>Status Update</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loadingItrs ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                     Loading ITRs…
                   </TableCell>
                 </TableRow>
@@ -897,7 +1715,60 @@ export default function ITR() {
                     <TableCell>{item.project}</TableCell>
                     <TableCell>{item.location}</TableCell>
                     <TableCell>
-                      <Badge variant={item.status === "Submitted" ? "default" : "secondary"}>{item.status}</Badge>
+                      <Badge variant={String(item.status || "").toUpperCase() === "SUBMITTED" ? "default" : "secondary"}>{item.status}</Badge>
+                    </TableCell>
+                    <TableCell>{statusDrafts[String(item.itr_id)]?.inspectionCode || item.inspectionCode || "-"}</TableCell>
+                    <TableCell>
+                      {item.itr_id ? (
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={statusDrafts[String(item.itr_id)]?.status || item.status || "DRAFT"}
+                            onValueChange={(value) => handleStatusDraftChange(item.itr_id, "status", value)}
+                          >
+                            <SelectTrigger className="h-8 w-[160px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {API_STATUS_OPTIONS.map((status) => (
+                                <SelectItem key={`${item.id}-desktop-${status}`} value={status}>
+                                  {status}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={statusDrafts[String(item.itr_id)]?.inspectionCode || ""}
+                            onValueChange={(value) => handleStatusDraftChange(item.itr_id, "inspectionCode", value)}
+                          >
+                            <SelectTrigger className="h-8 w-[120px]">
+                              <SelectValue placeholder="Code" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {API_INSPECTION_CODE_OPTIONS.map((option) => (
+                                <SelectItem key={`${item.id}-code-${option.value}`} value={option.value} className="whitespace-normal break-words leading-snug">
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            className="h-8 w-[180px]"
+                            placeholder="PMC comments"
+                            value={statusDrafts[String(item.itr_id)]?.lodhaPmcComments || ""}
+                            onChange={(event) => handleStatusDraftChange(item.itr_id, "lodhaPmcComments", event.target.value)}
+                          />
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleUpdateStatus(item)}
+                            disabled={Boolean(updatingStatusIds[String(item.itr_id)])}
+                          >
+                            {updatingStatusIds[String(item.itr_id)] ? "..." : "Save"}
+                          </Button>
+                        </div>
+                      ) : (
+                        "-"
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">

@@ -3,18 +3,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Package2, Loader2, AlertCircle } from "lucide-react";
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { api } from '@/lib/api';
 
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
   
   const navigate = useNavigate();
-  const location = useLocation();
   const { login, isAuthenticated } = useAuth();
   
   // Enforce flow: Login -> Project Selection -> Dashboard
@@ -43,10 +48,43 @@ export default function Login() {
       } else {
         setError('Invalid credentials. Use admin@madhuram.com / admin123, pm@madhuram.com / pm123, or devang@gmail.com / 123456');
       }
-    } catch (err) {
+    } catch {
       setError('An error occurred during login');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    setResetMessage('');
+
+    if (resetPassword !== resetPasswordConfirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setIsResetLoading(true);
+    try {
+      const result = await api.forgotPassword({
+        email_id: email,
+        password_change: resetPassword,
+        re_typepassword: resetPasswordConfirm,
+      });
+
+      if (result.success) {
+        setResetMessage('Password updated successfully. You can now log in with your new password.');
+        setShowForgotPassword(false);
+        setResetPassword('');
+        setResetPasswordConfirm('');
+      } else {
+        setError(result.error || 'Failed to reset password.');
+      }
+    } catch {
+      setError('An error occurred while resetting password.');
+    } finally {
+      setIsResetLoading(false);
     }
   };
 
@@ -144,8 +182,48 @@ export default function Login() {
                   )}
                   Sign In
                 </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="px-0 justify-start"
+                  onClick={() => setShowForgotPassword((prev) => !prev)}
+                >
+                  {showForgotPassword ? 'Cancel password reset' : 'Forgot password?'}
+                </Button>
               </div>
             </form>
+
+            {showForgotPassword && (
+              <form onSubmit={handleForgotPassword} className="grid gap-3 rounded-md border p-3">
+                <p className="text-sm font-medium">Reset Password</p>
+                <Input
+                  placeholder="New password"
+                  type="password"
+                  disabled={isResetLoading}
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  required
+                />
+                <Input
+                  placeholder="Re-type new password"
+                  type="password"
+                  disabled={isResetLoading}
+                  value={resetPasswordConfirm}
+                  onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                  required
+                />
+                <Button type="submit" disabled={isResetLoading || !email} className="h-10">
+                  {isResetLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Update Password
+                </Button>
+                {!email && <p className="text-xs text-muted-foreground">Enter your email above first.</p>}
+              </form>
+            )}
+            {resetMessage && (
+              <Alert>
+                <AlertDescription>{resetMessage}</AlertDescription>
+              </Alert>
+            )}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />

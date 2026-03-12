@@ -215,6 +215,18 @@ export const api = {
     return handleResponse(response);
   },
 
+  createUser: async (userData) => {
+    const response = await fetch(`${BASE_URL}/api/auth/users`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData),
+    });
+    return handleResponse(response);
+  },
+
   logout: async () => {
     const token = getToken();
     if (!token) return { success: true }; // Already "logged out" locally
@@ -246,14 +258,26 @@ export const api = {
     return handleResponse(response);
   },
 
+  getUserById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/auth/users/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   updateUser: async (id, data) => {
+    const payload = { ...data };
+    if (Array.isArray(payload.project_list) && !Array.isArray(payload.project)) {
+      payload.project = payload.project_list;
+    }
+
     const response = await fetch(`${BASE_URL}/api/auth/users/${id}`, {
       method: 'PUT',
       headers: {
         ...getAuthHeaders(),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     return handleResponse(response);
   },
@@ -742,6 +766,99 @@ export const api = {
     return handleResponse(response);
   },
 
+  // PR (Purchase Requisition) – Base URL: https://api.festmate.in, Storage: /uploads/pr
+  uploadPrFile: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+
+    const response = await fetch(`${BASE_URL}/api/pr/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  uploadPrSignature: async (file) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+
+    const response = await fetch(`${BASE_URL}/api/pr/upload-signature`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  createPr: async (data) => {
+    const response = await fetch(`${BASE_URL}/api/pr`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getPrs: async () => {
+    const response = await fetch(`${BASE_URL}/api/pr`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getPrById: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/pr/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getPrsByProject: async (projectId) => {
+    const response = await fetch(`${BASE_URL}/api/pr/project/${projectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  getPrsBySample: async (sampleId) => {
+    const response = await fetch(`${BASE_URL}/api/pr/sample/${sampleId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updatePr: async (id, data) => {
+    const response = await fetch(`${BASE_URL}/api/pr/${id}`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  deletePr: async (id) => {
+    const response = await fetch(`${BASE_URL}/api/pr/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   // PO (Purchase Orders) – Base URL: https://api.festmate.in, Storage: /uploads/po
   uploadPoFile: async (file) => {
     const formData = new FormData();
@@ -901,6 +1018,28 @@ export const api = {
   },
 
   // ITR (Installation Test Report)
+  uploadItrReference: async (file, meta = {}) => {
+    const formData = new FormData();
+    if (file instanceof File) {
+      formData.append('file', file);
+    } else {
+      return { success: false, error: 'Invalid file' };
+    }
+    if (meta.user_id != null && meta.user_id !== '') {
+      formData.append('user_id', String(meta.user_id));
+    }
+    if (meta.user_name != null && String(meta.user_name).trim() !== '') {
+      formData.append('user_name', String(meta.user_name));
+    }
+
+    const response = await fetch(`${BASE_URL}/api/itr/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
   createItr: async (data) => {
     const response = await fetch(`${BASE_URL}/api/itr`, {
       method: 'POST',
@@ -950,6 +1089,24 @@ export const api = {
     const response = await fetch(`${BASE_URL}/api/itr/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  updateItrStatus: async (id, data = {}) => {
+    const response = await fetch(`${BASE_URL}/api/itr/${id}/status`, {
+      method: 'PATCH',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: data.status ?? '',
+        inspection_code: data.inspection_code ?? data.inspectionCode ?? '',
+        lodha_pmc_comments: data.lodha_pmc_comments ?? data.lodhaPmcComments ?? '',
+        user_id: data.user_id,
+        user_name: data.user_name,
+      }),
     });
     return handleResponse(response);
   },

@@ -1,5 +1,18 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { DatabaseError, ValidationError, UniqueConstraintError } from 'sequelize';
+
+const VALID_ROLES = ['admin', 'operational_manager', 'po_officer', 'labour'];
+
+const formatUserResponse = (user) => ({
+  user_id: user.id,
+  username: user.username,
+  name: user.name,
+  email: user.email,
+  phone_number: user.phone_number,
+  role: user.role,
+  project_list: user.project_list,
+});
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -13,57 +26,70 @@ const generateToken = (user) => {
   );
 };
 
+const createUserRecord = async ({ name, username, email, phone_number, role, project, password }) => {
+  if (!name || !username || !email || !phone_number || !password || !role) {
+    return { error: { status: 400, message: 'username, email, phone_number, password, and role are required' } };
+  }
+
+  if (!VALID_ROLES.includes(role)) {
+    return { error: { status: 400, message: 'invalid role' } };
+  }
+
+  const existingEmail = await User.findOne({ where: { email } });
+  if (existingEmail) return { error: { status: 409, message: 'email already exists' } };
+
+  const existingPhone = await User.findOne({ where: { phone_number } });
+  if (existingPhone) return { error: { status: 409, message: 'phone number already exists' } };
+
+  const user = await User.create({
+    name,
+    username,
+    email,
+    phone_number,
+    role,
+    project_list: Array.isArray(project) ? project : [],
+    password
+  });
+
+  return { user };
+};
+
 // 1. Signup
 export const signup = async (req, res) => {
   try {
     const { name, username, email, phone_number, role, project, password } = req.body;
-
-    // Validation
-    if (!name || !username || !email || !phone_number || !password || !role) {
-      return res.status(400).json({ message: 'username, email, phone_number, password, and role are required' });
+    const result = await createUserRecord({ name, username, email, phone_number, role, project, password });
+    if (result.error) {
+      return res.status(result.error.status).json({ message: result.error.message });
     }
-
-    const validRoles = ['admin', 'operational_manager', 'po_officer', 'labour'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({ message: 'invalid role' });
-    }
-
-    // Check duplicates
-    const existingEmail = await User.findOne({ where: { email } });
-    if (existingEmail) return res.status(409).json({ message: 'email already exists' });
-
-    const existingPhone = await User.findOne({ where: { phone_number } });
-    if (existingPhone) return res.status(409).json({ message: 'phone number already exists' });
-
-    // Create User
-    const user = await User.create({
-      name,
-      username,
-      email,
-      phone_number,
-      role,
-      project_list: project || [],
-      password
-    });
+    const { user } = result;
 
     const token = generateToken(user);
 
     res.status(201).json({
       token,
-      user: {
-        user_id: user.id,
-        username: user.username,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
-        project_list: user.project_list
-      }
+      user: formatUserResponse(user)
     });
 
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ message: 'failed to sign up' });
+  }
+};
+
+// Create user via management endpoint (admin / operational manager)
+export const createUser = async (req, res) => {
+  try {
+    const { name, username, email, phone_number, role, project, password } = req.body;
+    const result = await createUserRecord({ name, username, email, phone_number, role, project, password });
+    if (result.error) {
+      return res.status(result.error.status).json({ message: result.error.message });
+    }
+
+    return res.status(201).json(formatUserResponse(result.user));
+  } catch (error) {
+    console.error('Create user error:', error);
+    return res.status(500).json({ message: 'failed to create user' });
   }
 };
 
@@ -90,15 +116,7 @@ export const login = async (req, res) => {
 
     res.status(200).json({
       token,
-      user: {
-        user_id: user.id,
-        username: user.username,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
-        project_list: user.project_list
-      },
+      user: formatUserResponse(user),
       message: 'login successful'
     });
 
@@ -146,14 +164,7 @@ export const forgotPassword = async (req, res) => {
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll();
-    const formattedUsers = users.map(user => ({
-      user_id: user.id,
-      name: user.name,
-      email: user.email,
-      phone_number: user.phone_number,
-      role: user.role,
-      project_list: user.project_list
-    }));
+    const formattedUsers = users.map((user) => formatUserResponse(user));
 
     res.status(200).json(formattedUsers);
   } catch (error) {
@@ -162,14 +173,33 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-// 6. Update User
+// 6. Get User By ID
+export const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: 'user not found' });
+    }
+
+    res.status(200).json(formatUserResponse(user));
+  } catch (error) {
+    console.error('Get user by id error:', error);
+    res.status(500).json({ message: 'failed to fetch user' });
+  }
+};
+
+// 7. Update User
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { username, email, phone_number, role, project_list } = req.body;
+    const { username, email, phone_number, role, project, project_list } = req.body;
 
-    if (!username || !email || !role) {
-      return res.status(400).json({ message: 'username, email and role are required' });
+    if (!username || !email || !phone_number || !role) {
+      return res.status(400).json({ message: 'username, email, phone_number and role are required' });
+    }
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ message: 'invalid role' });
     }
 
     const user = await User.findByPk(id);
@@ -182,26 +212,34 @@ export const updateUser = async (req, res) => {
     user.email = email;
     user.phone_number = phone_number;
     user.role = role;
-    if (project_list) user.project_list = project_list;
+    const projects = Array.isArray(project) ? project : project_list;
+    if (Array.isArray(projects)) user.project_list = projects;
 
     await user.save();
 
-    res.status(200).json({
-      user_id: user.id,
-      name: user.name,
-      email: user.email,
-      phone_number: user.phone_number,
-      role: user.role,
-      project_list: user.project_list
-    });
+    res.status(200).json(formatUserResponse(user));
 
   } catch (error) {
     console.error('Update user error:', error);
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({ message: 'email or phone number already exists' });
+    }
+    if (error instanceof ValidationError) {
+      return res.status(400).json({ message: error.message || 'validation failed' });
+    }
+    if (error instanceof DatabaseError) {
+      const sqlMessage = error?.parent?.sqlMessage || error.message || '';
+      if (sqlMessage.includes('role') && sqlMessage.includes('Data truncated')) {
+        return res.status(400).json({
+          message: 'invalid role in database enum; ensure app_users.role supports operational_manager'
+        });
+      }
+    }
     res.status(500).json({ message: 'failed to update user' });
   }
 };
 
-// 7. Delete User
+// 8. Delete User
 export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;

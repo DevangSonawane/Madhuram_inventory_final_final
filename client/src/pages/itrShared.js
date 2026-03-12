@@ -35,6 +35,9 @@ const EMPTY_SIGNOFF = {
 
 export const EMPTY_ITR = {
   title: "Work Inspection Request (WIR)",
+  project_id: "",
+  po_id: "",
+  mir_id: "",
   projectName: "",
   projectCode: "",
   clientEmployer: "",
@@ -42,7 +45,9 @@ export const EMPTY_ITR = {
   contractor: "",
   vendorCode: "",
   materialCode: "",
+  workOrderNo: "",
   itrRefNo: "",
+  revNo: "",
   wirItrSubmissionDateTime: "",
   inspectionDateTime: "",
   submittedTo: "",
@@ -56,6 +61,7 @@ export const EMPTY_ITR = {
       previousQty: "",
       currentQty: "",
       cumulativeQty: "",
+      unit: "",
     },
     discipline: [],
     descriptionOfWorks: "",
@@ -89,4 +95,9 @@ export const EMPTY_ITR = {
   },
   source: "Manual",
   sourceFileName: "",
+  sourceFilePath: "",
+  status: "",
+  inspectionCode: "",
+  workItems: [],
+  shaftDetails: [],
 };

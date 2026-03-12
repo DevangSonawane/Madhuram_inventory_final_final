@@ -65,7 +65,7 @@ export const MENU_CATEGORIES = [
         title: "Purchase Requests",
         path: "/purchase-requests",
         icon: ShoppingCart,
-        hidden: true,
+        hidden: false,
       },
       {
         title: "Vendor Comparison",
@@ -108,7 +108,7 @@ export const MENU_CATEGORIES = [
         title: "ITR",
         path: "/itr",
         icon: Hammer,
-        hidden: true,
+        hidden: false,
       },
     ]
   },

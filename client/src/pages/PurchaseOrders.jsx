@@ -14,6 +14,8 @@ import { useProject } from "@/contexts/ProjectContext";
 import { api } from "@/lib/api";
 import { EMPTY_PO, normalizePoData, sanitizeNumberInput, sanitizePhoneInput } from "@/pages/poShared";
 
+const NONE_VALUE = "__none__";
+
 function Field({ label, children, className = "" }) {
   return (
     <div className={`space-y-1 ${className}`.trim()}>
@@ -107,6 +109,18 @@ const buildPoPayload = (poData, projectId) => ({
   status: poData.status || "created",
 });
 
+const formatPrNumber = (pr = {}) => {
+  const sourceDate = pr.date || pr.created_at || new Date().toISOString();
+  const parsed = new Date(sourceDate);
+  const yyyy = parsed.getFullYear();
+  const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+  const dd = String(parsed.getDate()).padStart(2, "0");
+  const datePart = Number.isNaN(parsed.getTime()) ? "0000-00-00" : `${yyyy}-${mm}-${dd}`;
+  const sequence = pr.pr_id || pr.id || "0";
+  const project = pr.project_id || pr.projectId || "0";
+  return `PR-${datePart}-${sequence}-${project}`;
+};
+
 export default function PurchaseOrders() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -121,34 +135,30 @@ export default function PurchaseOrders() {
   const [loadingPos, setLoadingPos] = useState(false);
   const [sampleOptions, setSampleOptions] = useState([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
+  const [prOptions, setPrOptions] = useState([]);
+  const [loadingPrOptions, setLoadingPrOptions] = useState(false);
+  const [loadingPrItems, setLoadingPrItems] = useState(false);
+  const [selectedPrId, setSelectedPrId] = useState("");
 
   const selectedSampleMissing = Boolean(
     poData.sampleId && !sampleOptions.some((sample) => String(sample.sample_id || sample.id) === poData.sampleId)
+  );
+  const selectedPrMissing = Boolean(
+    selectedPrId && !prOptions.some((pr) => String(pr.pr_id || pr.id) === selectedPrId)
   );
 
   useEffect(() => {
     if (!projectId) {
       setLoadingPos(false);
-      setLoadingSamples(false);
-      setSampleOptions([]);
       setRecentPos([]);
       return;
     }
 
     const fetchPos = async () => {
       setLoadingPos(true);
-      setLoadingSamples(true);
       try {
         const result = await api.getPosByProject(projectId);
         if (result.success && Array.isArray(result.data)) {
-          const uniqueSampleIds = [...new Set(
-            result.data
-              .map((po) => po?.sample_id)
-              .filter((value) => value !== undefined && value !== null && value !== "")
-              .map((value) => String(value))
-          )];
-          setSampleOptions(uniqueSampleIds.map((sampleId) => ({ sample_id: sampleId })));
-
           const mapped = result.data.map((record) => {
             const normalized = normalizePoData(record);
             const id = normalized.orderNo || `PO-${record.po_id || Date.now()}`;
@@ -171,21 +181,80 @@ export default function PurchaseOrders() {
           if (result?.error) {
             toast({ title: "Error", description: result.error || "Failed to load purchase orders.", variant: "destructive" });
           }
-          setSampleOptions([]);
           setRecentPos([]);
         }
       } catch (error) {
         toast({ title: "Error", description: error?.message || "Failed to load purchase orders.", variant: "destructive" });
-        setSampleOptions([]);
         setRecentPos([]);
       } finally {
         setLoadingPos(false);
-        setLoadingSamples(false);
       }
     };
 
     fetchPos();
   }, [projectId, toast]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSamples = async () => {
+      setLoadingSamples(true);
+      try {
+        const response = projectId ? await api.getSamplesByProject(projectId) : await api.getSamples();
+        if (!mounted) return;
+        if (!response.success || !Array.isArray(response.data)) {
+          setSampleOptions([]);
+          return;
+        }
+        const byId = new Map();
+        response.data.forEach((sample) => {
+          const id = sample?.sample_id ?? sample?.id;
+          if (id == null || id === "") return;
+          byId.set(String(id), sample);
+        });
+        setSampleOptions(Array.from(byId.values()));
+      } catch {
+        if (mounted) setSampleOptions([]);
+      } finally {
+        if (mounted) setLoadingSamples(false);
+      }
+    };
+
+    loadSamples();
+    return () => {
+      mounted = false;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPrs = async () => {
+      setLoadingPrOptions(true);
+      try {
+        const response = projectId ? await api.getPrsByProject(projectId) : await api.getPrs();
+        if (!mounted) return;
+        if (!response.success || !Array.isArray(response.data)) {
+          setPrOptions([]);
+          return;
+        }
+        const byId = new Map();
+        response.data.forEach((pr) => {
+          const id = pr?.pr_id ?? pr?.id;
+          if (id == null || id === "") return;
+          byId.set(String(id), pr);
+        });
+        setPrOptions(Array.from(byId.values()));
+      } catch {
+        if (mounted) setPrOptions([]);
+      } finally {
+        if (mounted) setLoadingPrOptions(false);
+      }
+    };
+
+    loadPrs();
+    return () => {
+      mounted = false;
+    };
+  }, [projectId]);
 
   const hasPreview = useMemo(() => {
     return poData.vendor?.name || poData.orderNo || poData.poDate || poData.totalAmount;
@@ -293,6 +362,24 @@ export default function PurchaseOrders() {
     };
   };
 
+  const updateLinkedTax = (taxKey, field, value, mode) => {
+    const linkedTaxKey = taxKey === "cgst" ? "sgst" : "cgst";
+    setPoData((prev) =>
+      recalculatePoAmounts({
+        ...prev,
+        taxes: {
+          ...prev.taxes,
+          [taxKey]: { ...prev.taxes[taxKey], [field]: value },
+          [linkedTaxKey]: { ...prev.taxes[linkedTaxKey], [field]: value },
+        },
+        source: "Manual",
+      }, {
+        [`${taxKey}Mode`]: mode,
+        [`${linkedTaxKey}Mode`]: mode,
+      })
+    );
+  };
+
   const updateVendor = (key, value) => {
     setPoData((prev) => ({
       ...prev,
@@ -357,6 +444,68 @@ export default function PurchaseOrders() {
       const nextItems = prev.items.filter((_, i) => i !== index);
       return recalculatePoAmounts({ ...prev, items: nextItems, source: "Manual" });
     });
+  };
+
+  const mapPrItemsToPoItems = (items) => {
+    if (!Array.isArray(items)) return [];
+    return items.map((item, index) => {
+      const make = String(item?.make || "").trim();
+      const place = String(item?.place_of_utilisation || "").trim();
+      const remarks = [make ? `Make: ${make}` : "", place ? `Place: ${place}` : ""]
+        .filter(Boolean)
+        .join(" | ");
+      return {
+        srNo: String(index + 1),
+        hsnCode: "",
+        description: String(item?.material_description || "").trim(),
+        qty: item?.req_qty == null ? "" : String(item.req_qty),
+        uom: String(item?.unit || "").trim(),
+        rate: "",
+        amount: "",
+        remarks,
+      };
+    });
+  };
+
+  const applySelectedPrToPo = (selectedPr) => {
+    if (!selectedPr) return;
+    const mappedItems = mapPrItemsToPoItems(selectedPr.items);
+    setPoData((prev) =>
+      recalculatePoAmounts({
+        ...prev,
+        sampleId: selectedPr.sample_id != null && selectedPr.sample_id !== "" ? String(selectedPr.sample_id) : prev.sampleId,
+        items: mappedItems,
+        source: "Manual",
+      })
+    );
+  };
+
+  const handlePrNumberSelect = async (value) => {
+    if (value === NONE_VALUE) {
+      setSelectedPrId("");
+      return;
+    }
+
+    setSelectedPrId(value);
+    const selectedPr = prOptions.find((pr) => String(pr.pr_id || pr.id) === String(value));
+    if (selectedPr && Array.isArray(selectedPr.items) && selectedPr.items.length > 0) {
+      applySelectedPrToPo(selectedPr);
+      return;
+    }
+
+    setLoadingPrItems(true);
+    try {
+      const response = await api.getPrById(value);
+      if (!response.success) {
+        toast({ title: "Error", description: response.error || "Failed to load PR items.", variant: "destructive" });
+        return;
+      }
+      applySelectedPrToPo(response.data || {});
+    } catch (error) {
+      toast({ title: "Error", description: error?.message || "Failed to load PR items.", variant: "destructive" });
+    } finally {
+      setLoadingPrItems(false);
+    }
   };
 
   const handleFile = async (file) => {
@@ -459,6 +608,7 @@ export default function PurchaseOrders() {
 
   const handleClear = () => {
     setPoData(EMPTY_PO);
+    setSelectedPrId("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -583,14 +733,14 @@ export default function PurchaseOrders() {
                 <div className="manual-entry-grid sm:grid-cols-2">
                   <Field label="Sample ID">
                     <Select
-                      value={poData.sampleId || undefined}
-                      onValueChange={(value) => setPoData((prev) => ({ ...prev, sampleId: value, source: "Manual" }))}
-                      disabled={!projectId || loadingSamples}
+                      value={poData.sampleId || NONE_VALUE}
+                      onValueChange={(value) => setPoData((prev) => ({ ...prev, sampleId: value === NONE_VALUE ? "" : value, source: "Manual" }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={projectId ? (loadingSamples ? "Loading samples..." : "Select sample (required)") : "Select project first"} />
+                        <SelectValue placeholder={loadingSamples ? "Loading samples..." : "Select sample (required)"} />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={NONE_VALUE}>None</SelectItem>
                         {selectedSampleMissing ? (
                           <SelectItem value={poData.sampleId}>Sample #{poData.sampleId} (current)</SelectItem>
                         ) : null}
@@ -600,6 +750,32 @@ export default function PurchaseOrders() {
                           return (
                             <SelectItem key={id} value={id}>
                               {`#${id} - ${label}`}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="PR Number">
+                    <Select
+                      value={selectedPrId || NONE_VALUE}
+                      onValueChange={handlePrNumberSelect}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={loadingPrOptions || loadingPrItems ? "Loading PR..." : "Select PR Number"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE_VALUE}>None</SelectItem>
+                        {selectedPrMissing ? (
+                          <SelectItem value={selectedPrId}>PR #{selectedPrId} (current)</SelectItem>
+                        ) : null}
+                        {prOptions.map((pr) => {
+                          const id = String(pr.pr_id || pr.id);
+                          const generatedPrNumber = formatPrNumber(pr);
+                          const label = pr.workorder_no || pr.project_name || "Purchase Request";
+                          return (
+                            <SelectItem key={id} value={id}>
+                              {`${generatedPrNumber} - ${label}`}
                             </SelectItem>
                           );
                         })}
@@ -805,15 +981,7 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.cgst.percent}
-                            onChange={(event) =>
-                              setPoData((prev) =>
-                                recalculatePoAmounts({
-                                  ...prev,
-                                  taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, percent: sanitizeNumberInput(event.target.value) } },
-                                  source: "Manual",
-                                }, { cgstMode: "percent" })
-                              )
-                            }
+                            onChange={(event) => updateLinkedTax("cgst", "percent", sanitizeNumberInput(event.target.value), "percent")}
                           />
                         </div>
                         <div className="flex items-center gap-2">
@@ -823,15 +991,7 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.cgst.amount}
-                            onChange={(event) =>
-                              setPoData((prev) =>
-                                recalculatePoAmounts({
-                                  ...prev,
-                                  taxes: { ...prev.taxes, cgst: { ...prev.taxes.cgst, amount: sanitizeNumberInput(event.target.value) } },
-                                  source: "Manual",
-                                }, { cgstMode: "amount" })
-                              )
-                            }
+                            onChange={(event) => updateLinkedTax("cgst", "amount", sanitizeNumberInput(event.target.value), "amount")}
                           />
                         </div>
                       </div>
@@ -845,15 +1005,7 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.sgst.percent}
-                            onChange={(event) =>
-                              setPoData((prev) =>
-                                recalculatePoAmounts({
-                                  ...prev,
-                                  taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, percent: sanitizeNumberInput(event.target.value) } },
-                                  source: "Manual",
-                                }, { sgstMode: "percent" })
-                              )
-                            }
+                            onChange={(event) => updateLinkedTax("sgst", "percent", sanitizeNumberInput(event.target.value), "percent")}
                           />
                         </div>
                         <div className="flex items-center gap-2">
@@ -863,15 +1015,7 @@ export default function PurchaseOrders() {
                             inputMode="decimal"
                             step="any"
                             value={poData.taxes.sgst.amount}
-                            onChange={(event) =>
-                              setPoData((prev) =>
-                                recalculatePoAmounts({
-                                  ...prev,
-                                  taxes: { ...prev.taxes, sgst: { ...prev.taxes.sgst, amount: sanitizeNumberInput(event.target.value) } },
-                                  source: "Manual",
-                                }, { sgstMode: "amount" })
-                              )
-                            }
+                            onChange={(event) => updateLinkedTax("sgst", "amount", sanitizeNumberInput(event.target.value), "amount")}
                           />
                         </div>
                       </div>

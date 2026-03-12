@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { ACCESS_CONTROL_CATALOG } from '@/constants/accessControlCatalog';
-import { buildDefaultAccessControl } from '@/lib/accessControl';
+import { buildDefaultAccessControl, hasFunctionAccess } from '@/lib/accessControl';
 import { getUserAccessControlOverride, saveUserAccessControlOverride } from '@/lib/accessControlStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,10 +43,11 @@ export default function SettingsAccessControl({ embedded = false }) {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [draftAccessControl, setDraftAccessControl] = useState(buildDefaultAccessControl());
 
-  const isAdmin = currentUser?.role === 'admin';
+  const canManageAccessByRole = currentUser?.role === 'admin' || currentUser?.role === 'operational_manager';
+  const canManageAccess = canManageAccessByRole && hasFunctionAccess(currentUser, 'settings.access_control');
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!canManageAccess) {
       setLoadingUsers(false);
       return;
     }
@@ -78,7 +79,7 @@ export default function SettingsAccessControl({ embedded = false }) {
     };
 
     fetchUsers();
-  }, [isAdmin, toast]);
+  }, [canManageAccess, toast]);
 
   const selectedUser = useMemo(
     () => users.find((item) => item.user_id === selectedUserId) || null,
@@ -153,11 +154,11 @@ export default function SettingsAccessControl({ embedded = false }) {
   const enabledFunctions = Object.values(draftAccessControl.functions || {}).filter(Boolean).length;
   const totalFunctions = ACCESS_CONTROL_CATALOG.reduce((sum, page) => sum + page.functions.length, 0);
 
-  if (!isAdmin) {
+  if (!canManageAccess) {
     return (
       <Alert variant="destructive">
         <AlertDescription>
-          You do not have permission to access this section. Only administrators can configure page and function access.
+          You do not have permission to access this section. Only allowed administrators/operational managers can configure page and function access.
         </AlertDescription>
       </Alert>
     );

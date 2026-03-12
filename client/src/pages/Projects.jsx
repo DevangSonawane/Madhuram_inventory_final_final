@@ -25,7 +25,7 @@ export default function Projects() {
   const [deleting, setDeleting] = useState(false);
 
   const isAdmin = user?.role === 'admin';
-  const isProjectManager = user?.role === 'project_manager';
+  const isProjectManager = user?.role === 'operational_manager';
   const canEditDelete = isAdmin || isProjectManager;
 
   useEffect(() => {

@@ -73,11 +73,56 @@ export default function ProjectSelection() {
   }, []);
 
   const projectList = Array.isArray(projects) ? projects : [];
-  const filteredProjects = projectList.filter(project => {
+  const normalizedRole = String(user?.role || '').toLowerCase();
+  const canViewAllProjects = normalizedRole === 'admin' || normalizedRole === 'operational_manager';
+  const rawProjectList = Array.isArray(user?.project_list)
+    ? user.project_list
+    : (() => {
+        if (typeof user?.project_list !== 'string') return [];
+        try {
+          const parsed = JSON.parse(user.project_list);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })();
+  const assignedProjectIds = new Set(
+    Array.isArray(rawProjectList)
+      ? rawProjectList
+          .flatMap((entry) => {
+            if (entry == null) return [];
+            if (typeof entry === 'object') {
+              return [
+                entry.id,
+                entry.project_id,
+                entry.name,
+                entry.project_name,
+              ];
+            }
+            return [entry];
+          })
+          .map((value) => String(value).trim().toLowerCase())
+          .filter(Boolean)
+      : []
+  );
+
+  const filteredProjects = projectList.filter((project) => {
     if (!user) return false;
-    if (user.role === 'admin') return true;
-    if (user.role === 'project_manager') return project.manager_id === user.id;
-    return false;
+
+    if (canViewAllProjects) return true;
+
+    // Non-admin users can only see projects explicitly assigned by admin.
+    if (assignedProjectIds.size === 0) return false;
+    const projectKeys = [
+      project?.project_id,
+      project?.id,
+      project?.name,
+      project?.project_name,
+    ]
+      .map((value) => String(value ?? '').trim().toLowerCase())
+      .filter(Boolean);
+
+    return projectKeys.some((key) => assignedProjectIds.has(key));
   });
 
   const handleSelectProject = (project) => {
