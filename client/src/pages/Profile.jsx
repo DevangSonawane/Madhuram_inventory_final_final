@@ -78,7 +78,7 @@ export default function Profile() {
 
   const isAdmin = currentUser?.role === 'admin';
   const isOperationalManager = currentUser?.role === 'operational_manager';
-  const canManageUsersByRole = isAdmin || isOperationalManager;
+  const canManageUsersByRole = isAdmin;
   const canViewUserManagementTab = canManageUsersByRole && hasFunctionAccess(currentUser, 'settings.user_management');
   const canViewAccessControlTab = canManageUsersByRole && hasFunctionAccess(currentUser, 'settings.access_control');
 

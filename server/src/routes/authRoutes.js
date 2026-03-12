@@ -22,10 +22,10 @@ router.post('/forgot-password', forgotPassword);
 
 // USERS APIs
 // Docs say: GET /api/auth/users
-router.post('/users', authenticate, authorizeRoles('admin', 'operational_manager'), createUser);
-router.get('/users', authenticate, authorizeRoles('admin', 'operational_manager'), getAllUsers);
-router.get('/users/:id', authenticate, authorizeRoles('admin', 'operational_manager'), getUserById);
-router.put('/users/:id', authenticate, authorizeRoles('admin', 'operational_manager'), updateUser);
+router.post('/users', authenticate, authorizeRoles('admin'), createUser);
+router.get('/users', authenticate, authorizeRoles('admin'), getAllUsers);
+router.get('/users/:id', authenticate, authorizeRoles('admin'), getUserById);
+router.put('/users/:id', authenticate, authorizeRoles('admin'), updateUser);
 router.delete('/users/:id', authenticate, authorizeRoles('admin'), deleteUser);
 
 export default router;

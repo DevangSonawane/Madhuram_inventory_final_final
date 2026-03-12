@@ -62,7 +62,7 @@ export default function Users() {
   const { toast } = useToast();
 
   const isAdmin = user?.role === 'admin';
-  const canManageUsersByRole = isAdmin || user?.role === 'operational_manager';
+  const canManageUsersByRole = isAdmin;
   const canManageUsers = canManageUsersByRole && hasFunctionAccess(user, 'settings.user_management');
 
   const [formData, setFormData] = useState({

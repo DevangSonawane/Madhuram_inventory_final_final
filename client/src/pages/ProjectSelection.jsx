@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Building, Calendar, MapPin, Loader2, Plus, Trash2, FileText, Upload, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { hasPageAccess } from "@/lib/accessControl";
 import { MAX_FILE_SIZE, MAX_COMPRESSION_API_SIZE } from "@/constants/fileLimits";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractWorkOrderFields, mapExtractedToProjectForm } from "@/lib/workOrderExtractor";
@@ -68,9 +69,12 @@ export default function ProjectSelection() {
     }
   };
 
+  const canAccessProjectsPage = hasPageAccess(user, '/projects');
+
   useEffect(() => {
+    if (!canAccessProjectsPage) return;
     fetchProjects();
-  }, []);
+  }, [canAccessProjectsPage, fetchProjects]);
 
   const projectList = Array.isArray(projects) ? projects : [];
   const normalizedRole = String(user?.role || '').toLowerCase();
@@ -440,6 +444,21 @@ export default function ProjectSelection() {
       }
     }
   };
+
+  if (!canAccessProjectsPage) {
+    return (
+      <div className="min-h-screen bg-background p-8">
+        <div className="max-w-3xl mx-auto">
+          <Card>
+            <CardHeader>
+              <CardTitle>Access Restricted</CardTitle>
+              <CardDescription>Only pages assigned by admin are visible to your account.</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

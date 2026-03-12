@@ -17,6 +17,20 @@ export const buildDefaultAccessControl = () => {
   return { pages, functions };
 };
 
+export const buildNoAccessControl = () => {
+  const pages = {};
+  const functions = {};
+
+  ACCESS_CONTROL_CATALOG.forEach((page) => {
+    pages[page.pagePath] = false;
+    page.functions.forEach((fn) => {
+      functions[fn.key] = false;
+    });
+  });
+
+  return { pages, functions };
+};
+
 export const normalizeProjectRoutePath = (pathname = '') => {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length <= 1) {
@@ -31,9 +45,7 @@ export const hasPageAccess = (user, pagePath) => {
   if (user?.role === 'admin') return true;
 
   const pages = user?.access_control?.pages;
-  if (!pages || typeof pages !== 'object') return true;
-  if (!(pagePath in pages)) return true;
-
+  if (!pages || typeof pages !== 'object') return false;
   return Boolean(pages[pagePath]);
 };
 
@@ -42,9 +54,7 @@ export const hasFunctionAccess = (user, functionKey) => {
   if (user?.role === 'admin') return true;
 
   const functions = user?.access_control?.functions;
-  if (!functions || typeof functions !== 'object') return true;
-  if (!(functionKey in functions)) return true;
-
+  if (!functions || typeof functions !== 'object') return false;
   return Boolean(functions[functionKey]);
 };
 
