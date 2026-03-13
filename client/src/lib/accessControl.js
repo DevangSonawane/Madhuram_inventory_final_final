@@ -41,6 +41,7 @@ export const normalizeProjectRoutePath = (pathname = '') => {
 
 export const hasPageAccess = (user, pagePath) => {
   if (!pagePath) return true;
+  if (pagePath === '/projects') return true;
   if (ALWAYS_ALLOWED_PAGE_PATHS.includes(pagePath)) return true;
   if (user?.role === 'admin') return true;
 

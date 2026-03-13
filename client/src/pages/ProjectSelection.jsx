@@ -508,6 +508,11 @@ export default function ProjectSelection() {
               <CardTitle>Access Restricted</CardTitle>
               <CardDescription>Only pages assigned by admin are visible to your account.</CardDescription>
             </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" /> Logout
+              </Button>
+            </CardContent>
           </Card>
         </div>
       </div>
