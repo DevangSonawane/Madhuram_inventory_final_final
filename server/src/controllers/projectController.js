@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import Project from '../models/Project.js';
+import User from '../models/User.js';
 import { parseJsonLike } from '../utils/jsonField.js';
 
 const toArrayFromIndexedBody = (body, key) => {
@@ -35,8 +36,51 @@ const toMlManagement = (body) => {
   return { ml_task: '' };
 };
 
+const toAssignedProjectKeySet = (value) => {
+  if (Array.isArray(value)) {
+    return new Set(
+      value
+        .flatMap((entry) => {
+          if (entry == null) return [];
+          if (typeof entry === 'object') {
+            return [entry.id, entry.project_id, entry.name, entry.project_name];
+          }
+          return [entry];
+        })
+        .map((item) => String(item).trim().toLowerCase())
+        .filter(Boolean)
+    );
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return toAssignedProjectKeySet(parsed);
+    } catch {
+      return new Set();
+    }
+  }
+  return new Set();
+};
+
+const canUserAccessProject = (project, assignedKeys) => {
+  if (!project || !(assignedKeys instanceof Set) || assignedKeys.size === 0) return false;
+  const candidates = [
+    project.project_id,
+    project.id,
+    project.project_name,
+    project.name,
+  ]
+    .map((item) => String(item ?? '').trim().toLowerCase())
+    .filter(Boolean);
+  return candidates.some((key) => assignedKeys.has(key));
+};
+
 const buildProjectPayload = (req, isUpdate = false) => {
   const body = req.body || {};
+  const uploadedPathFromBody = typeof body.work_order_file_path === 'string' ? body.work_order_file_path.trim() : '';
+  const normalizedBodyPath = uploadedPathFromBody.startsWith('/uploads/')
+    ? uploadedPathFromBody
+    : (uploadedPathFromBody.includes('/uploads/') ? uploadedPathFromBody.slice(uploadedPathFromBody.indexOf('/uploads/')) : '');
 
   const payload = {
     project_name: body.project_name,
@@ -55,6 +99,8 @@ const buildProjectPayload = (req, isUpdate = false) => {
 
   if (req.files?.work_order_file?.[0]) {
     payload.work_order_file = path.posix.join('/uploads/projects', req.files.work_order_file[0].filename);
+  } else if (normalizedBodyPath) {
+    payload.work_order_file = normalizedBodyPath;
   }
   if (req.files?.mas_file?.[0]) {
     payload.mas_file = path.posix.join('/uploads/projects', req.files.mas_file[0].filename);
@@ -92,7 +138,15 @@ export const createProject = async (req, res) => {
 
 export const getProjects = async (_req, res) => {
   try {
-    const projects = await Project.findAll({ order: [['created_at', 'DESC']] });
+    let projects = await Project.findAll({ order: [['created_at', 'DESC']] });
+    const isAdmin = String(_req?.user?.role || '').toLowerCase() === 'admin';
+
+    if (!isAdmin) {
+      const dbUser = await User.findByPk(_req?.user?.id);
+      const assignedKeys = toAssignedProjectKeySet(dbUser?.project_list);
+      projects = projects.filter((project) => canUserAccessProject(project, assignedKeys));
+    }
+
     return res.status(200).json(projects);
   } catch (error) {
     console.error('Get projects error:', error);
@@ -107,6 +161,15 @@ export const getProjectById = async (req, res) => {
 
     const project = await Project.findByPk(id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const isAdmin = String(req?.user?.role || '').toLowerCase() === 'admin';
+    if (!isAdmin) {
+      const dbUser = await User.findByPk(req?.user?.id);
+      const assignedKeys = toAssignedProjectKeySet(dbUser?.project_list);
+      if (!canUserAccessProject(project, assignedKeys)) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    }
 
     return res.status(200).json(project);
   } catch (error) {

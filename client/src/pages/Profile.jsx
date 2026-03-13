@@ -74,6 +74,7 @@ export default function Profile() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [projectOptions, setProjectOptions] = useState([]);
   const { toast } = useToast();
 
   const isAdmin = currentUser?.role === 'admin';
@@ -96,6 +97,7 @@ export default function Profile() {
   useEffect(() => {
     if (canViewUserManagementTab) {
       fetchUsers();
+      fetchProjectOptions();
     } else {
       setLoading(false);
     }
@@ -137,6 +139,55 @@ export default function Profile() {
     setFormData(prev => ({ ...prev, role: value }));
   };
 
+  const normalizeProjectAssignments = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item)).filter(Boolean);
+        }
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const fetchProjectOptions = async () => {
+    try {
+      const result = await api.getProjects();
+      if (!result.success || !Array.isArray(result.data)) {
+        setProjectOptions([]);
+        return;
+      }
+
+      const options = result.data
+        .map((project) => {
+          const id = project.project_id ?? project.id ?? project.project_name ?? project.name;
+          const name = project.project_name || project.name || `Project ${id}`;
+          if (id == null) return null;
+          return { id: String(id), name };
+        })
+        .filter(Boolean);
+
+      setProjectOptions(options);
+    } catch (error) {
+      setProjectOptions([]);
+    }
+  };
+
+  const handleProjectAssignmentChange = (value) => {
+    const next = value && value !== 'none' ? [String(value)] : [];
+    setFormData((prev) => ({
+      ...prev,
+      project: next,
+      project_list: next,
+    }));
+  };
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -152,13 +203,17 @@ export default function Profile() {
 
   const handleAddUser = async () => {
     try {
+      const selectedProjects = normalizeProjectAssignments(
+        (Array.isArray(formData.project) && formData.project.length > 0) ? formData.project : formData.project_list
+      );
       const signupData = {
         name: formData.name,
         username: formData.username || formData.name,
         email: formData.email,
         phone_number: formData.phone_number,
         role: formData.role,
-        project: Array.isArray(formData.project) ? formData.project : [],
+        project_id: 0,
+        project: selectedProjects,
         password: formData.password
       };
       const result = await api.createUser(signupData);
@@ -176,14 +231,16 @@ export default function Profile() {
   };
 
   const handleEditClick = (user) => {
+    const resolvedUsername = (user.username || user.name || '').trim();
     setSelectedUser(user);
     setFormData({
       name: user.name,
-      username: user.username,
+      username: resolvedUsername,
       email: user.email,
       phone_number: user.phone_number,
       role: user.role,
-      project_list: user.project_list || []
+      project: normalizeProjectAssignments(user.project_list),
+      project_list: normalizeProjectAssignments(user.project_list)
     });
     setIsEditOpen(true);
   };
@@ -191,12 +248,24 @@ export default function Profile() {
   const handleUpdateUser = async () => {
     if (!selectedUser) return;
     try {
+      const normalizedUsername = (formData.username || formData.name || '').trim();
+      if (!normalizedUsername) {
+        toast({
+          variant: "destructive",
+          title: "Username is required",
+          description: "Please enter a username before saving."
+        });
+        return;
+      }
+      const selectedProjects = normalizeProjectAssignments(
+        (Array.isArray(formData.project_list) && formData.project_list.length > 0) ? formData.project_list : formData.project
+      );
       const updateData = {
-        username: formData.username,
+        username: normalizedUsername,
         email: formData.email,
         phone_number: formData.phone_number,
         role: formData.role,
-        project_list: formData.project_list
+        project_list: selectedProjects
       };
       const result = await api.updateUser(selectedUser.user_id, updateData);
       if (result.success) {
@@ -511,6 +580,25 @@ export default function Profile() {
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="space-y-2">
+                        <Label>Projects</Label>
+                        <Select
+                          value={normalizeProjectAssignments(formData.project)[0] || 'none'}
+                          onValueChange={handleProjectAssignmentChange}
+                        >
+                          <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Select project" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No project</SelectItem>
+                            {projectOptions.map((projectOption) => (
+                              <SelectItem key={projectOption.id} value={projectOption.id}>
+                                {projectOption.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
@@ -591,6 +679,25 @@ export default function Profile() {
                         <SelectItem value="operational_manager">Operational Manager</SelectItem>
                         <SelectItem value="po_officer">PO Officer</SelectItem>
                         <SelectItem value="labour">Labour</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Projects</Label>
+                    <Select
+                      value={normalizeProjectAssignments(formData.project_list)[0] || 'none'}
+                      onValueChange={handleProjectAssignmentChange}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No project</SelectItem>
+                        {projectOptions.map((projectOption) => (
+                          <SelectItem key={projectOption.id} value={projectOption.id}>
+                            {projectOption.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

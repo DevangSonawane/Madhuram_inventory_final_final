@@ -10,6 +10,7 @@ import {
   deleteProject,
   compressFile,
 } from '../controllers/projectController.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -55,6 +56,8 @@ const compressStorage = multer.diskStorage({
 
 const projectUpload = multer({ storage: projectStorage });
 const compressUpload = multer({ storage: compressStorage });
+
+router.use(authenticate);
 
 router.post(
   '/projects',

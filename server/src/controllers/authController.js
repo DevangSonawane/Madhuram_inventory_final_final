@@ -4,9 +4,15 @@ import { DatabaseError, ValidationError, UniqueConstraintError } from 'sequelize
 
 const VALID_ROLES = ['admin', 'operational_manager', 'po_officer', 'labour'];
 
+const normalizeText = (value) => {
+  if (value == null) return '';
+  return String(value).trim();
+};
+
 const formatUserResponse = (user) => ({
+  // Backward-compatible fallback for older rows where username might be missing.
+  username: normalizeText(user.username) || normalizeText(user.name),
   user_id: user.id,
-  username: user.username,
   name: user.name,
   email: user.email,
   phone_number: user.phone_number,
@@ -194,11 +200,15 @@ export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const { username, email, phone_number, role, project, project_list } = req.body;
+    const normalizedUsername = normalizeText(username);
+    const normalizedEmail = normalizeText(email);
+    const normalizedPhone = normalizeText(phone_number);
+    const normalizedRole = normalizeText(role);
 
-    if (!username || !email || !phone_number || !role) {
+    if (!normalizedUsername || !normalizedEmail || !normalizedPhone || !normalizedRole) {
       return res.status(400).json({ message: 'username, email, phone_number and role are required' });
     }
-    if (!VALID_ROLES.includes(role)) {
+    if (!VALID_ROLES.includes(normalizedRole)) {
       return res.status(400).json({ message: 'invalid role' });
     }
 
@@ -207,11 +217,11 @@ export const updateUser = async (req, res) => {
       return res.status(404).json({ message: 'user not found' });
     }
 
-    user.name = username; // Map username in body to name in DB as per doc implication
-    user.username = username; // Also update username field
-    user.email = email;
-    user.phone_number = phone_number;
-    user.role = role;
+    user.name = normalizedUsername; // Map username in body to name in DB as per doc implication
+    user.username = normalizedUsername; // Also update username field
+    user.email = normalizedEmail;
+    user.phone_number = normalizedPhone;
+    user.role = normalizedRole;
     const projects = Array.isArray(project) ? project : project_list;
     if (Array.isArray(projects)) user.project_list = projects;
 

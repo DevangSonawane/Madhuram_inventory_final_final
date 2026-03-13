@@ -12,6 +12,8 @@ import { MAX_FILE_SIZE, MAX_COMPRESSION_API_SIZE } from "@/constants/fileLimits"
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractWorkOrderFields, mapExtractedToProjectFormForm } from "@/lib/workOrderExtractor";
 
+const MAX_BACKEND_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
+
 export default function ProjectForm({ project, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
     project_name: '',
@@ -486,11 +488,12 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         samples: formData.samples || [],
         ml_management: formData.ml_management || { ml_task: '' },
         work_order_file: files.work_order_file,
+        work_order_file_path: '',
         mas_file: files.mas_file
       };
 
-      // If work_order_file is larger than allowed upload size, compress it
-      if (submitData.work_order_file && submitData.work_order_file.size > MAX_FILE_SIZE) {
+      // Fast path: upload directly unless file exceeds backend hard limit.
+      if (submitData.work_order_file && submitData.work_order_file.size > MAX_BACKEND_UPLOAD_SIZE) {
         const original = submitData.work_order_file;
 
         if (original.size > MAX_COMPRESSION_API_SIZE) {
@@ -516,7 +519,6 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
           }
           fileUrl = api.getCompressedFileFetchUrl(fileUrl);
 
-          // Attempt authenticated fetch if we have a stored token
           let response;
           const token = localStorage.getItem('inventory_user');
           if (token) {
@@ -525,7 +527,7 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
               response = await fetch(fileUrl, {
                 headers: { Authorization: `Bearer ${user.token}` }
               });
-            } catch (err) {
+            } catch {
               response = await fetch(fileUrl);
             }
           } else {
@@ -540,8 +542,8 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
           if (!blob || blob.size === 0) throw new Error('Compressed file is empty');
 
           const compressedFile = new File([blob], original.name, { type: original.type || blob.type });
-          // Replace file in submit payload and UI state
           submitData.work_order_file = compressedFile;
+          submitData.work_order_file_path = String(compResult.data.url);
           setFiles(prev => ({ ...prev, work_order_file: compressedFile }));
 
           // Show compression stats if provided
@@ -577,6 +579,63 @@ export default function ProjectForm({ project, onSuccess, onCancel }) {
         result = await api.updateProject(project.project_id, submitData);
       } else {
         result = await api.createProject(submitData);
+      }
+
+      const shouldRetryWithCompressedPath =
+        !project?.project_id &&
+        !result?.success &&
+        !!submitData.work_order_file &&
+        /file size too large|max limit is 100mb/i.test(String(result?.error || ''));
+
+      if (shouldRetryWithCompressedPath) {
+        try {
+          setCompressing(prev => ({ ...prev, work_order_file: true }));
+          toast({
+            title: 'Retrying upload',
+            description: 'Server rejected file size. Trying compressed upload path...',
+          });
+
+          const compResult = await api.compressFile(submitData.work_order_file);
+          if (!compResult?.success || !compResult?.data?.url) {
+            throw new Error(compResult?.error || 'Compression retry failed.');
+          }
+
+          const retryData = {
+            ...submitData,
+            work_order_file: null,
+            work_order_file_path: String(compResult.data.url),
+          };
+          result = await api.createProject(retryData);
+        } catch (retryError) {
+          result = {
+            success: false,
+            error: retryError?.message || 'Compressed retry failed.',
+          };
+        } finally {
+          setCompressing(prev => ({ ...prev, work_order_file: false }));
+        }
+      }
+
+      const shouldCreateWithoutFile =
+        !project?.project_id &&
+        !result?.success &&
+        !!submitData.work_order_file &&
+        /file size too large|max limit is 100mb|gateway time-out|timeout|failed to fetch/i.test(String(result?.error || ''));
+
+      if (shouldCreateWithoutFile) {
+        const finalRetryData = {
+          ...submitData,
+          work_order_file: null,
+          work_order_file_path: '',
+        };
+        const finalRetryResult = await api.createProject(finalRetryData);
+        if (finalRetryResult?.success) {
+          result = finalRetryResult;
+          toast({
+            title: 'Project created without file',
+            description: 'Work order upload failed on server. Project is created; attach file later.',
+          });
+        }
       }
 
       if (result.success) {

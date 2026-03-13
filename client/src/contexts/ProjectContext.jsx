@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { useToast } from '../hooks/use-toast';
 import { api } from '../lib/api';
@@ -11,31 +11,28 @@ export const ProjectProvider = ({ children }) => {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isFetchingProjectsRef = useRef(false);
 
-  // Fetch projects from API when user is available
-  useEffect(() => {
-    if (user || localStorage.getItem('inventory_user')) {
-      fetchProjects();
-    } else {
-      setProjects([]);
-      setSelectedProject(null);
-      setLoading(false);
-    }
-  }, [user]);
-
-  // Load selected project from local storage
-  useEffect(() => {
-    const savedProjectId = localStorage.getItem('selected_project_id');
-    if (savedProjectId && projects.length > 0) {
-      const project = projects.find(p => p.project_id === savedProjectId || p.id === savedProjectId);
-      if (project) {
-        setSelectedProject(project);
+  const normalizeAssignedProjectKeys = (value) => {
+    if (Array.isArray(value)) return value.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item).trim().toLowerCase()).filter(Boolean);
+        }
+      } catch {
+        return [];
       }
     }
-  }, [projects]);
+    return [];
+  };
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchProjects = useCallback(async ({ showLoader = true } = {}) => {
+    if (isFetchingProjectsRef.current) return;
+    isFetchingProjectsRef.current = true;
+
+    if (showLoader) setLoading(true);
     try {
       const result = await api.getProjects();
       if (result.success && result.data) {
@@ -67,7 +64,26 @@ export const ProjectProvider = ({ children }) => {
           created_at: project.created_at,
           updated_at: project.updated_at
         }));
-        setProjects(mappedProjects);
+        const normalizedRole = String(user?.role || '').toLowerCase();
+        const isPrivilegedRole = normalizedRole === 'admin';
+        const assignedKeys = new Set(normalizeAssignedProjectKeys(user?.project_list));
+
+        const filteredProjects = isPrivilegedRole
+          ? mappedProjects
+          : mappedProjects.filter((project) => {
+              if (assignedKeys.size === 0) return false;
+              const candidates = [
+                project.id,
+                project.project_id,
+                project.name,
+                project.project_name,
+              ]
+                .map((item) => String(item ?? '').trim().toLowerCase())
+                .filter(Boolean);
+              return candidates.some((key) => assignedKeys.has(key));
+            });
+
+        setProjects(filteredProjects);
       } else {
         if (result?.error) console.error('Failed to fetch projects:', result.error);
         toast({
@@ -86,9 +102,32 @@ export const ProjectProvider = ({ children }) => {
       });
       setProjects([]);
     } finally {
+      if (showLoader) setLoading(false);
+      isFetchingProjectsRef.current = false;
+    }
+  }, [toast, user?.role, user?.project_list]);
+
+  // Fetch projects from API when user is available
+  useEffect(() => {
+    if (user || localStorage.getItem('inventory_user')) {
+      fetchProjects();
+    } else {
+      setProjects([]);
+      setSelectedProject(null);
       setLoading(false);
     }
-  };
+  }, [user?.user_id, user?.token, fetchProjects]);
+
+  // Load selected project from local storage
+  useEffect(() => {
+    const savedProjectId = localStorage.getItem('selected_project_id');
+    if (savedProjectId && projects.length > 0) {
+      const project = projects.find(p => p.project_id === savedProjectId || p.id === savedProjectId);
+      if (project) {
+        setSelectedProject(project);
+      }
+    }
+  }, [projects]);
 
   const createProject = async (newProjectData) => {
     setLoading(true);
@@ -107,14 +146,15 @@ export const ProjectProvider = ({ children }) => {
         samples: newProjectData.samples || [],
         ml_management: newProjectData.ml_management || { ml_task: '' },
         work_order_file: newProjectData.work_order_file,
+        work_order_file_path: newProjectData.work_order_file_path || '',
         mas_file: newProjectData.mas_file
       };
 
       const result = await api.createProject(apiData);
       
       if (result.success) {
-        // Refresh projects list
-        await fetchProjects();
+        // Refresh list in background without blocking UI.
+        fetchProjects({ showLoader: false });
         return result;
       } else {
         throw new Error(result.error || 'Failed to create project');
@@ -148,8 +188,8 @@ export const ProjectProvider = ({ children }) => {
           clearProject();
         }
         
-        // Refresh projects list
-        await fetchProjects();
+        // Refresh list in background without blocking UI.
+        fetchProjects({ showLoader: false });
         
         toast({
           title: 'Success',

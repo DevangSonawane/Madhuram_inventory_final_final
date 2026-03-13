@@ -69,6 +69,27 @@ const parseArrayLike = (value, fallback = []) => {
   return fallback;
 };
 
+const normalizeProjectStartDateForApi = (value) => {
+  if (!value) return '';
+  if (typeof value !== 'string') return value;
+  if (value.includes('T')) return value;
+
+  let normalized = value.trim();
+  const ddMmYyyy = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (ddMmYyyy) {
+    const [, dd, mm, yyyy] = ddMmYyyy;
+    normalized = `${yyyy}-${mm}-${dd}`;
+  }
+
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+
+  // Fallback: send raw value; backend may still accept/normalize it.
+  return value;
+};
+
 const normalizeDynamicField = (value) => {
   const list = parseArrayLike(value, []);
   return list
@@ -399,13 +420,9 @@ export const api = {
     // Required/Text fields
     formData.append('project_name', projectData.project_name || '');
     
-    // API expects project_startdate in CREATE request (ISO format: "2026-01-26T00:00:00.000Z")
-    // Convert date to ISO string if it's a date input value
-    let startDate = projectData.product_duration || projectData.project_startdate || '';
-    if (startDate && !startDate.includes('T')) {
-      // If it's a date input (YYYY-MM-DD), convert to ISO
-      startDate = new Date(startDate + 'T00:00:00.000Z').toISOString();
-    }
+    // API expects project_startdate in CREATE request (ISO format).
+    // Accept both YYYY-MM-DD and DD/MM/YYYY safely.
+    const startDate = normalizeProjectStartDateForApi(projectData.product_duration || projectData.project_startdate || '');
     formData.append('project_startdate', startDate);
     
     formData.append('client_name', projectData.client_name || '');
@@ -447,6 +464,9 @@ export const api = {
     // Files
     if (projectData.work_order_file instanceof File) {
       formData.append('work_order_file', projectData.work_order_file);
+    }
+    if (typeof projectData.work_order_file_path === 'string' && projectData.work_order_file_path.trim()) {
+      formData.append('work_order_file_path', projectData.work_order_file_path.trim());
     }
     
     if (projectData.mas_file instanceof File) {

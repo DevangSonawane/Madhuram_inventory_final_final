@@ -572,7 +572,7 @@ export default function ITR() {
   const [projectOptions, setProjectOptions] = useState([]);
   const [poOptions, setPoOptions] = useState([]);
   const [mirOptions, setMirOptions] = useState([]);
-  const { selectedProject } = useProject();
+  const { selectedProject, projects } = useProject();
   const { user } = useAuth();
   const projectId = selectedProject?.id ?? selectedProject?.project_id ?? null;
   const effectiveProjectId = Number(itrData.project_id || projectId || 0) || null;
@@ -621,23 +621,8 @@ export default function ITR() {
   }, [fetchItrs]);
 
   useEffect(() => {
-    let active = true;
-    const run = async () => {
-      try {
-        const res = await api.getProjects();
-        if (!active) return;
-        if (res?.success && Array.isArray(res.data)) {
-          setProjectOptions(res.data);
-        }
-      } catch {
-        if (active) setProjectOptions([]);
-      }
-    };
-    run();
-    return () => {
-      active = false;
-    };
-  }, []);
+    setProjectOptions(Array.isArray(projects) ? projects : []);
+  }, [projects]);
 
   useEffect(() => {
     let active = true;

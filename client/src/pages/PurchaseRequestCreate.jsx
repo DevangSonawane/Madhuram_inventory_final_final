@@ -58,7 +58,7 @@ const formatDateToken = (value) => {
 export default function PurchaseRequestCreate() {
   const navigate = useNavigate();
   const { projectId } = useParams();
-  const { selectedProject } = useProject();
+  const { selectedProject, projects } = useProject();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [isPrDragOver, setIsPrDragOver] = useState(false);
@@ -126,35 +126,16 @@ export default function PurchaseRequestCreate() {
   );
 
   useEffect(() => {
-    let mounted = true;
-    const loadProjects = async () => {
-      setLoadingProjects(true);
-      try {
-        const result = await api.getProjects();
-        if (!mounted) return;
-        if (!result.success || !Array.isArray(result.data)) {
-          setProjectOptions([]);
-          return;
-        }
-        const byId = new Map();
-        result.data.forEach((project) => {
-          const id = project?.project_id ?? project?.id;
-          if (id == null || id === "") return;
-          byId.set(String(id), project);
-        });
-        setProjectOptions(Array.from(byId.values()));
-      } catch {
-        if (mounted) setProjectOptions([]);
-      } finally {
-        if (mounted) setLoadingProjects(false);
-      }
-    };
-
-    loadProjects();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    setLoadingProjects(true);
+    const byId = new Map();
+    (Array.isArray(projects) ? projects : []).forEach((project) => {
+      const id = project?.project_id ?? project?.id;
+      if (id == null || id === "") return;
+      byId.set(String(id), project);
+    });
+    setProjectOptions(Array.from(byId.values()));
+    setLoadingProjects(false);
+  }, [projects]);
 
   useEffect(() => {
     const currentProjectId = String(form.project_id || "").trim();

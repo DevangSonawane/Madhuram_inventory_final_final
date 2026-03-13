@@ -28,16 +28,85 @@ export default function Projects() {
   const isProjectManager = user?.role === 'operational_manager';
   const canEditDelete = isAdmin || isProjectManager;
 
+  const normalizeAssignedProjectKeys = (value) => {
+    if (Array.isArray(value)) {
+      return value
+        .flatMap((entry) => {
+          if (entry == null) return [];
+          if (typeof entry === 'object') {
+            return [entry.id, entry.project_id, entry.name, entry.project_name];
+          }
+          return [entry];
+        })
+        .map((item) => String(item).trim().toLowerCase())
+        .filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .flatMap((entry) => {
+              if (entry == null) return [];
+              if (typeof entry === 'object') {
+                return [entry.id, entry.project_id, entry.name, entry.project_name];
+              }
+              return [entry];
+            })
+            .map((item) => String(item).trim().toLowerCase())
+            .filter(Boolean);
+        }
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const assignedKeys = new Set(normalizeAssignedProjectKeys(user?.project_list));
+  const visibleProjects = isAdmin
+    ? projects
+    : projects.filter((project) => {
+        const candidates = [
+          project.project_id,
+          project.id,
+          project.project_name,
+          project.name,
+        ]
+          .map((item) => String(item ?? '').trim().toLowerCase())
+          .filter(Boolean);
+        return candidates.some((key) => assignedKeys.has(key));
+      });
+
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [user?.role, user?.project_list]);
 
   const fetchProjects = async () => {
     try {
       setLoading(true);
       const result = await api.getProjects();
       if (result.success) {
-        setProjects(Array.isArray(result.data) ? result.data : []);
+        const rawProjects = Array.isArray(result.data) ? result.data : [];
+        const isPrivilegedRole = isAdmin;
+        const assignedKeys = new Set(normalizeAssignedProjectKeys(user?.project_list));
+
+        const filtered = isPrivilegedRole
+          ? rawProjects
+          : rawProjects.filter((project) => {
+              if (assignedKeys.size === 0) return false;
+              const candidates = [
+                project.project_id,
+                project.id,
+                project.project_name,
+                project.name,
+              ]
+                .map((item) => String(item ?? '').trim().toLowerCase())
+                .filter(Boolean);
+              return candidates.some((key) => assignedKeys.has(key));
+            });
+
+        setProjects(filtered);
       } else {
         toast({
           title: "Error",
@@ -127,7 +196,7 @@ export default function Projects() {
     }
   };
 
-  const filteredProjects = projects.filter(p => 
+  const filteredProjects = visibleProjects.filter(p => 
     (p.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.client_name?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -175,7 +244,7 @@ export default function Projects() {
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{projects.length}</div>
+            <div className="text-2xl font-bold">{visibleProjects.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -185,7 +254,7 @@ export default function Projects() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {new Set(projects.map(p => p.client_name).filter(Boolean)).size}
+              {new Set(visibleProjects.map(p => p.client_name).filter(Boolean)).size}
             </div>
           </CardContent>
         </Card>
@@ -196,7 +265,7 @@ export default function Projects() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {projects.filter(p => p.work_order_file).length}
+              {visibleProjects.filter(p => p.work_order_file).length}
             </div>
           </CardContent>
         </Card>
@@ -207,7 +276,7 @@ export default function Projects() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {projects.filter(p => p.mas_file).length}
+              {visibleProjects.filter(p => p.mas_file).length}
             </div>
           </CardContent>
         </Card>
@@ -229,7 +298,9 @@ export default function Projects() {
         <CardContent>
           {filteredProjects.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No projects found. Create your first project to get started.
+              {isAdmin
+                ? 'No projects found. Create your first project to get started.'
+                : 'No projects assigned yet, please contact admin.'}
             </div>
           ) : (
             <>

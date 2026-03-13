@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProject } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,12 +14,14 @@ import { Building, Calendar, MapPin, Loader2, Plus, Trash2, FileText, Upload, Ch
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { hasPageAccess } from "@/lib/accessControl";
-import { MAX_FILE_SIZE, MAX_COMPRESSION_API_SIZE } from "@/constants/fileLimits";
+import { MAX_FILE_SIZE } from "@/constants/fileLimits";
 import { extractTextFromPdf } from "@/lib/pdfUtils";
 import { extractWorkOrderFields, mapExtractedToProjectForm } from "@/lib/workOrderExtractor";
 
+const MAX_BACKEND_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
+
 export default function ProjectSelection() {
-  const { projects, loading, selectProject, fetchProjects, createProject, deleteProject } = useProject();
+  const { projects, loading, selectProject, createProject, deleteProject } = useProject();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -38,6 +40,7 @@ export default function ProjectSelection() {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [workOrderFile, setWorkOrderFile] = useState(null);
+  const [, setCompressingWorkOrder] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -49,7 +52,6 @@ export default function ProjectSelection() {
     value: '',
     wo_number: ''
   });
-  const [compressingWorkOrder, setCompressingWorkOrder] = useState(false);
   const workOrderInputRef = useRef(null);
 
   const isPdf = (f) => f && (f.type === 'application/pdf' || (f.name || '').toLowerCase().endsWith('.pdf'));
@@ -64,21 +66,16 @@ export default function ProjectSelection() {
     if (file.size > MAX_FILE_SIZE) {
       toast({
         title: 'Large file selected',
-        description: `Selected file is ${(file.size / 1024 / 1024).toFixed(1)} MB. If larger than ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)} MB, it will be compressed automatically when you click Create Project.`,
+        description: `Selected file is ${(file.size / 1024 / 1024).toFixed(1)} MB. Large files may take longer to upload.`,
       });
     }
   };
 
   const canAccessProjectsPage = hasPageAccess(user, '/projects');
 
-  useEffect(() => {
-    if (!canAccessProjectsPage) return;
-    fetchProjects();
-  }, [canAccessProjectsPage, fetchProjects]);
-
   const projectList = Array.isArray(projects) ? projects : [];
   const normalizedRole = String(user?.role || '').toLowerCase();
-  const canViewAllProjects = normalizedRole === 'admin' || normalizedRole === 'operational_manager';
+  const canViewAllProjects = normalizedRole === 'admin';
   const rawProjectList = Array.isArray(user?.project_list)
     ? user.project_list
     : (() => {
@@ -251,7 +248,6 @@ export default function ProjectSelection() {
   const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (compressingWorkOrder) return;
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
 
@@ -311,27 +307,23 @@ export default function ProjectSelection() {
         value: newProject.value,
         wo_number: newProject.wo_number,
         status: newProject.status || 'Planning',
-        work_order_file: workOrderFile || null
+        work_order_file: workOrderFile || null,
+        work_order_file_path: ''
       };
       
-      // If work order file is larger than allowed upload size, compress it before sending
-      if (projectData.work_order_file && projectData.work_order_file.size > MAX_FILE_SIZE) {
+      // Fast path: upload directly unless file exceeds backend hard limit.
+      if (projectData.work_order_file && projectData.work_order_file.size > MAX_BACKEND_UPLOAD_SIZE) {
         const original = projectData.work_order_file;
-
-        if (original.size > MAX_COMPRESSION_API_SIZE) {
-          const msg = `Selected file is ${(original.size / 1024 / 1024).toFixed(1)} MB which exceeds the maximum compression limit of ${(MAX_COMPRESSION_API_SIZE / 1024 / 1024).toFixed(0)} MB. Please compress the file manually and try again.`;
-          toast({ title: 'File too large', description: msg, variant: 'destructive' });
-          setIsCreating(false);
-          return;
-        }
-
         setCompressingWorkOrder(true);
-        toast({ title: 'Compressing', description: 'Compressing work order before creating project…' });
+        toast({
+          title: 'Preparing upload',
+          description: 'File is above 100MB, trying compression...',
+        });
 
         try {
           const compResult = await api.compressFile(original);
-          if (!compResult || !compResult.success || !compResult.data || !compResult.data.url) {
-            throw new Error((compResult && compResult.error) || 'Compression failed to return a downloadable file URL');
+          if (!compResult?.success || !compResult?.data?.url) {
+            throw new Error(compResult?.error || 'Compression failed.');
           }
 
           let fileUrl = api.getApiFileUrl(compResult.data.url);
@@ -340,46 +332,103 @@ export default function ProjectSelection() {
           }
           fileUrl = api.getCompressedFileFetchUrl(fileUrl);
 
-          // Attempt authenticated fetch if we have a stored token
           let response;
-          const token = localStorage.getItem('inventory_user');
-          if (token) {
-            try {
-              const user = JSON.parse(token);
-              response = await fetch(fileUrl, {
-                headers: { Authorization: `Bearer ${user.token}` }
-              });
-            } catch (err) {
-              response = await fetch(fileUrl);
-            }
-          } else {
+          try {
+            const userData = JSON.parse(localStorage.getItem('inventory_user') || '{}');
+            const token = userData?.token;
+            response = token
+              ? await fetch(fileUrl, { headers: { Authorization: `Bearer ${token}` } })
+              : await fetch(fileUrl);
+          } catch {
             response = await fetch(fileUrl);
           }
 
           if (!response.ok) {
-            throw new Error(`Failed to download compressed file: ${response.status} ${response.statusText}`);
+            throw new Error(`Failed to fetch compressed file (${response.status}).`);
           }
 
           const blob = await response.blob();
-          if (!blob || blob.size === 0) throw new Error('Compressed file is empty');
+          if (!blob || blob.size === 0) {
+            throw new Error('Compressed file is empty.');
+          }
 
           const compressedFile = new File([blob], original.name, { type: original.type || blob.type });
           projectData.work_order_file = compressedFile;
+          projectData.work_order_file_path = String(compResult.data.url);
           setWorkOrderFile(compressedFile);
-          toast({ title: 'File compressed', description: 'Work order compressed and attached.' });
+
+          toast({
+            title: 'Compression complete',
+            description: 'Using compressed work order for project creation.',
+          });
         } catch (err) {
-          console.error('Compression before create failed:', err);
-          const msg = err?.message || 'Compression failed before project creation.';
-          toast({ title: 'Compression failed', description: msg, variant: 'destructive' });
-          setCompressingWorkOrder(false);
-          setIsCreating(false);
+          toast({
+            title: 'Compression failed',
+            description: err?.message || 'Could not compress file above 100MB. Please use a smaller file.',
+            variant: 'destructive',
+          });
           return;
         } finally {
           setCompressingWorkOrder(false);
         }
       }
 
-      const result = await createProject(projectData);
+      let result = await createProject(projectData);
+
+      const shouldRetryWithCompressedPath =
+        !result?.success &&
+        !!projectData.work_order_file &&
+        /file size too large|max limit is 100mb/i.test(String(result?.error || ''));
+
+      if (shouldRetryWithCompressedPath) {
+        try {
+          setCompressingWorkOrder(true);
+          toast({
+            title: 'Retrying upload',
+            description: 'Server rejected file size. Trying compressed upload path...',
+          });
+
+          const compResult = await api.compressFile(projectData.work_order_file);
+          if (!compResult?.success || !compResult?.data?.url) {
+            throw new Error(compResult?.error || 'Compression retry failed.');
+          }
+
+          const retryData = {
+            ...projectData,
+            work_order_file: null,
+            work_order_file_path: String(compResult.data.url),
+          };
+          result = await createProject(retryData);
+        } catch (retryError) {
+          result = {
+            success: false,
+            error: retryError?.message || 'Compressed retry failed.',
+          };
+        } finally {
+          setCompressingWorkOrder(false);
+        }
+      }
+
+      const shouldCreateWithoutFile =
+        !result?.success &&
+        !!projectData.work_order_file &&
+        /file size too large|max limit is 100mb|gateway time-out|timeout|failed to fetch/i.test(String(result?.error || ''));
+
+      if (shouldCreateWithoutFile) {
+        const finalRetryData = {
+          ...projectData,
+          work_order_file: null,
+          work_order_file_path: '',
+        };
+        const finalRetryResult = await createProject(finalRetryData);
+        if (finalRetryResult?.success) {
+          result = finalRetryResult;
+          toast({
+            title: 'Project created without file',
+            description: 'Work order upload failed on server. Project is created; attach file later when API is stable.',
+          });
+        }
+      }
       
       if (result.success) {
         toast({
@@ -412,7 +461,7 @@ export default function ProjectSelection() {
       console.error(error);
       toast({
         title: "Error",
-        description: "Failed to create project",
+        description: error?.message || "Failed to create project",
         variant: "destructive"
       });
     } finally {
@@ -584,15 +633,8 @@ export default function ProjectSelection() {
                             accept={ACCEPT_WO}
                             onChange={handleFileChange}
                             className="sr-only"
-                            disabled={compressingWorkOrder}
                           />
-                          {compressingWorkOrder ? (
-                            <div className="flex flex-col items-center gap-2">
-                              <Loader2 className="h-10 w-10 text-primary animate-spin" />
-                              <span className="font-medium">Compressing file…</span>
-                              <span className="text-sm text-muted-foreground">This may take a moment for large files</span>
-                            </div>
-                          ) : workOrderFile ? (
+                          {workOrderFile ? (
                             <div className="flex flex-col items-center gap-2">
                               <FileText className="h-10 w-10 text-primary" />
                               <span className="font-medium">{workOrderFile.name}</span>
@@ -777,9 +819,13 @@ export default function ProjectSelection() {
             </Card>
           ))}
           
-          {projects.length === 0 && (
+          {filteredProjects.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground">No projects found. {isAdmin ? "Create one to get started." : "Please contact an administrator."}</p>
+              <p className="text-muted-foreground">
+                {isAdmin
+                  ? "No projects found. Create one to get started."
+                  : "No projects assigned yet, please contact admin."}
+              </p>
             </div>
           )}
         </div>
