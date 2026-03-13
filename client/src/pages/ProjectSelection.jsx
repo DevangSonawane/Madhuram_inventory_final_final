@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { Building, Calendar, MapPin, Loader2, Plus, Trash2, FileText, Upload, CheckCircle2 } from "lucide-react";
+import { Building, Calendar, MapPin, Loader2, Plus, Trash2, FileText, Upload, CheckCircle2, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { hasPageAccess } from "@/lib/accessControl";
@@ -22,7 +22,7 @@ const MAX_BACKEND_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB
 
 export default function ProjectSelection() {
   const { projects, loading, selectProject, createProject, deleteProject } = useProject();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -473,6 +473,11 @@ export default function ProjectSelection() {
     navigate('/projects/inventory/add');
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
   const handleDeleteProject = async () => {
     if (projectToDelete) {
       try {
@@ -531,6 +536,9 @@ export default function ProjectSelection() {
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                 <Button variant="outline" onClick={handleOpenAddInventoryPage} className="w-full sm:w-auto">
                     + Add inventory
+                </Button>
+                <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto">
+                    <LogOut className="mr-2 h-4 w-4" /> Logout
                 </Button>
                 
                 {/* Only show create project if needed (e.g. Admin or Manager) */}
