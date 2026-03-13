@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,6 +13,9 @@ const MOCK_INVOICES = [
 ];
 
 export default function Billing() {
+  const navigate = useNavigate();
+  const { projectId } = useParams();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -19,7 +23,13 @@ export default function Billing() {
           <h1 className="text-3xl font-bold tracking-tight">Billing & Invoices</h1>
           <p className="text-muted-foreground mt-2">Generate invoices based on MIR (Delivery) or ITR (Installation).</p>
         </div>
-        <Button className="w-full sm:w-auto">
+        <Button
+          className="w-full sm:w-auto"
+          onClick={() => {
+            if (!projectId) return;
+            navigate(`/${projectId}/billing/invoice-editor`);
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" /> Generate Invoice
         </Button>
       </div>

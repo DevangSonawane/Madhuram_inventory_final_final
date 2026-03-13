@@ -37,6 +37,7 @@ import MIRPreview from '@/pages/MIRPreview';
 import ITR from '@/pages/ITR';
 import ITRPreview from '@/pages/ITRPreview';
 import Billing from '@/pages/Billing';
+import BillingInvoiceEditor from '@/pages/BillingInvoiceEditor';
 import Documents from '@/pages/Documents';
 import Users from '@/pages/Users';
 import Profile from '@/pages/Profile';
@@ -116,6 +117,7 @@ function App() {
                   <Route path="itr" element={<ITR />} />
                   <Route path="itr/preview" element={<ITRPreview />} />
                   <Route path="billing" element={<Billing />} />
+                  <Route path="billing/invoice-editor" element={<BillingInvoiceEditor />} />
                   <Route path="documents" element={<Documents />} />
                   <Route path="users" element={<Users />} />
                   <Route path="profile" element={<Profile />} />

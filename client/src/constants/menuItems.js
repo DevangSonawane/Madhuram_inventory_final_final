@@ -119,7 +119,6 @@ export const MENU_CATEGORIES = [
         title: "Billing & Invoices",
         path: "/billing",
         icon: Receipt,
-        hidden: true,
       },
     ]
   },
