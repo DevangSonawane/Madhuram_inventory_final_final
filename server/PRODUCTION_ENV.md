@@ -27,9 +27,14 @@ CORS_ORIGIN=https://your-production-domain.com,https://www.your-production-domai
 # Email Configuration (Optional)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
+SMTP_SECURE=false
 SMTP_USER=your_email@gmail.com
 SMTP_PASS=your_app_password
-SMTP_FROM=noreply@yourdomain.com
+SMTP_FROM_EMAIL=your_email@gmail.com
+SMTP_FROM_NAME=Your Company Name
+SMTP_CC_EMAIL=
+SMTP_BCC_EMAIL=
+SMTP_REJECT_UNAUTHORIZED=true
 
 # File Upload Configuration
 MAX_FILE_SIZE=52428800
@@ -60,4 +65,3 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # Generate refresh secret
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-

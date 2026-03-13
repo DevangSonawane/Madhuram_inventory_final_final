@@ -14,6 +14,7 @@ import sampleRoutes from './routes/sampleRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import vendorRoutes from './routes/vendorRoutes.js';
 import vendorPriceListRoutes from './routes/vendorPriceListRoutes.js';
+import prRoutes from './routes/prRoutes.js';
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use('/api/sample', sampleRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/vendor-price-list', vendorPriceListRoutes);
+app.use('/api/pr', prRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {

@@ -879,6 +879,37 @@ export const api = {
     return handleResponse(response);
   },
 
+  sendPrEmail: async (payload) => {
+    const attachmentFile = payload?.attachmentFile instanceof File ? payload.attachmentFile : null;
+
+    if (attachmentFile) {
+      const formData = new FormData();
+      formData.append('pr', JSON.stringify(payload?.pr || {}));
+      formData.append('vendors', JSON.stringify(payload?.vendors || []));
+      formData.append('attachment', attachmentFile);
+
+      const response = await fetch(`${BASE_URL}/api/pr/email`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+      return handleResponse(response);
+    }
+
+    const response = await fetch(`${BASE_URL}/api/pr/email`, {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        pr: payload?.pr || {},
+        vendors: payload?.vendors || [],
+      }),
+    });
+    return handleResponse(response);
+  },
+
   // PO (Purchase Orders) – Base URL: https://api.festmate.in, Storage: /uploads/po
   uploadPoFile: async (file) => {
     const formData = new FormData();

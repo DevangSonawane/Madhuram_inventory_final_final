@@ -2,15 +2,18 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   CalendarDays,
+  ChevronDown,
   Eye,
   FileSignature,
   FileText,
   Loader2,
+  Mail,
   Pencil,
   Plus,
   RefreshCcw,
   Search,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -19,8 +22,10 @@ import { useProject } from "@/contexts/ProjectContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -520,7 +525,6 @@ export default function PurchaseRequests() {
   const [prs, setPrs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [sampleFilter, setSampleFilter] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -534,6 +538,17 @@ export default function PurchaseRequests() {
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [mirOptions, setMirOptions] = useState([]);
   const [loadingMirs, setLoadingMirs] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailPr, setEmailPr] = useState(null);
+  const [vendorOptions, setVendorOptions] = useState([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+  const [selectedVendorIds, setSelectedVendorIds] = useState([]);
+  const [emailSending, setEmailSending] = useState(false);
+  const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
+  const [vendorSearch, setVendorSearch] = useState("");
+  const [emailAttachment, setEmailAttachment] = useState(null);
+  const [isFileDragActive, setIsFileDragActive] = useState(false);
+  const [emailRemarks, setEmailRemarks] = useState("");
 
   const effectiveProjectId = useMemo(
     () => parseIntegerOrNull(projectId) || parseIntegerOrNull(selectedProject?.project_id || selectedProject?.id),
@@ -846,7 +861,7 @@ export default function PurchaseRequests() {
 
       setFormOpen(false);
       setEditingPrId(null);
-      await loadPrs({ mode: sampleFilter ? "sample" : "auto", sampleId: sampleFilter });
+      await loadPrs();
     } finally {
       setFormSubmitting(false);
     }
@@ -872,28 +887,125 @@ export default function PurchaseRequests() {
       }
 
       toast({ title: "PR deleted", description: "Purchase request removed successfully." });
-      await loadPrs({ mode: sampleFilter ? "sample" : "auto", sampleId: sampleFilter });
+      await loadPrs();
     } finally {
       setDeletingPrId(null);
     }
   };
 
-  const applySampleFilter = async () => {
-    const normalizedSampleId = parseIntegerOrNull(sampleFilter);
-    if (!normalizedSampleId) {
+  const getVendorId = (vendor) => String(vendor?.vendor_id ?? vendor?.id ?? "");
+
+  const openEmailDialog = async (pr) => {
+    const projectScopeId = parseIntegerOrNull(pr?.project_id) || effectiveProjectId;
+    setEmailPr(pr);
+    setEmailDialogOpen(true);
+    setVendorDropdownOpen(false);
+    setVendorSearch("");
+    setVendorOptions([]);
+    setSelectedVendorIds([]);
+    setEmailAttachment(null);
+    setIsFileDragActive(false);
+    setEmailRemarks("");
+
+    try {
+      setLoadingVendors(true);
+      const result = projectScopeId
+        ? await api.getVendorsByProject(projectScopeId)
+        : await api.getVendors();
+
+      if (!result.success || !Array.isArray(result.data)) {
+        toast({
+          title: "Failed to load vendors",
+          description: result.error || "Could not load vendor list.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const withEmail = result.data.filter((vendor) => String(vendor?.vendor_email || "").trim());
+      setVendorOptions(withEmail);
+      setSelectedVendorIds([]);
+    } catch {
       toast({
-        title: "Invalid Sample ID",
-        description: "Enter a valid numeric sample ID to filter.",
+        title: "Failed to load vendors",
+        description: "Could not load vendor list.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingVendors(false);
+    }
+  };
+
+  const toggleVendorSelection = (vendorId, checked) => {
+    if (!vendorId) return;
+    setSelectedVendorIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(vendorId);
+      else next.delete(vendorId);
+      return Array.from(next);
+    });
+  };
+
+  const handleAttachmentSelect = (file) => {
+    if (!(file instanceof File)) return;
+    setEmailAttachment(file);
+  };
+
+  const handleAttachmentDrop = (event) => {
+    event.preventDefault();
+    setIsFileDragActive(false);
+    const file = event.dataTransfer?.files?.[0];
+    if (file) handleAttachmentSelect(file);
+  };
+
+  const handleSendPrEmail = async () => {
+    if (!emailPr) return;
+
+    const selectedVendors = vendorOptions.filter((vendor) => selectedVendorIds.includes(getVendorId(vendor)));
+    if (selectedVendors.length === 0) {
+      toast({
+        title: "Select vendors",
+        description: "Choose at least one vendor with a valid email.",
         variant: "destructive",
       });
       return;
     }
-    await loadPrs({ mode: "sample", sampleId: normalizedSampleId });
-  };
 
-  const clearSampleFilter = async () => {
-    setSampleFilter("");
-    await loadPrs({ mode: "auto" });
+    try {
+      setEmailSending(true);
+      const result = await api.sendPrEmail({
+        pr: emailPr,
+        vendors: selectedVendors.map((vendor) => ({
+          vendor_id: vendor.vendor_id || vendor.id,
+          vendor_name: vendor.vendor_name || vendor.vendor_company_name || "Vendor",
+          vendor_email: vendor.vendor_email,
+        })),
+        attachmentFile: emailAttachment,
+        custom_remarks: String(emailRemarks || "").trim(),
+      });
+
+      if (!result.success) {
+        toast({
+          title: "Email failed",
+          description: result.error || "Could not send PR email.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEmailDialogOpen(false);
+      setEmailPr(null);
+      setVendorOptions([]);
+      setSelectedVendorIds([]);
+      setEmailAttachment(null);
+      setEmailRemarks("");
+      toast({
+        title: "Email sent",
+        description: `PR sent to ${selectedVendors.length} vendor(s).`,
+      });
+    } finally {
+      setEmailSending(false);
+    }
   };
 
   return (
@@ -903,11 +1015,11 @@ export default function PurchaseRequests() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Purchase Requests</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage PR lifecycle with project and sample scoped API endpoints.
+              Manage PR lifecycle with project-scoped API endpoints.
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button variant="outline" onClick={() => loadPrs({ mode: sampleFilter ? "sample" : "auto", sampleId: sampleFilter })}>
+            <Button variant="outline" onClick={() => loadPrs()}>
               <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
             </Button>
             <Button onClick={() => navigate("create")}>
@@ -941,12 +1053,10 @@ export default function PurchaseRequests() {
       <Card>
         <CardHeader>
           <CardTitle>Filters</CardTitle>
-          <CardDescription>
-            Use project-scoped loading by default; optionally fetch using sample endpoint.
-          </CardDescription>
+          <CardDescription>Search and filter purchase requests.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-12">
-          <div className="relative md:col-span-5">
+          <div className="relative md:col-span-9">
             <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-9"
@@ -968,23 +1078,6 @@ export default function PurchaseRequests() {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="md:col-span-2">
-            <Input
-              value={sampleFilter}
-              onChange={(e) => setSampleFilter(e.target.value)}
-              placeholder="Sample ID"
-            />
-          </div>
-
-          <div className="flex gap-2 md:col-span-3">
-            <Button variant="outline" className="flex-1" onClick={applySampleFilter}>
-              Apply Sample
-            </Button>
-            <Button variant="ghost" className="flex-1" onClick={clearSampleFilter}>
-              Reset
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -1077,6 +1170,9 @@ export default function PurchaseRequests() {
                           <Button variant="outline" size="sm" onClick={() => openEditDialog(pr)}>
                             <Pencil className="mr-2 h-4 w-4" /> Edit
                           </Button>
+                          <Button variant="outline" size="sm" onClick={() => openEmailDialog(pr)}>
+                            <Mail className="mr-2 h-4 w-4" /> Email
+                          </Button>
                           <Button
                             variant="destructive"
                             size="sm"
@@ -1120,6 +1216,192 @@ export default function PurchaseRequests() {
       />
 
       <PrViewDialog open={viewOpen} onOpenChange={setViewOpen} pr={selectedPr} />
+
+      <Dialog
+        open={emailDialogOpen}
+        onOpenChange={(open) => {
+          setEmailDialogOpen(open);
+          if (!open) {
+            setEmailPr(null);
+            setVendorOptions([]);
+            setSelectedVendorIds([]);
+            setVendorDropdownOpen(false);
+            setVendorSearch("");
+            setEmailAttachment(null);
+            setIsFileDragActive(false);
+            setEmailRemarks("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Email Purchase Request</DialogTitle>
+            <DialogDescription>
+              Select vendors. The selected PR will be sent to their email addresses.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border p-3 text-sm">
+              <div><span className="font-medium">PR:</span> {emailPr ? formatPrNumber(emailPr) : "-"}</div>
+              <div><span className="font-medium">Project:</span> {emailPr?.project_name || "-"}</div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Attachment (optional)</Label>
+              <label
+                className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center transition-colors ${
+                  isFileDragActive ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30"
+                }`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsFileDragActive(true);
+                }}
+                onDragLeave={() => setIsFileDragActive(false)}
+                onDrop={handleAttachmentDrop}
+              >
+                <input
+                  type="file"
+                  className="hidden"
+                  onClick={(event) => {
+                    event.currentTarget.value = "";
+                  }}
+                  onChange={(event) => handleAttachmentSelect(event.target.files?.[0])}
+                />
+                <Upload className="mb-2 h-5 w-5 text-muted-foreground" />
+                <p className="text-sm font-medium">Drag and drop a file here, or click to upload</p>
+                <p className="text-xs text-muted-foreground">The selected file will be attached when you send the email.</p>
+              </label>
+              {emailAttachment ? (
+                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <span className="truncate">{emailAttachment.name}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setEmailAttachment(null)}>
+                    Remove
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Remarks (optional)</Label>
+              <Textarea
+                value={emailRemarks}
+                onChange={(event) => setEmailRemarks(event.target.value)}
+                placeholder="Add any note for vendors..."
+                rows={3}
+              />
+            </div>
+
+            <Label>Vendors</Label>
+
+            <div className="rounded-lg border p-3">
+              {loadingVendors ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading vendors...
+                </div>
+              ) : vendorOptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No vendors with email found for this project.</p>
+              ) : (
+                <div className="space-y-3">
+                  <Popover open={vendorDropdownOpen} onOpenChange={setVendorDropdownOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        <span className="truncate">
+                          {selectedVendorIds.length > 0
+                            ? `${selectedVendorIds.length} vendor(s) selected`
+                            : "Select Vendors"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[430px] max-w-[90vw] p-3" align="start">
+                      <div className="space-y-3">
+                        <Input
+                          value={vendorSearch}
+                          onChange={(e) => setVendorSearch(e.target.value)}
+                          placeholder="Search vendor name or email..."
+                        />
+                        <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                          {vendorOptions
+                            .filter((vendor) => {
+                              const q = vendorSearch.trim().toLowerCase();
+                              if (!q) return true;
+                              const name = String(vendor.vendor_name || vendor.vendor_company_name || "").toLowerCase();
+                              const email = String(vendor.vendor_email || "").toLowerCase();
+                              return name.includes(q) || email.includes(q);
+                            })
+                            .map((vendor) => {
+                              const vendorId = getVendorId(vendor);
+                              const checked = selectedVendorIds.includes(vendorId);
+                              const label = vendor.vendor_name || vendor.vendor_company_name || "Vendor";
+                              return (
+                                <label
+                                  key={vendorId}
+                                  className="flex cursor-pointer items-start gap-2 rounded-md border p-2 hover:bg-accent/40"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(value) => toggleVendorSelection(vendorId, Boolean(value))}
+                                  />
+                                  <span className="min-w-0 text-sm">
+                                    <span className="block truncate font-medium">{label}</span>
+                                    <span className="block truncate text-xs text-muted-foreground">{vendor.vendor_email}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {selectedVendorIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {vendorOptions
+                        .filter((vendor) => selectedVendorIds.includes(getVendorId(vendor)))
+                        .map((vendor) => {
+                          const vendorId = getVendorId(vendor);
+                          return (
+                            <Badge key={vendorId} variant="secondary" className="gap-1">
+                              {vendor.vendor_name || vendor.vendor_company_name || "Vendor"}
+                              <button
+                                type="button"
+                                className="inline-flex"
+                                onClick={() => toggleVendorSelection(vendorId, false)}
+                                aria-label={`Remove ${vendor.vendor_name || "vendor"}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No vendor selected</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={emailSending}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendPrEmail} disabled={emailSending || loadingVendors || selectedVendorIds.length === 0}>
+              {emailSending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" /> Send Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
