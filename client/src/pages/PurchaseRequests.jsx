@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   CalendarDays,
   ChevronDown,
+  Download,
   Eye,
   FileSignature,
   FileText,
@@ -16,6 +17,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useProject } from "@/contexts/ProjectContext";
@@ -86,6 +89,16 @@ const formatDate = (value) => {
   return date.toLocaleDateString();
 };
 
+const formatDateDmy = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  return `${dd}.${mm}.${yyyy}`;
+};
+
 const formatPrNumber = (pr = {}) => {
   const sourceDate = pr.date || pr.created_at || new Date().toISOString();
   const parsed = new Date(sourceDate);
@@ -97,6 +110,14 @@ const formatPrNumber = (pr = {}) => {
   const project = pr.project_id || pr.projectId || "0";
   return `PR-${datePart}-${sequence}-${project}`;
 };
+
+const blobToDataUrl = (blob) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(blob);
+  });
 
 const normalizePr = (item = {}) => ({
   ...item,
@@ -544,6 +565,7 @@ export default function PurchaseRequests() {
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [selectedVendorIds, setSelectedVendorIds] = useState([]);
   const [emailSending, setEmailSending] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
   const [vendorSearch, setVendorSearch] = useState("");
   const [emailAttachment, setEmailAttachment] = useState(null);
@@ -1008,6 +1030,196 @@ export default function PurchaseRequests() {
     }
   };
 
+  const handleDownloadMaterialRequest = async () => {
+    if (!emailPr) return;
+    try {
+      setPdfDownloading(true);
+      const pr = normalizePr(emailPr);
+      const signatureUrl = pr.signature_file_path ? api.getApiFileUrl(pr.signature_file_path) : "";
+
+      let signatureDataUrl = "";
+      if (signatureUrl) {
+        try {
+          const response = await fetch(signatureUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            signatureDataUrl = await blobToDataUrl(blob);
+          }
+        } catch {
+          signatureDataUrl = "";
+        }
+      }
+
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      doc.setDrawColor(0);
+      doc.setTextColor(0);
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const frameX = margin;
+      const frameY = margin;
+      const frameW = pageWidth - margin * 2;
+      const frameH = pageHeight - margin * 2;
+
+      const titleH = 10;
+      const headerRowH = 8;
+      const headerRows = 5;
+      const headerH = headerRowH * headerRows;
+      const splitW = 130;
+      const splitX = frameX + splitW;
+
+      const renderFrame = () => {
+        doc.setLineWidth(0.5);
+        doc.rect(frameX, frameY, frameW, frameH);
+      };
+
+      const renderTitleAndHeader = () => {
+        renderFrame();
+
+        doc.setLineWidth(0.5);
+        doc.line(frameX, frameY + titleH, frameX + frameW, frameY + titleH);
+
+        doc.setFont("times", "bold");
+        doc.setFontSize(14);
+        doc.text("Material Request", frameX + frameW / 2, frameY + 7, { align: "center" });
+
+        const headerY = frameY + titleH;
+        doc.rect(frameX, headerY, frameW, headerH);
+        doc.line(splitX, headerY, splitX, headerY + headerH);
+        for (let i = 1; i < headerRows; i += 1) {
+          doc.line(frameX, headerY + i * headerRowH, frameX + frameW, headerY + i * headerRowH);
+        }
+
+        const drawLabelValue = (label, value, x, y) => {
+          doc.setFont("times", "bold");
+          doc.setFontSize(10.5);
+          doc.text(label, x, y);
+          const labelW = doc.getTextWidth(label);
+          doc.setFont("times", "normal");
+          doc.text(String(value || "-"), x + labelW + 1, y);
+        };
+
+        const leftX = frameX + 2.5;
+        const rightX = splitX + 2.5;
+        const rowY = (index) => headerY + headerRowH * (index + 0.65);
+
+        drawLabelValue("Project Name :-", pr.project_name || "-", leftX, rowY(0));
+        drawLabelValue("Date :-", formatDateDmy(pr.date), rightX, rowY(0));
+        drawLabelValue("Work Order No.:-", pr.workorder_no || "-", leftX, rowY(1));
+        drawLabelValue("Location :-", pr.location || "-", leftX, rowY(2));
+
+        const mrNo = pr.pr_id || pr.id || pr.mirno || "-";
+        drawLabelValue("MR No. :-", mrNo, leftX, rowY(3));
+        drawLabelValue("Urgency :-", pr.urgency || "-", leftX, rowY(4));
+      };
+
+      renderTitleAndHeader();
+
+      const tableStartY = frameY + titleH + headerH;
+      const items = Array.isArray(pr.items) ? pr.items : [];
+      const minRows = 15;
+      const tableRows = Array.from({ length: Math.max(items.length, minRows) }, (_, idx) => {
+        const item = items[idx] || {};
+        const hasItem = idx < items.length;
+        return [
+          hasItem ? String(idx + 1) : "",
+          String(item.material_description || ""),
+          String(item.unit || ""),
+          item.req_qty == null ? "" : String(item.req_qty),
+          String(item.make || ""),
+          String(item.place_of_utilisation || ""),
+        ];
+      });
+
+      autoTable(doc, {
+        startY: tableStartY,
+        margin: { left: frameX, right: frameX },
+        tableWidth: frameW,
+        theme: "grid",
+        head: [["Sr. No.", "Material Description", "Unit", "Req. Qty.", "Make", "Place of Utilisation"]],
+        body: tableRows,
+        styles: {
+          font: "times",
+          fontSize: 9.5,
+          cellPadding: 1.5,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.2,
+          textColor: [0, 0, 0],
+          valign: "middle",
+        },
+        headStyles: {
+          fontStyle: "bold",
+          fillColor: [255, 255, 255],
+          textColor: [0, 0, 0],
+          lineColor: [0, 0, 0],
+          lineWidth: 0.2,
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: "center" },
+          1: { cellWidth: 85 },
+          2: { cellWidth: 14, halign: "center" },
+          3: { cellWidth: 20, halign: "center" },
+          4: { cellWidth: 25 },
+          5: { cellWidth: 34 },
+        },
+        didDrawPage: (data) => {
+          if (data.pageNumber > 1) {
+            renderFrame();
+          }
+        },
+      });
+
+      const footerH = 20;
+      const footerY = pageHeight - margin - footerH;
+      const lastTableY = doc.lastAutoTable?.finalY || tableStartY;
+      if (lastTableY > footerY - 3) {
+        doc.addPage();
+        renderFrame();
+      }
+
+      const lastPageNumber = doc.getNumberOfPages();
+      doc.setPage(lastPageNumber);
+
+      const colW = frameW / 3;
+      doc.setLineWidth(0.5);
+      doc.line(frameX, footerY, frameX + frameW, footerY);
+      doc.line(frameX + colW, footerY, frameX + colW, frameY + frameH);
+      doc.line(frameX + colW * 2, footerY, frameX + colW * 2, frameY + frameH);
+
+      doc.setFont("times", "bold");
+      doc.setFontSize(10);
+      doc.text("Requested BY :", frameX + colW / 2, footerY + footerH - 4, { align: "center" });
+      doc.text("Checked By :", frameX + colW + colW / 2, footerY + footerH - 4, { align: "center" });
+      doc.text("Approved By :", frameX + colW * 2 + colW / 2, footerY + footerH - 4, { align: "center" });
+
+      if (signatureDataUrl) {
+        const isPng = signatureDataUrl.startsWith("data:image/png");
+        const type = isPng ? "PNG" : "JPEG";
+        const imgW = 34;
+        const imgH = 12;
+        const imgX = frameX + colW * 2 + (colW - imgW) / 2;
+        const imgY = footerY + 3;
+        doc.addImage(signatureDataUrl, type, imgX, imgY, imgW, imgH);
+      } else if (pr.approved_by && pr.approved_by !== "-") {
+        doc.setFont("times", "normal");
+        doc.setFontSize(9);
+        doc.text(String(pr.approved_by), frameX + colW * 2 + colW / 2, footerY + 10, { align: "center" });
+      }
+
+      const filename = `Material-Request-${formatPrNumber(pr)}.pdf`;
+      doc.save(filename);
+    } catch {
+      toast({
+        title: "Download failed",
+        description: "Could not generate the PDF.",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-border bg-gradient-to-r from-emerald-50 via-teal-50 to-white p-6 md:p-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/70">
@@ -1225,6 +1437,7 @@ export default function PurchaseRequests() {
             setEmailPr(null);
             setVendorOptions([]);
             setSelectedVendorIds([]);
+            setPdfDownloading(false);
             setVendorDropdownOpen(false);
             setVendorSearch("");
             setEmailAttachment(null);
@@ -1387,6 +1600,21 @@ export default function PurchaseRequests() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={emailSending}>
               Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadMaterialRequest}
+              disabled={emailSending || pdfDownloading || !emailPr}
+            >
+              {pdfDownloading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Downloading
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" /> Download
+                </>
+              )}
             </Button>
             <Button onClick={handleSendPrEmail} disabled={emailSending || loadingVendors || selectedVendorIds.length === 0}>
               {emailSending ? (
