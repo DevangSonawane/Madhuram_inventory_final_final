@@ -568,7 +568,7 @@ export default function PurchaseRequests() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
   const [vendorSearch, setVendorSearch] = useState("");
-  const [emailAttachment, setEmailAttachment] = useState(null);
+  const [emailAttachments, setEmailAttachments] = useState([]);
   const [isFileDragActive, setIsFileDragActive] = useState(false);
   const [emailRemarks, setEmailRemarks] = useState("");
 
@@ -925,7 +925,7 @@ export default function PurchaseRequests() {
     setVendorSearch("");
     setVendorOptions([]);
     setSelectedVendorIds([]);
-    setEmailAttachment(null);
+    setEmailAttachments([]);
     setIsFileDragActive(false);
     setEmailRemarks("");
 
@@ -969,15 +969,29 @@ export default function PurchaseRequests() {
   };
 
   const handleAttachmentSelect = (file) => {
-    if (!(file instanceof File)) return;
-    setEmailAttachment(file);
+    const normalized = [];
+
+    if (file instanceof File) {
+      normalized.push(file);
+    } else if (file && typeof FileList !== "undefined" && file instanceof FileList) {
+      Array.from(file).forEach((entry) => {
+        if (entry instanceof File) normalized.push(entry);
+      });
+    } else if (Array.isArray(file)) {
+      file.forEach((entry) => {
+        if (entry instanceof File) normalized.push(entry);
+      });
+    }
+
+    if (normalized.length === 0) return;
+    setEmailAttachments(normalized);
   };
 
   const handleAttachmentDrop = (event) => {
     event.preventDefault();
     setIsFileDragActive(false);
-    const file = event.dataTransfer?.files?.[0];
-    if (file) handleAttachmentSelect(file);
+    const files = event.dataTransfer?.files;
+    if (files && files.length > 0) handleAttachmentSelect(files);
   };
 
   const handleSendPrEmail = async () => {
@@ -1002,7 +1016,7 @@ export default function PurchaseRequests() {
           vendor_name: vendor.vendor_name || vendor.vendor_company_name || "Vendor",
           vendor_email: vendor.vendor_email,
         })),
-        attachmentFile: emailAttachment,
+        attachmentFiles: emailAttachments,
         custom_remarks: String(emailRemarks || "").trim(),
       });
 
@@ -1019,7 +1033,7 @@ export default function PurchaseRequests() {
       setEmailPr(null);
       setVendorOptions([]);
       setSelectedVendorIds([]);
-      setEmailAttachment(null);
+      setEmailAttachments([]);
       setEmailRemarks("");
       toast({
         title: "Email sent",
@@ -1440,7 +1454,7 @@ export default function PurchaseRequests() {
             setPdfDownloading(false);
             setVendorDropdownOpen(false);
             setVendorSearch("");
-            setEmailAttachment(null);
+            setEmailAttachments([]);
             setIsFileDragActive(false);
             setEmailRemarks("");
           }
@@ -1475,22 +1489,44 @@ export default function PurchaseRequests() {
               >
                 <input
                   type="file"
+                  multiple
                   className="hidden"
                   onClick={(event) => {
                     event.currentTarget.value = "";
                   }}
-                  onChange={(event) => handleAttachmentSelect(event.target.files?.[0])}
+                  onChange={(event) => handleAttachmentSelect(event.target.files)}
                 />
                 <Upload className="mb-2 h-5 w-5 text-muted-foreground" />
-                <p className="text-sm font-medium">Drag and drop a file here, or click to upload</p>
-                <p className="text-xs text-muted-foreground">The selected file will be attached when you send the email.</p>
+                <p className="text-sm font-medium">Drag and drop files here, or click to upload</p>
+                <p className="text-xs text-muted-foreground">Selected files will be uploaded and attached when you send the email.</p>
               </label>
-              {emailAttachment ? (
-                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                  <span className="truncate">{emailAttachment.name}</span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setEmailAttachment(null)}>
-                    Remove
-                  </Button>
+              {emailAttachments.length > 0 ? (
+                <div className="space-y-2">
+                  {emailAttachments.map((file) => {
+                    const key = `${file.name}-${file.size}-${file.lastModified}`;
+                    return (
+                      <div key={key} className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                        <span className="truncate">{file.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setEmailAttachments((prev) =>
+                              prev.filter((entry) => `${entry.name}-${entry.size}-${entry.lastModified}` !== key)
+                            )
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    );
+                  })}
+                  <div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setEmailAttachments([])}>
+                      Clear All
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>

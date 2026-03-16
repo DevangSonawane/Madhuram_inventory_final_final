@@ -880,12 +880,87 @@ export const api = {
   },
 
   sendPrEmail: async (payload) => {
-    const attachmentFile = payload?.attachmentFile instanceof File ? payload.attachmentFile : null;
+    const pr = payload?.pr || {};
+    const prId = pr?.pr_id ?? pr?.id ?? payload?.pr_id ?? payload?.id ?? null;
+    const vendors = Array.isArray(payload?.vendors) ? payload.vendors : [];
+    const to = typeof payload?.to === 'string' && payload.to.trim()
+      ? payload.to.trim()
+      : vendors
+          .map((vendor) => String(vendor?.vendor_email || '').trim())
+          .filter(Boolean)
+          .join(', ');
+    const cc = Array.isArray(payload?.cc) ? payload.cc.filter(Boolean).map(String) : [];
+    const message = String(payload?.message ?? payload?.custom_remarks ?? '').trim();
 
+    const userFromStorage = (() => {
+      try {
+        return JSON.parse(localStorage.getItem('inventory_user') || 'null');
+      } catch {
+        return null;
+      }
+    })();
+    const user_id = String(userFromStorage?.user_id ?? userFromStorage?.id ?? userFromStorage?.userId ?? '').trim();
+    const user_name = String(userFromStorage?.user_name ?? userFromStorage?.name ?? userFromStorage?.username ?? '').trim();
+
+    const attachmentFiles = [];
+    if (Array.isArray(payload?.attachmentFiles)) {
+      payload.attachmentFiles.forEach((file) => {
+        if (file instanceof File) attachmentFiles.push(file);
+      });
+    }
+    if (payload?.attachmentFile instanceof File) attachmentFiles.push(payload.attachmentFile);
+
+    const sendWithNewEndpoints = async () => {
+      let attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
+
+      if (prId && attachmentFiles.length > 0) {
+        const formData = new FormData();
+        attachmentFiles.forEach((file) => {
+          formData.append('files', file);
+        });
+
+        const uploadResponse = await fetch(`${BASE_URL}/api/pr/${prId}/upload-email-attachment`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData,
+        });
+        const uploadResult = await handleResponse(uploadResponse);
+        if (!uploadResult.success) {
+          return uploadResult;
+        }
+        attachments = Array.isArray(uploadResult.data?.attachments) ? uploadResult.data.attachments : [];
+      }
+
+      const response = await fetch(`${BASE_URL}/api/pr/${prId}/send-email`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to,
+          cc,
+          message,
+          attachments,
+          user_id,
+          user_name,
+        }),
+      });
+      return handleResponse(response);
+    };
+
+    if (prId) {
+      const result = await sendWithNewEndpoints();
+      if (result.success) return result;
+      if (result.status !== 404) return result;
+    }
+
+    const attachmentFile = attachmentFiles[0] instanceof File ? attachmentFiles[0] : null;
     if (attachmentFile) {
       const formData = new FormData();
-      formData.append('pr', JSON.stringify(payload?.pr || {}));
-      formData.append('vendors', JSON.stringify(payload?.vendors || []));
+      formData.append('pr', JSON.stringify(pr));
+      formData.append('vendors', JSON.stringify(vendors));
+      if (message) formData.append('custom_remarks', message);
       formData.append('attachment', attachmentFile);
 
       const response = await fetch(`${BASE_URL}/api/pr/email`, {
@@ -903,8 +978,9 @@ export const api = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        pr: payload?.pr || {},
-        vendors: payload?.vendors || [],
+        pr,
+        vendors,
+        custom_remarks: message,
       }),
     });
     return handleResponse(response);

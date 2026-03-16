@@ -367,6 +367,106 @@ const fetchProjectData = async (projectId) => {
 
 const normalizeToArray = (value) => (Array.isArray(value) ? value : []);
 
+const placeholderMatrix = (label) => [[`Click tab to load ${label}`]];
+
+const sectionKeyForRawSheetName = (rawName) => {
+  const name = String(rawName || "");
+  if (name === "Project" || name.startsWith("Project ")) return "Project";
+  if (name === "PurchaseOrders" || name === "PurchaseOrder_Items") return "PurchaseOrders";
+  if (name === "DeliveryChallans" || name === "DeliveryChallan_Items") return "DeliveryChallans";
+  if (name === "BOQ") return "BOQ";
+  if (name === "MIR" || name === "MIR_Items" || name === "MIR_DynamicFields") return "MIR";
+  if (name === "ITR") return "ITR";
+  if (name === "Samples" || name === "Sample_ItemDescription" || name === "Sample_AddFields") return "Samples";
+  if (name === "Inventory") return "Inventory";
+  if (name === "Vendors" || name === "VendorPriceLists" || name === "VendorPriceListItems") return "Vendors";
+  if (name === "Summary") return "Summary";
+  return null;
+};
+
+const datasetToMatrix = (dataset) => {
+  if (dataset == null) return [["No data"]];
+  if (Array.isArray(dataset)) {
+    const rows = dataset.map((row) => (isPlainObject(row) ? flattenRecord(row) : { value: row }));
+    return rowsToMatrix(rows);
+  }
+  if (isPlainObject(dataset)) return rowsToMatrix([flattenRecord(dataset)]);
+  return rowsToMatrix([{ value: dataset }]);
+};
+
+const buildInitialWorkbookSheets = (project) => {
+  const usedNames = new Set();
+  const rawToSheetName = new Map();
+  const sheets = [];
+
+  const addMatrix = (rawName, matrix) => {
+    const name = sanitizeSheetName(rawName, usedNames);
+    rawToSheetName.set(rawName, name);
+    sheets.push({ rawName, name, matrix });
+    return name;
+  };
+
+  if (project && isPlainObject(project)) {
+    const excluded = new Set(["pr_po_tracking", "samples", "ml_management"]);
+    const flattened = flattenRecord(project, { maxDepth: 2, excludeKeys: excluded });
+    addMatrix("Project", rowsToMatrix([flattened]));
+  } else {
+    addMatrix("Project", rowsToMatrix([project ?? "No project data"]));
+  }
+
+  addMatrix("Project PR_PO_Tracking", datasetToMatrix(normalizeToArray(project?.pr_po_tracking)));
+  addMatrix("Project Samples", datasetToMatrix(normalizeToArray(project?.samples)));
+  addMatrix(
+    "Project ML_Management",
+    datasetToMatrix(project?.ml_management && isPlainObject(project.ml_management) ? project.ml_management : { ml_task: project?.ml_management ?? "" }),
+  );
+
+  [
+    "PurchaseOrders",
+    "PurchaseOrder_Items",
+    "DeliveryChallans",
+    "DeliveryChallan_Items",
+    "BOQ",
+    "MIR",
+    "MIR_Items",
+    "MIR_DynamicFields",
+    "ITR",
+    "Samples",
+    "Sample_ItemDescription",
+    "Sample_AddFields",
+    "Inventory",
+    "Vendors",
+    "VendorPriceLists",
+    "VendorPriceListItems",
+  ].forEach((rawName) => addMatrix(rawName, placeholderMatrix(rawName)));
+
+  const summaryRows = [];
+  if (project?.project_name != null) summaryRows.push({ Metric: "Project Name", Value: project.project_name });
+  if (project?.client_name != null) summaryRows.push({ Metric: "Client", Value: project.client_name });
+  if (project?.location != null) summaryRows.push({ Metric: "Location", Value: project.location });
+  if (project?.wo_number != null) summaryRows.push({ Metric: "WO Number", Value: project.wo_number });
+
+  const purchaseOrdersSheet = rawToSheetName.get("PurchaseOrders");
+  const mirSheet = rawToSheetName.get("MIR");
+  const itrSheet = rawToSheetName.get("ITR");
+
+  if (purchaseOrdersSheet) {
+    summaryRows.push({ Metric: "Total POs", Value: { __formula: countRowsFormula(purchaseOrdersSheet) } });
+    summaryRows.push({ Metric: "First PO Ref", Value: { __formula: firstColumnFormulaRef(purchaseOrdersSheet) } });
+  }
+  if (mirSheet) {
+    summaryRows.push({ Metric: "Total MIR", Value: { __formula: countRowsFormula(mirSheet) } });
+    summaryRows.push({ Metric: "First MIR Ref", Value: { __formula: firstColumnFormulaRef(mirSheet) } });
+  }
+  if (itrSheet) {
+    summaryRows.push({ Metric: "Total ITR", Value: { __formula: countRowsFormula(itrSheet) } });
+  }
+
+  addMatrix("Summary", rowsToMatrix(summaryRows.length ? summaryRows : [{ Metric: "Summary", Value: "No data" }]));
+
+  return { sheets, rawToSheetName };
+};
+
 const fetchProjectWorkbookData = async (projectId) => {
   const baseUrl = (import.meta.env.VITE_API_BASE_URL || "https://api.festmate.in").replace(/\/$/, "");
   const token = getAuthToken();
@@ -550,26 +650,51 @@ const fetchProjectWorkbookData = async (projectId) => {
   return workbook;
 };
 
-export default function ProjectSpreadsheet({ projectId, title = "Spreadsheet" }) {
+export default function ProjectSpreadsheet({
+  projectId,
+  title = "Spreadsheet",
+  workbookTitle,
+  showHeader = true,
+  showDownload = true,
+  wrapperClassName,
+  bodyClassName,
+}) {
   const containerId = React.useId().replace(/:/g, "");
   const luckysheetRef = React.useRef(null);
+  const depsRef = React.useRef({ dollar: null, luckysheet: null, pluginsLoaded: false });
+  const sheetNameToRawRef = React.useRef(new Map());
+  const sheetNameToSectionRef = React.useRef(new Map());
+  const loadedSectionsRef = React.useRef(new Set());
+  const loadingSectionRef = React.useRef(new Set());
+  const recreatingRef = React.useRef(false);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
-  const initLuckysheet = React.useCallback(async (sheets) => {
-    const jq = await import("jquery");
-    const dollar = jq?.default || jq;
-    globalThis.$ = dollar;
-    globalThis.jQuery = dollar;
-    const mw = await import("jquery-mousewheel");
-    const attachMousewheel = mw?.default || mw;
-    if (typeof attachMousewheel === "function") {
-      attachMousewheel(dollar);
+  const initLuckysheet = React.useCallback(async (sheets, hook) => {
+    if (!depsRef.current.dollar) {
+      const jq = await import("jquery");
+      const dollar = jq?.default || jq;
+      depsRef.current.dollar = dollar;
+      globalThis.$ = dollar;
+      globalThis.jQuery = dollar;
+      const mw = await import("jquery-mousewheel");
+      const attachMousewheel = mw?.default || mw;
+      if (typeof attachMousewheel === "function") {
+        attachMousewheel(dollar);
+      }
     }
 
-    const mod = await import("luckysheet");
-    await import("luckysheet/dist/plugins/js/plugin.js");
-    const luckysheet = mod?.default || mod;
+    if (!depsRef.current.luckysheet) {
+      const mod = await import("luckysheet");
+      depsRef.current.luckysheet = mod?.default || mod;
+    }
+
+    if (!depsRef.current.pluginsLoaded) {
+      await import("luckysheet/dist/plugins/js/plugin.js");
+      depsRef.current.pluginsLoaded = true;
+    }
+
+    const luckysheet = depsRef.current.luckysheet;
 
     if (luckysheetRef.current && typeof luckysheetRef.current.destroy === "function") {
       try {
@@ -585,6 +710,7 @@ export default function ProjectSpreadsheet({ projectId, title = "Spreadsheet" })
     luckysheetRef.current = luckysheet;
     luckysheet.create({
       container: containerId,
+      title: workbookTitle ?? title,
       showtoolbar: true,
       showsheetbar: true,
       showinfobar: true,
@@ -593,8 +719,262 @@ export default function ProjectSpreadsheet({ projectId, title = "Spreadsheet" })
       enableAddBackTop: false,
       allowEdit: true,
       data: sheets,
+      hook,
     });
-  }, [containerId]);
+  }, [containerId, title, workbookTitle]);
+
+  const fetchWorkbookSectionMatrices = React.useCallback(
+    async (sectionKey) => {
+      const baseUrl = (import.meta.env.VITE_API_BASE_URL || "https://api.festmate.in").replace(/\/$/, "");
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const fetchJson = async (url) => {
+        const res = await fetch(url, { headers });
+        const contentType = res.headers.get("content-type") || "";
+        const body = contentType.includes("application/json") ? await res.json() : await res.text();
+        if (!res.ok) {
+          const error = body?.error || body?.message || res.statusText || "Request failed";
+          throw new Error(error);
+        }
+        if (body && typeof body === "object" && "data" in body && "success" in body) {
+          if (!body.success) throw new Error(body.error || "Request failed");
+          return body.data;
+        }
+        return body;
+      };
+
+      if (sectionKey === "PurchaseOrders") {
+        const pos = normalizeToArray(await fetchJson(`${baseUrl}/api/po/project/${projectId}`));
+        const poRows = pos.map((po) => {
+          if (!isPlainObject(po)) return po;
+          const { items, ...rest } = po;
+          return flattenRecord(rest, { maxDepth: 2 });
+        });
+        const itemRows = pos.flatMap((po) => {
+          if (!isPlainObject(po)) return [];
+          const poId = po.po_id ?? null;
+          const projectIdValue = po.project_id ?? null;
+          const items = normalizeToArray(po.items);
+          return items.map((item, idx) => {
+            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
+            return { po_id: poId, project_id: projectIdValue, item_index: idx + 1, ...row };
+          });
+        });
+        return new Map([
+          ["PurchaseOrders", datasetToMatrix(poRows)],
+          ["PurchaseOrder_Items", datasetToMatrix(itemRows)],
+        ]);
+      }
+
+      if (sectionKey === "DeliveryChallans") {
+        const dcs = normalizeToArray(await fetchJson(`${baseUrl}/api/dc/project/${projectId}`));
+        const dcRows = dcs.map((dc) => {
+          if (!isPlainObject(dc)) return dc;
+          const { items, ...rest } = dc;
+          return flattenRecord(rest, { maxDepth: 2 });
+        });
+        const itemRows = dcs.flatMap((dc) => {
+          if (!isPlainObject(dc)) return [];
+          const dcId = dc.dc_id ?? null;
+          const projectIdValue = dc.project_id ?? null;
+          const poId = dc.po_id ?? null;
+          const items = normalizeToArray(dc.items);
+          return items.map((item, idx) => {
+            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
+            return { dc_id: dcId, project_id: projectIdValue, po_id: poId, item_index: idx + 1, ...row };
+          });
+        });
+        return new Map([
+          ["DeliveryChallans", datasetToMatrix(dcRows)],
+          ["DeliveryChallan_Items", datasetToMatrix(itemRows)],
+        ]);
+      }
+
+      if (sectionKey === "BOQ") {
+        const boq = await fetchJson(`${baseUrl}/api/boq/project/${projectId}`);
+        return new Map([["BOQ", datasetToMatrix(boq)]]);
+      }
+
+      if (sectionKey === "MIR") {
+        const mirs = normalizeToArray(await fetchJson(`${baseUrl}/api/mir/project/${projectId}`));
+        const mirRows = mirs.map((mir) => {
+          if (!isPlainObject(mir)) return mir;
+          const { items, dynamic_field, ...rest } = mir;
+          return flattenRecord(rest, { maxDepth: 2 });
+        });
+        const itemRows = mirs.flatMap((mir) => {
+          if (!isPlainObject(mir)) return [];
+          const mirId = mir.mir_id ?? null;
+          const projectIdValue = mir.project_id ?? null;
+          const poId = mir.po_id ?? null;
+          const items = normalizeToArray(mir.items);
+          return items.map((item, idx) => {
+            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
+            return { mir_id: mirId, project_id: projectIdValue, po_id: poId, item_index: idx + 1, ...row };
+          });
+        });
+        const fieldRows = mirs.flatMap((mir) => {
+          if (!isPlainObject(mir)) return [];
+          const mirId = mir.mir_id ?? null;
+          const projectIdValue = mir.project_id ?? null;
+          const fields = normalizeToArray(mir.dynamic_field);
+          return fields.map((f, idx) => {
+            const row = isPlainObject(f) ? flattenRecord(f, { maxDepth: 2 }) : { value: f };
+            return { mir_id: mirId, project_id: projectIdValue, field_index: idx + 1, ...row };
+          });
+        });
+        return new Map([
+          ["MIR", datasetToMatrix(mirRows)],
+          ["MIR_Items", datasetToMatrix(itemRows)],
+          ["MIR_DynamicFields", datasetToMatrix(fieldRows)],
+        ]);
+      }
+
+      if (sectionKey === "ITR") {
+        const itrs = await fetchJson(`${baseUrl}/api/itr/project/${projectId}`);
+        return new Map([["ITR", datasetToMatrix(itrs)]]);
+      }
+
+      if (sectionKey === "Samples") {
+        const samples = normalizeToArray(await fetchJson(`${baseUrl}/api/sample/project/${projectId}`));
+        const sampleRows = samples.map((s) => {
+          if (!isPlainObject(s)) return s;
+          const { item_description, add_fields, ...rest } = s;
+          return flattenRecord(rest, { maxDepth: 2 });
+        });
+        const itemRows = samples.flatMap((s) => {
+          if (!isPlainObject(s)) return [];
+          const sampleId = s.sample_id ?? null;
+          const projectIdValue = s.project_id ?? null;
+          const items = normalizeToArray(s.item_description);
+          return items.map((item, idx) => {
+            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
+            return { sample_id: sampleId, project_id: projectIdValue, item_index: idx + 1, ...row };
+          });
+        });
+        const fieldRows = samples.flatMap((s) => {
+          if (!isPlainObject(s)) return [];
+          const sampleId = s.sample_id ?? null;
+          const projectIdValue = s.project_id ?? null;
+          const items = normalizeToArray(s.add_fields);
+          return items.map((item, idx) => {
+            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
+            return { sample_id: sampleId, project_id: projectIdValue, field_index: idx + 1, ...row };
+          });
+        });
+        return new Map([
+          ["Samples", datasetToMatrix(sampleRows)],
+          ["Sample_ItemDescription", datasetToMatrix(itemRows)],
+          ["Sample_AddFields", datasetToMatrix(fieldRows)],
+        ]);
+      }
+
+      if (sectionKey === "Inventory") {
+        const inventory = await fetchJson(`${baseUrl}/api/inventory/project/${projectId}`);
+        return new Map([["Inventory", datasetToMatrix(inventory)]]);
+      }
+
+      if (sectionKey === "Vendors") {
+        const vendors = normalizeToArray(await fetchJson(`${baseUrl}/api/vendors/project/${projectId}`));
+        const priceListIds = vendors.flatMap((v) => (isPlainObject(v) ? normalizeToArray(v.price_list_ids) : [])).filter((id) => id != null);
+        const uniquePriceListIds = Array.from(new Set(priceListIds.map((id) => String(id)))).slice(0, 50);
+        const priceListDetails = await Promise.allSettled(uniquePriceListIds.map((id) => fetchJson(`${baseUrl}/api/vendor-price-list/${id}`)));
+
+        const vendorIdByPriceListId = new Map();
+        vendors.forEach((v) => {
+          if (!isPlainObject(v)) return;
+          normalizeToArray(v.price_list_ids).forEach((id) => {
+            if (id == null) return;
+            vendorIdByPriceListId.set(String(id), v.vendor_id ?? null);
+          });
+        });
+
+        const priceLists = [];
+        const priceListItems = [];
+        priceListDetails.forEach((r, idx) => {
+          const priceListId = uniquePriceListIds[idx];
+          if (r.status !== "fulfilled") {
+            priceLists.push({ price_list_id: priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? null, error: r.reason?.message || "Failed to fetch price list" });
+            return;
+          }
+          const row = r.value;
+          if (!isPlainObject(row)) {
+            priceLists.push({ price_list_id: priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? null, value: row });
+            return;
+          }
+          const { items, ...rest } = row;
+          priceLists.push({ vendor_id: vendorIdByPriceListId.get(priceListId) ?? row.vendor_id ?? null, ...flattenRecord(rest, { maxDepth: 2 }) });
+          normalizeToArray(items).forEach((item, itemIdx) => {
+            const flatItem = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
+            priceListItems.push({ price_list_id: row.price_list_id ?? priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? row.vendor_id ?? null, item_index: itemIdx + 1, ...flatItem });
+          });
+        });
+
+        return new Map([
+          ["Vendors", datasetToMatrix(vendors)],
+          ["VendorPriceLists", datasetToMatrix(priceLists)],
+          ["VendorPriceListItems", datasetToMatrix(priceListItems)],
+        ]);
+      }
+
+      return new Map();
+    },
+    [projectId],
+  );
+
+  const handleSheetActivate = React.useCallback(
+    async (sheetIndex) => {
+      if (recreatingRef.current) return;
+      const luckysheet = luckysheetRef.current;
+      if (!luckysheet || typeof luckysheet.getAllSheets !== "function") return;
+
+      const sheets = luckysheet.getAllSheets() || [];
+      const sheet = sheets[sheetIndex];
+      const sheetName = sheet?.name;
+      if (!sheetName) return;
+
+      const rawName = sheetNameToRawRef.current.get(sheetName) ?? null;
+      const sectionKey = sheetNameToSectionRef.current.get(sheetName) ?? sectionKeyForRawSheetName(rawName);
+      if (!sectionKey || sectionKey === "Project" || sectionKey === "Summary") return;
+      if (loadedSectionsRef.current.has(sectionKey) || loadingSectionRef.current.has(sectionKey)) return;
+
+      loadingSectionRef.current.add(sectionKey);
+      setLoading(true);
+      setError("");
+      try {
+        const matrices = await fetchWorkbookSectionMatrices(sectionKey);
+
+        const updatedSheets = sheets.map((s, idx) => {
+          const next = { ...s, status: idx === sheetIndex ? 1 : 0 };
+          const raw = sheetNameToRawRef.current.get(s?.name);
+          if (!raw || !matrices.has(raw)) return next;
+          const matrix = matrices.get(raw);
+          const rebuilt = matrixToLuckySheet(next.name, matrix, Number(next.order ?? idx));
+          return { ...next, row: rebuilt.row, column: rebuilt.column, celldata: rebuilt.celldata, data: [] };
+        });
+
+        recreatingRef.current = true;
+        try {
+          await initLuckysheet(updatedSheets, {
+            sheetActivateAfter: (i) => {
+              handleSheetActivate(i);
+            },
+          });
+        } finally {
+          recreatingRef.current = false;
+        }
+
+        loadedSectionsRef.current.add(sectionKey);
+      } catch (e) {
+        setError(e?.message || "Failed to load sheet data");
+      } finally {
+        loadingSectionRef.current.delete(sectionKey);
+        setLoading(false);
+      }
+    },
+    [fetchWorkbookSectionMatrices, initLuckysheet],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -603,11 +983,32 @@ export default function ProjectSpreadsheet({ projectId, title = "Spreadsheet" })
       setLoading(true);
       setError("");
       try {
-        const workbookData = await fetchProjectWorkbookData(projectId);
-        const sheetMatrices = buildWorkbookSheetMatrices(workbookData);
-        const luckySheets = sheetMatrices.map((s, i) => matrixToLuckySheet(s.name, s.matrix, i));
+        loadedSectionsRef.current = new Set();
+        loadingSectionRef.current = new Set();
+        sheetNameToRawRef.current = new Map();
+        sheetNameToSectionRef.current = new Map();
+
+        const project = await fetchProjectData(projectId);
+        const { sheets, rawToSheetName } = buildInitialWorkbookSheets(project);
+
+        sheets.forEach((s) => {
+          sheetNameToRawRef.current.set(s.name, s.rawName);
+          sheetNameToSectionRef.current.set(s.name, sectionKeyForRawSheetName(s.rawName));
+        });
+
+        rawToSheetName.forEach((sheetName, rawName) => {
+          sheetNameToRawRef.current.set(sheetName, rawName);
+          sheetNameToSectionRef.current.set(sheetName, sectionKeyForRawSheetName(rawName));
+        });
+
+        const luckySheets = sheets.map((s, i) => matrixToLuckySheet(s.name, s.matrix, i));
         if (!cancelled) {
-          await initLuckysheet(luckySheets);
+          await initLuckysheet(luckySheets, {
+            sheetActivateAfter: (i) => {
+              handleSheetActivate(i);
+            },
+          });
+          loadedSectionsRef.current.add("Project");
         }
       } catch (e) {
         if (!cancelled) {
@@ -629,7 +1030,7 @@ export default function ProjectSpreadsheet({ projectId, title = "Spreadsheet" })
         }
       }
     };
-  }, [projectId, initLuckysheet]);
+  }, [projectId, initLuckysheet, handleSheetActivate]);
 
   const downloadExcel = React.useCallback(() => {
     const luckysheet = luckysheetRef.current;
@@ -652,23 +1053,31 @@ export default function ProjectSpreadsheet({ projectId, title = "Spreadsheet" })
     XLSX.writeFile(workbook, filename, { compression: true });
   }, [projectId]);
 
+  const body = error ? (
+    <div className="p-6 text-sm text-destructive">{error}</div>
+  ) : (
+    <div className={bodyClassName ?? "relative h-[calc(100vh-12rem)] w-full"}>
+      {loading && <div className="absolute inset-0 z-10 bg-background/70 backdrop-blur-sm" />}
+      <div id={containerId} className="h-full w-full" />
+    </div>
+  );
+
+  if (!showHeader) {
+    return <div className={wrapperClassName ?? "h-full w-full"}>{body}</div>;
+  }
+
   return (
-    <Card className="h-[calc(100vh-8rem)]">
+    <Card className={wrapperClassName ?? "h-[calc(100vh-8rem)]"}>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg">{title}</CardTitle>
-        <Button onClick={downloadExcel} disabled={loading || Boolean(error)}>
-          Download Excel
-        </Button>
+        {showDownload && (
+          <Button onClick={downloadExcel} disabled={loading || Boolean(error)}>
+            Download Excel
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="p-0">
-        {error ? (
-          <div className="p-6 text-sm text-destructive">{error}</div>
-        ) : (
-          <div className="relative h-[calc(100vh-12rem)] w-full">
-            {loading && <div className="absolute inset-0 z-10 bg-background/70 backdrop-blur-sm" />}
-            <div id={containerId} className="h-full w-full" />
-          </div>
-        )}
+        {body}
       </CardContent>
     </Card>
   );
