@@ -127,35 +127,15 @@ const buildWorkbookSheetMatrices = (workbookData) => {
     return name;
   };
 
-  const project = workbookData?.Project && isPlainObject(workbookData.Project) ? workbookData.Project : null;
-  if (project) {
-    const excluded = new Set(["pr_po_tracking", "samples", "ml_management"]);
-    const flattened = flattenRecord(project, { maxDepth: 2, excludeKeys: excluded });
-    addSheet("Project", [flattened]);
-  } else {
-    addSheet("Project", [workbookData?.Project ?? "No project data"]);
-  }
-
   const moduleOrder = [
-    ["Project PR_PO_Tracking", workbookData?.Project_PR_PO_Tracking],
-    ["Project Samples", workbookData?.Project_Samples],
-    ["Project ML_Management", workbookData?.Project_ML_Management],
     ["PurchaseOrders", workbookData?.PurchaseOrders],
-    ["PurchaseOrder_Items", workbookData?.PurchaseOrder_Items],
     ["DeliveryChallans", workbookData?.DeliveryChallans],
-    ["DeliveryChallan_Items", workbookData?.DeliveryChallan_Items],
     ["BOQ", workbookData?.BOQ],
     ["MIR", workbookData?.MIR],
-    ["MIR_Items", workbookData?.MIR_Items],
-    ["MIR_DynamicFields", workbookData?.MIR_DynamicFields],
     ["ITR", workbookData?.ITR],
     ["Samples", workbookData?.Samples],
-    ["Sample_ItemDescription", workbookData?.Sample_ItemDescription],
-    ["Sample_AddFields", workbookData?.Sample_AddFields],
     ["Inventory", workbookData?.Inventory],
     ["Vendors", workbookData?.Vendors],
-    ["VendorPriceLists", workbookData?.VendorPriceLists],
-    ["VendorPriceListItems", workbookData?.VendorPriceListItems],
   ];
 
   moduleOrder.forEach(([name, dataset]) => {
@@ -171,34 +151,6 @@ const buildWorkbookSheetMatrices = (workbookData) => {
     }
     addSheet(name, [{ value: dataset }]);
   });
-
-  const summaryRows = [];
-  if (project?.project_name != null) summaryRows.push({ Metric: "Project Name", Value: project.project_name });
-  if (project?.client_name != null) summaryRows.push({ Metric: "Client", Value: project.client_name });
-  if (project?.location != null) summaryRows.push({ Metric: "Location", Value: project.location });
-  if (project?.wo_number != null) summaryRows.push({ Metric: "WO Number", Value: project.wo_number });
-
-  const purchaseOrdersSheet = Array.from(matrices.keys()).find((k) => k.toLowerCase() === "purchaseorders");
-  const mirSheet = Array.from(matrices.keys()).find((k) => k.toLowerCase() === "mir");
-  const itrSheet = Array.from(matrices.keys()).find((k) => k.toLowerCase() === "itr");
-
-  if (purchaseOrdersSheet) {
-    summaryRows.push({ Metric: "Total POs", Value: { __formula: countRowsFormula(purchaseOrdersSheet) } });
-    summaryRows.push({ Metric: "First PO Ref", Value: { __formula: firstColumnFormulaRef(purchaseOrdersSheet) } });
-  }
-  if (mirSheet) {
-    summaryRows.push({ Metric: "Total MIR", Value: { __formula: countRowsFormula(mirSheet) } });
-    summaryRows.push({ Metric: "First MIR Ref", Value: { __formula: firstColumnFormulaRef(mirSheet) } });
-  }
-  if (itrSheet) {
-    summaryRows.push({ Metric: "Total ITR", Value: { __formula: countRowsFormula(itrSheet) } });
-  }
-
-  if (summaryRows.length > 0) {
-    const summaryMatrix = rowsToMatrix(summaryRows.map((r) => ({ Metric: r.Metric, Value: r.Value })));
-    const summaryName = sanitizeSheetName("Summary", usedNames);
-    matrices.set(summaryName, summaryMatrix);
-  }
 
   return Array.from(matrices.entries()).map(([name, matrix]) => ({ name, matrix }));
 };
@@ -351,7 +303,7 @@ const fetchProjectData = async (projectId) => {
     return body;
   };
 
-  const urls = [`${baseUrl}/api/project/${projectId}`, `${baseUrl}/api/projects/${projectId}`];
+  const urls = [`${baseUrl}/api/projects/${projectId}`];
   for (const url of urls) {
     try {
       return await tryFetch(url);
@@ -371,16 +323,14 @@ const placeholderMatrix = (label) => [[`Click tab to load ${label}`]];
 
 const sectionKeyForRawSheetName = (rawName) => {
   const name = String(rawName || "");
-  if (name === "Project" || name.startsWith("Project ")) return "Project";
-  if (name === "PurchaseOrders" || name === "PurchaseOrder_Items") return "PurchaseOrders";
-  if (name === "DeliveryChallans" || name === "DeliveryChallan_Items") return "DeliveryChallans";
+  if (name === "PurchaseOrders") return "PurchaseOrders";
+  if (name === "DeliveryChallans") return "DeliveryChallans";
   if (name === "BOQ") return "BOQ";
-  if (name === "MIR" || name === "MIR_Items" || name === "MIR_DynamicFields") return "MIR";
+  if (name === "MIR") return "MIR";
   if (name === "ITR") return "ITR";
-  if (name === "Samples" || name === "Sample_ItemDescription" || name === "Sample_AddFields") return "Samples";
+  if (name === "Samples") return "Samples";
   if (name === "Inventory") return "Inventory";
-  if (name === "Vendors" || name === "VendorPriceLists" || name === "VendorPriceListItems") return "Vendors";
-  if (name === "Summary") return "Summary";
+  if (name === "Vendors") return "Vendors";
   return null;
 };
 
@@ -394,7 +344,7 @@ const datasetToMatrix = (dataset) => {
   return rowsToMatrix([{ value: dataset }]);
 };
 
-const buildInitialWorkbookSheets = (project) => {
+const buildInitialWorkbookSheets = (_project) => {
   const usedNames = new Set();
   const rawToSheetName = new Map();
   const sheets = [];
@@ -406,63 +356,9 @@ const buildInitialWorkbookSheets = (project) => {
     return name;
   };
 
-  if (project && isPlainObject(project)) {
-    const excluded = new Set(["pr_po_tracking", "samples", "ml_management"]);
-    const flattened = flattenRecord(project, { maxDepth: 2, excludeKeys: excluded });
-    addMatrix("Project", rowsToMatrix([flattened]));
-  } else {
-    addMatrix("Project", rowsToMatrix([project ?? "No project data"]));
-  }
-
-  addMatrix("Project PR_PO_Tracking", datasetToMatrix(normalizeToArray(project?.pr_po_tracking)));
-  addMatrix("Project Samples", datasetToMatrix(normalizeToArray(project?.samples)));
-  addMatrix(
-    "Project ML_Management",
-    datasetToMatrix(project?.ml_management && isPlainObject(project.ml_management) ? project.ml_management : { ml_task: project?.ml_management ?? "" }),
+  ["PurchaseOrders", "DeliveryChallans", "BOQ", "MIR", "ITR", "Samples", "Inventory", "Vendors"].forEach((rawName) =>
+    addMatrix(rawName, placeholderMatrix(rawName)),
   );
-
-  [
-    "PurchaseOrders",
-    "PurchaseOrder_Items",
-    "DeliveryChallans",
-    "DeliveryChallan_Items",
-    "BOQ",
-    "MIR",
-    "MIR_Items",
-    "MIR_DynamicFields",
-    "ITR",
-    "Samples",
-    "Sample_ItemDescription",
-    "Sample_AddFields",
-    "Inventory",
-    "Vendors",
-    "VendorPriceLists",
-    "VendorPriceListItems",
-  ].forEach((rawName) => addMatrix(rawName, placeholderMatrix(rawName)));
-
-  const summaryRows = [];
-  if (project?.project_name != null) summaryRows.push({ Metric: "Project Name", Value: project.project_name });
-  if (project?.client_name != null) summaryRows.push({ Metric: "Client", Value: project.client_name });
-  if (project?.location != null) summaryRows.push({ Metric: "Location", Value: project.location });
-  if (project?.wo_number != null) summaryRows.push({ Metric: "WO Number", Value: project.wo_number });
-
-  const purchaseOrdersSheet = rawToSheetName.get("PurchaseOrders");
-  const mirSheet = rawToSheetName.get("MIR");
-  const itrSheet = rawToSheetName.get("ITR");
-
-  if (purchaseOrdersSheet) {
-    summaryRows.push({ Metric: "Total POs", Value: { __formula: countRowsFormula(purchaseOrdersSheet) } });
-    summaryRows.push({ Metric: "First PO Ref", Value: { __formula: firstColumnFormulaRef(purchaseOrdersSheet) } });
-  }
-  if (mirSheet) {
-    summaryRows.push({ Metric: "Total MIR", Value: { __formula: countRowsFormula(mirSheet) } });
-    summaryRows.push({ Metric: "First MIR Ref", Value: { __formula: firstColumnFormulaRef(mirSheet) } });
-  }
-  if (itrSheet) {
-    summaryRows.push({ Metric: "Total ITR", Value: { __formula: countRowsFormula(itrSheet) } });
-  }
-
-  addMatrix("Summary", rowsToMatrix(summaryRows.length ? summaryRows : [{ Metric: "Summary", Value: "No data" }]));
 
   return { sheets, rawToSheetName };
 };
@@ -751,20 +647,7 @@ export default function ProjectSpreadsheet({
           const { items, ...rest } = po;
           return flattenRecord(rest, { maxDepth: 2 });
         });
-        const itemRows = pos.flatMap((po) => {
-          if (!isPlainObject(po)) return [];
-          const poId = po.po_id ?? null;
-          const projectIdValue = po.project_id ?? null;
-          const items = normalizeToArray(po.items);
-          return items.map((item, idx) => {
-            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-            return { po_id: poId, project_id: projectIdValue, item_index: idx + 1, ...row };
-          });
-        });
-        return new Map([
-          ["PurchaseOrders", datasetToMatrix(poRows)],
-          ["PurchaseOrder_Items", datasetToMatrix(itemRows)],
-        ]);
+        return new Map([["PurchaseOrders", datasetToMatrix(poRows)]]);
       }
 
       if (sectionKey === "DeliveryChallans") {
@@ -774,21 +657,7 @@ export default function ProjectSpreadsheet({
           const { items, ...rest } = dc;
           return flattenRecord(rest, { maxDepth: 2 });
         });
-        const itemRows = dcs.flatMap((dc) => {
-          if (!isPlainObject(dc)) return [];
-          const dcId = dc.dc_id ?? null;
-          const projectIdValue = dc.project_id ?? null;
-          const poId = dc.po_id ?? null;
-          const items = normalizeToArray(dc.items);
-          return items.map((item, idx) => {
-            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-            return { dc_id: dcId, project_id: projectIdValue, po_id: poId, item_index: idx + 1, ...row };
-          });
-        });
-        return new Map([
-          ["DeliveryChallans", datasetToMatrix(dcRows)],
-          ["DeliveryChallan_Items", datasetToMatrix(itemRows)],
-        ]);
+        return new Map([["DeliveryChallans", datasetToMatrix(dcRows)]]);
       }
 
       if (sectionKey === "BOQ") {
@@ -803,32 +672,7 @@ export default function ProjectSpreadsheet({
           const { items, dynamic_field, ...rest } = mir;
           return flattenRecord(rest, { maxDepth: 2 });
         });
-        const itemRows = mirs.flatMap((mir) => {
-          if (!isPlainObject(mir)) return [];
-          const mirId = mir.mir_id ?? null;
-          const projectIdValue = mir.project_id ?? null;
-          const poId = mir.po_id ?? null;
-          const items = normalizeToArray(mir.items);
-          return items.map((item, idx) => {
-            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-            return { mir_id: mirId, project_id: projectIdValue, po_id: poId, item_index: idx + 1, ...row };
-          });
-        });
-        const fieldRows = mirs.flatMap((mir) => {
-          if (!isPlainObject(mir)) return [];
-          const mirId = mir.mir_id ?? null;
-          const projectIdValue = mir.project_id ?? null;
-          const fields = normalizeToArray(mir.dynamic_field);
-          return fields.map((f, idx) => {
-            const row = isPlainObject(f) ? flattenRecord(f, { maxDepth: 2 }) : { value: f };
-            return { mir_id: mirId, project_id: projectIdValue, field_index: idx + 1, ...row };
-          });
-        });
-        return new Map([
-          ["MIR", datasetToMatrix(mirRows)],
-          ["MIR_Items", datasetToMatrix(itemRows)],
-          ["MIR_DynamicFields", datasetToMatrix(fieldRows)],
-        ]);
+        return new Map([["MIR", datasetToMatrix(mirRows)]]);
       }
 
       if (sectionKey === "ITR") {
@@ -843,31 +687,7 @@ export default function ProjectSpreadsheet({
           const { item_description, add_fields, ...rest } = s;
           return flattenRecord(rest, { maxDepth: 2 });
         });
-        const itemRows = samples.flatMap((s) => {
-          if (!isPlainObject(s)) return [];
-          const sampleId = s.sample_id ?? null;
-          const projectIdValue = s.project_id ?? null;
-          const items = normalizeToArray(s.item_description);
-          return items.map((item, idx) => {
-            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-            return { sample_id: sampleId, project_id: projectIdValue, item_index: idx + 1, ...row };
-          });
-        });
-        const fieldRows = samples.flatMap((s) => {
-          if (!isPlainObject(s)) return [];
-          const sampleId = s.sample_id ?? null;
-          const projectIdValue = s.project_id ?? null;
-          const items = normalizeToArray(s.add_fields);
-          return items.map((item, idx) => {
-            const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-            return { sample_id: sampleId, project_id: projectIdValue, field_index: idx + 1, ...row };
-          });
-        });
-        return new Map([
-          ["Samples", datasetToMatrix(sampleRows)],
-          ["Sample_ItemDescription", datasetToMatrix(itemRows)],
-          ["Sample_AddFields", datasetToMatrix(fieldRows)],
-        ]);
+        return new Map([["Samples", datasetToMatrix(sampleRows)]]);
       }
 
       if (sectionKey === "Inventory") {
@@ -877,45 +697,7 @@ export default function ProjectSpreadsheet({
 
       if (sectionKey === "Vendors") {
         const vendors = normalizeToArray(await fetchJson(`${baseUrl}/api/vendors/project/${projectId}`));
-        const priceListIds = vendors.flatMap((v) => (isPlainObject(v) ? normalizeToArray(v.price_list_ids) : [])).filter((id) => id != null);
-        const uniquePriceListIds = Array.from(new Set(priceListIds.map((id) => String(id)))).slice(0, 50);
-        const priceListDetails = await Promise.allSettled(uniquePriceListIds.map((id) => fetchJson(`${baseUrl}/api/vendor-price-list/${id}`)));
-
-        const vendorIdByPriceListId = new Map();
-        vendors.forEach((v) => {
-          if (!isPlainObject(v)) return;
-          normalizeToArray(v.price_list_ids).forEach((id) => {
-            if (id == null) return;
-            vendorIdByPriceListId.set(String(id), v.vendor_id ?? null);
-          });
-        });
-
-        const priceLists = [];
-        const priceListItems = [];
-        priceListDetails.forEach((r, idx) => {
-          const priceListId = uniquePriceListIds[idx];
-          if (r.status !== "fulfilled") {
-            priceLists.push({ price_list_id: priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? null, error: r.reason?.message || "Failed to fetch price list" });
-            return;
-          }
-          const row = r.value;
-          if (!isPlainObject(row)) {
-            priceLists.push({ price_list_id: priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? null, value: row });
-            return;
-          }
-          const { items, ...rest } = row;
-          priceLists.push({ vendor_id: vendorIdByPriceListId.get(priceListId) ?? row.vendor_id ?? null, ...flattenRecord(rest, { maxDepth: 2 }) });
-          normalizeToArray(items).forEach((item, itemIdx) => {
-            const flatItem = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-            priceListItems.push({ price_list_id: row.price_list_id ?? priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? row.vendor_id ?? null, item_index: itemIdx + 1, ...flatItem });
-          });
-        });
-
-        return new Map([
-          ["Vendors", datasetToMatrix(vendors)],
-          ["VendorPriceLists", datasetToMatrix(priceLists)],
-          ["VendorPriceListItems", datasetToMatrix(priceListItems)],
-        ]);
+        return new Map([["Vendors", datasetToMatrix(vendors)]]);
       }
 
       return new Map();
@@ -1004,11 +786,31 @@ export default function ProjectSpreadsheet({
         const luckySheets = sheets.map((s, i) => matrixToLuckySheet(s.name, s.matrix, i));
         if (!cancelled) {
           await initLuckysheet(luckySheets, {
+            sheetActivate: (i) => {
+              handleSheetActivate(i);
+            },
             sheetActivateAfter: (i) => {
               handleSheetActivate(i);
             },
           });
-          loadedSectionsRef.current.add("Project");
+          // Attempt eager data load for all sections so tabs show fields immediately
+          try {
+            const fullWorkbook = await fetchProjectWorkbookData(projectId);
+            const fullSheets = buildWorkbookSheetMatrices(fullWorkbook).map((s, i) =>
+              matrixToLuckySheet(s.name, s.matrix, i),
+            );
+            await initLuckysheet(fullSheets, {
+              sheetActivate: (i) => {
+                handleSheetActivate(i);
+              },
+              sheetActivateAfter: (i) => {
+                handleSheetActivate(i);
+              },
+            });
+          } catch {
+            null;
+          }
+          // No extra tabs beyond sidebar; don't mark any default section as loaded
         }
       } catch (e) {
         if (!cancelled) {
@@ -1063,7 +865,18 @@ export default function ProjectSpreadsheet({
   );
 
   if (!showHeader) {
-    return <div className={wrapperClassName ?? "h-full w-full"}>{body}</div>;
+    return (
+      <div className={wrapperClassName ?? "h-full w-full"}>
+        {showDownload && (
+          <div className="fixed right-4 top-4 z-50">
+            <Button variant="outline" onClick={downloadExcel} disabled={loading || Boolean(error)}>
+              Download Excel
+            </Button>
+          </div>
+        )}
+        {body}
+      </div>
+    );
   }
 
   return (

@@ -23,7 +23,7 @@ export default function BillingInvoiceEditor() {
           title="Billing Invoice Workbook"
           workbookTitle="Madhuram Sheet"
           showHeader={false}
-          showDownload={false}
+          showDownload
           wrapperClassName="h-full w-full"
           bodyClassName="relative h-full w-full"
         />
