@@ -9,12 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil } from "lucide-react";
+import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPdfWithOcr } from "@/lib/pdfUtils";
 import { extractBOQFromText, mapBOQItemsToTable } from "@/lib/boqExtractor";
 import { api } from "@/lib/api";
+import { Checkbox } from "@/components/ui/checkbox";
 
 function normalizeBoqItem(apiItem) {
   return {
@@ -76,10 +77,14 @@ export default function BOQ() {
   const [formFile, setFormFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const addFormRef = useRef(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [massDeleteOpen, setMassDeleteOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
 
   const fetchItems = async () => {
     if (!projectId) {
       setItems([]);
+      setSelectedIds(new Set());
       return;
     }
     setLoading(true);
@@ -87,13 +92,16 @@ export default function BOQ() {
       const res = await api.getBOQsByProject(projectId);
       if (res.success && Array.isArray(res.data)) {
         setItems(res.data.map(normalizeBoqItem));
+        setSelectedIds(new Set());
       } else {
         setItems([]);
+        setSelectedIds(new Set());
       }
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "Failed to load BOQ items.", variant: "destructive" });
       setItems([]);
+      setSelectedIds(new Set());
     } finally {
       setLoading(false);
     }
@@ -302,6 +310,11 @@ export default function BOQ() {
       const res = await api.deleteBOQ(item.id);
       if (res.success) {
         await fetchItems();
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
         toast({ title: "Item deleted", description: "BOQ item removed." });
       } else {
         toast({ title: "Error", description: res.error || "Failed to delete item.", variant: "destructive" });
@@ -332,8 +345,97 @@ export default function BOQ() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedItems = filteredItems.slice(startIndex, endIndex);
+  const pageIds = paginatedItems.map((i) => i?.id).filter((id) => id != null);
+  const pageAllSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const pageSomeSelected = pageIds.some((id) => selectedIds.has(id));
+  const pageCheckboxState = pageAllSelected ? true : pageSomeSelected ? "indeterminate" : false;
 
   const totalAmount = filteredItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+  const toggleItemSelection = (id, checked) => {
+    if (id == null) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const togglePageSelection = (checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        pageIds.forEach((id) => next.add(id));
+      } else {
+        pageIds.forEach((id) => next.delete(id));
+      }
+      return next;
+    });
+  };
+
+  const handleMassDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (!projectId || ids.length === 0) return;
+
+    setSaving(true);
+    try {
+      let deleted = 0;
+      let failed = 0;
+      for (const id of ids) {
+        try {
+          const res = await api.deleteBOQ(id);
+          if (res?.success) deleted += 1;
+          else failed += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      await fetchItems();
+      setSelectedIds(new Set());
+      setMassDeleteOpen(false);
+      toast({
+        title: "Mass delete complete",
+        description: failed > 0 ? `${deleted} deleted, ${failed} failed.` : `${deleted} item(s) deleted.`,
+        variant: failed > 0 ? "destructive" : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!projectId || items.length === 0) return;
+
+    const ids = items.map((i) => i?.id).filter((id) => id != null);
+    if (ids.length === 0) return;
+
+    setSaving(true);
+    try {
+      let deleted = 0;
+      let failed = 0;
+      const batchSize = 10;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const results = await Promise.allSettled(batch.map((id) => api.deleteBOQ(id)));
+        results.forEach((r) => {
+          if (r.status === "fulfilled" && r.value?.success) deleted += 1;
+          else failed += 1;
+        });
+      }
+
+      await fetchItems();
+      setSelectedIds(new Set());
+      setDeleteAllOpen(false);
+      toast({
+        title: "Delete all complete",
+        description: failed > 0 ? `${deleted} deleted, ${failed} failed.` : `${deleted} item(s) deleted.`,
+        variant: failed > 0 ? "destructive" : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -347,9 +449,6 @@ export default function BOQ() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">BOQ Management</h1>
           <p className="text-muted-foreground mt-2">Manage Bill of Quantities for projects.</p>
-          {!projectId && (
-            <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">Select a project to load and save BOQ items.</p>
-          )}
         </div>
         <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2">
           <div
@@ -375,6 +474,24 @@ export default function BOQ() {
           </Button>
           <Button size="sm" className="shrink-0" onClick={openAddDialog} disabled={!projectId}>
             <Plus className="mr-2 h-4 w-4" /> Add Item
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setMassDeleteOpen(true)}
+            disabled={!projectId || selectedIds.size === 0 || saving}
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete Selected{selectedIds.size ? ` (${selectedIds.size})` : ""}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setDeleteAllOpen(true)}
+            disabled={!projectId || items.length === 0 || saving}
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete All
           </Button>
           <Button variant="outline" size="sm" className="shrink-0" onClick={fetchItems} disabled={loading}>
             {loading ? "Loading…" : "Refresh"}
@@ -410,6 +527,13 @@ export default function BOQ() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={pageCheckboxState}
+                      onCheckedChange={(v) => togglePageSelection(Boolean(v))}
+                      disabled={paginatedItems.length === 0}
+                    />
+                  </TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Item Code</TableHead>
                   <TableHead>Description</TableHead>
@@ -424,19 +548,25 @@ export default function BOQ() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                       Loading BOQ items…
                     </TableCell>
                   </TableRow>
                 ) : paginatedItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                       {!projectId ? "Select a project to load BOQ items." : searchTerm ? "No items found matching your search." : "No BOQ items. Import a PDF or add items manually."}
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedItems.map((item) => (
                   <TableRow key={item.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(item.id)}
+                        onCheckedChange={(v) => toggleItemSelection(item.id, Boolean(v))}
+                      />
+                    </TableCell>
                     <TableCell><Badge variant="outline">{item.category}</Badge></TableCell>
                     <TableCell className="font-mono text-xs">{item.code}</TableCell>
                     <TableCell className="font-medium max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>
@@ -460,7 +590,7 @@ export default function BOQ() {
                 )}
                 {paginatedItems.length > 0 && (
                   <TableRow className="bg-muted/50 font-bold">
-                  <TableCell colSpan={5}>Total</TableCell>
+                  <TableCell colSpan={6}>Total</TableCell>
                   <TableCell className="text-right"></TableCell>
                   <TableCell className="text-right"></TableCell>
                   <TableCell className="text-right">₹{totalAmount.toLocaleString()}</TableCell>
@@ -553,7 +683,11 @@ export default function BOQ() {
                     <div className="font-medium">{item.description}</div>
                     <div className="text-xs font-mono text-muted-foreground">{item.code}</div>
                   </div>
-                  <div className="text-right">
+                  <div className="flex flex-col items-end gap-2">
+                    <Checkbox
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={(v) => toggleItemSelection(item.id, Boolean(v))}
+                    />
                     <div className="font-bold">{item.amount ? `₹${Number(item.amount).toLocaleString()}` : "–"}</div>
                     {item.rate ? <div className="text-xs text-muted-foreground">₹{Number(item.rate).toLocaleString()}/{item.unit}</div> : null}
                   </div>
@@ -656,8 +790,47 @@ export default function BOQ() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={massDeleteOpen} onOpenChange={setMassDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete selected BOQ items</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            This will permanently delete {selectedIds.size} item(s).
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMassDeleteOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleMassDelete} disabled={saving || selectedIds.size === 0}>
+              {saving ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteAllOpen} onOpenChange={setDeleteAllOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete all BOQ items</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            This will permanently delete {items.length} item(s).
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteAllOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAll} disabled={saving || items.length === 0}>
+              {saving ? "Deleting…" : "Delete All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add BOQ Item</DialogTitle>
           </DialogHeader>
@@ -756,7 +929,7 @@ export default function BOQ() {
       </Dialog>
 
       <Dialog open={!!editItem} onOpenChange={(open) => !open && setEditItem(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit BOQ Item</DialogTitle>
           </DialogHeader>
@@ -855,7 +1028,7 @@ export default function BOQ() {
       </Dialog>
 
       <Dialog open={importPreviewOpen} onOpenChange={setImportPreviewOpen}>
-        <DialogContent className="sm:max-w-[90vw] max-h-[85vh] flex flex-col">
+        <DialogContent className="sm:max-w-[90vw] h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -868,7 +1041,7 @@ export default function BOQ() {
           <p className="text-sm text-muted-foreground">
             {extractedItems.length} item(s) extracted. Add to existing BOQ or replace all.
           </p>
-          <ScrollArea className="flex-1 max-h-[50vh] border rounded-md">
+          <div className="flex-1 overflow-auto border rounded-md">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -891,7 +1064,7 @@ export default function BOQ() {
                 ))}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setImportPreviewOpen(false); setBoqFile(null); setExtractError(null); if (boqInputRef.current) boqInputRef.current.value = ""; }} disabled={saving}>
               Cancel

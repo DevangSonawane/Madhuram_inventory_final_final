@@ -11,7 +11,7 @@ import {
   BarChart3, 
   History,
   Briefcase,
-  // ClipboardList,
+  ClipboardList,
   // CheckSquare,
   Layers,
   Truck,
@@ -41,11 +41,11 @@ export const MENU_CATEGORIES = [
         path: "/projects",
         icon: Briefcase,
       },
-      // {
-      //   title: "BOQ Management",
-      //   path: "/boq",
-      //   icon: ClipboardList,
-      // },
+      {
+        title: "BOQ Management",
+        path: "/boq",
+        icon: ClipboardList,
+      },
       // {
       //   title: "MAS",
       //   path: "/mas",
