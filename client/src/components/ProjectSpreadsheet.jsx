@@ -1179,6 +1179,21 @@ const wrapCellText = (value, { maxLineChars = 90, maxLines = 3 } = {}) => {
   return truncated ? `${out}…` : out;
 };
 
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const buildInvoiceMatrix = (project) => {
   const projectName = String(project?.project_name || project?.name || "").trim();
   const clientName = String(project?.client_name || "").trim();
@@ -1516,8 +1531,8 @@ const buildQtyMatrix = (rawDcs) => {
   return matrix.length > 0 ? matrix : [["No data"]];
 };
 
-const buildItemTabsAfterCpvc = (project, rawDcs) => {
-  const dcs = normalizeToArray(rawDcs);
+const buildItemTabsAfterCpvc = (project, rawSamples, rawDcs) => {
+  const samples = normalizeToArray(rawSamples);
   const seen = new Set();
   const tabs = [];
 
@@ -1541,11 +1556,12 @@ const buildItemTabsAfterCpvc = (project, rawDcs) => {
 
   const itemLabels = [];
   const labelSeen = new Set();
-  dcs.forEach((dc) => {
-    if (!isPlainObject(dc)) return;
-    normalizeToArray(dc.items).forEach((item) => {
-      if (!isPlainObject(item)) return;
-      const label = String(item.name || item.description || "").trim();
+  samples.forEach((sample) => {
+    if (!isPlainObject(sample)) return;
+    const rows = parseJsonArray(sample.item_description);
+    rows.forEach((row) => {
+      if (!isPlainObject(row)) return;
+      const label = String(row.item || row.description || row.material_description || "").trim();
       if (!label || labelSeen.has(label)) return;
       labelSeen.add(label);
       itemLabels.push(label);
@@ -1719,21 +1735,6 @@ const buildBoqMatrix = (raw, project) => {
 const buildSamplesMatrix = (raw, project) => {
   const samples = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
 
-  const parseArrayField = (value) => {
-    if (Array.isArray(value)) return value;
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (!trimmed) return [];
-      try {
-        const parsed = JSON.parse(trimmed);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  };
-
   const matrix = [];
   let first = true;
 
@@ -1772,7 +1773,7 @@ const buildSamplesMatrix = (raw, project) => {
     ]);
     matrix.push(["", "", "", "", "Rate", "Amount", "Previous", "Present", "Total", "Previous", "Present", "Total"]);
 
-    const rows = parseArrayField(sample.item_description);
+    const rows = parseJsonArray(sample.item_description);
     rows.forEach((row, idx) => {
       if (!isPlainObject(row)) return;
       const qty = row.quantity ?? row.qty ?? row.req_qty ?? "";
@@ -1841,6 +1842,7 @@ const fetchProjectWorkbookData = async (projectId) => {
   const endpoints = [
     ["DeliveryChallans", `${baseUrl}/api/dc/project/${projectId}`],
     ["BOQ", `${baseUrl}/api/boq/project/${projectId}`],
+    ["Samples", `${baseUrl}/api/sample/project/${projectId}`],
   ];
 
   const results = await Promise.allSettled(endpoints.map(([, url]) => fetchJson(url)));
@@ -1860,7 +1862,7 @@ const fetchProjectWorkbookData = async (projectId) => {
   workbook.QTY = buildQtyMatrix(workbook.DeliveryChallans);
   workbook.BOQ = buildBoqMatrix(workbook.BOQ, project);
   workbook.Abstract = buildAbstractMatrix(project, workbook.DeliveryChallans);
-  workbook.ItemTabs = buildItemTabsAfterCpvc(project, workbook.DeliveryChallans);
+  workbook.ItemTabs = buildItemTabsAfterCpvc(project, workbook.Samples, workbook.DeliveryChallans);
 
   return workbook;
 };
