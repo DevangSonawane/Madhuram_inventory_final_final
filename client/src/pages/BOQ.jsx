@@ -12,8 +12,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Download, Upload, Plus, FileSpreadsheet, CheckCircle2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pencil, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { extractTextFromPdfWithOcr } from "@/lib/pdfUtils";
-import { extractBOQFromText, mapBOQItemsToTable } from "@/lib/boqExtractor";
 import { api } from "@/lib/api";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -38,7 +36,7 @@ function normalizeBoqItem(apiItem) {
 
 function toApiPayload(item, projectId) {
   return {
-    category: item.category ?? '',
+    category: item.category || 'General',
     item_code: item.code ?? item.item_code ?? '',
     description: item.description ?? '',
     floor: item.floor ?? '',
@@ -90,12 +88,25 @@ export default function BOQ() {
     setLoading(true);
     try {
       const res = await api.getBOQsByProject(projectId);
-      if (res.success && Array.isArray(res.data)) {
-        setItems(res.data.map(normalizeBoqItem));
+      const rows = res?.success
+        ? (Array.isArray(res.data)
+            ? res.data
+            : Array.isArray(res.data?.boqs)
+              ? res.data.boqs
+              : Array.isArray(res.data?.data)
+                ? res.data.data
+                : [])
+        : [];
+
+      if (rows.length > 0) {
+        setItems(rows.map(normalizeBoqItem));
         setSelectedIds(new Set());
       } else {
         setItems([]);
         setSelectedIds(new Set());
+        if (!res?.success) {
+          toast({ title: "Error", description: res?.error || "Failed to load BOQ items.", variant: "destructive" });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -117,18 +128,31 @@ export default function BOQ() {
     setExtractError(null);
     setExtracting(true);
     try {
-      // Optimized extraction: limit pages and use parallel processing
-      const raw = await extractTextFromPdfWithOcr(file, { 
-        fullDocument: true, 
-        preserveLines: true,
-        maxPages: 20,
-        batchSize: 4
+      const res = await api.parseBoqPdf({
+        boq_file: file,
+        project_id: projectId || '',
+        save: 'false'
       });
-      const { items: parsed, projectName } = extractBOQFromText(raw);
-      const mapped = mapBOQItemsToTable(parsed, 0);
-      setExtractedItems(mapped);
-      setExtractedProjectName(projectName || "");
-      setImportPreviewOpen(true);
+
+      if (res.success && res.data && Array.isArray(res.data.items)) {
+        const mapped = res.data.items.map((it, idx) => ({
+          id: idx + 1 + Date.now(),
+          category: it.section || 'General',
+          code: it.item_no || '',
+          item_code: it.item_no || '',
+          description: it.description || '',
+          unit: it.unit || '',
+          quantity: it.qty ? String(it.qty) : '',
+          rate: '',
+          amount: '',
+          floor: '',
+        }));
+        setExtractedItems(mapped);
+        setExtractedProjectName("");
+        setImportPreviewOpen(true);
+      } else {
+        throw new Error(res.error || "Failed to parse BOQ PDF from server.");
+      }
     } catch (err) {
       console.error(err);
       setExtractError(err?.message || "Could not read BOQ PDF.");
@@ -172,16 +196,28 @@ export default function BOQ() {
       setSaving(true);
       try {
         let created = 0;
+        let failed = 0;
+        let firstError = null;
         for (const it of extractedItems) {
           const payload = toApiPayload({ ...it, code: it.code ?? it.item_code }, projectId);
           const res = await api.createBOQ(payload);
           if (res.success) created++;
+          else {
+            failed += 1;
+            if (!firstError) firstError = res.error || "Failed to create BOQ item";
+          }
         }
         await fetchItems();
+        setSearchTerm("");
+        setCurrentPage(1);
         setImportPreviewOpen(false);
         setBoqFile(null);
         if (boqInputRef.current) boqInputRef.current.value = "";
-        toast({ title: "Added to BOQ", description: `${created} item(s) added.` });
+        toast({
+          title: "Added to BOQ",
+          description: failed > 0 ? `${created} added, ${failed} failed. ${firstError || ""}`.trim() : `${created} item(s) added.`,
+          variant: failed > 0 ? "destructive" : undefined,
+        });
       } catch (e) {
         toast({ title: "Error", description: "Failed to add some items.", variant: "destructive" });
       } finally {
@@ -191,6 +227,8 @@ export default function BOQ() {
       const maxId = items.length ? Math.max(...items.map((i) => i.id)) : 0;
       const withIds = extractedItems.map((it, i) => ({ ...it, id: maxId + i + 1 }));
       setItems((prev) => [...prev, ...withIds]);
+      setSearchTerm("");
+      setCurrentPage(1);
       setImportPreviewOpen(false);
       setBoqFile(null);
       if (boqInputRef.current) boqInputRef.current.value = "";
@@ -206,16 +244,28 @@ export default function BOQ() {
           await api.deleteBOQ(item.id);
         }
         let created = 0;
+        let failed = 0;
+        let firstError = null;
         for (const it of extractedItems) {
           const payload = toApiPayload({ ...it, code: it.code ?? it.item_code }, projectId);
           const res = await api.createBOQ(payload);
           if (res.success) created++;
+          else {
+            failed += 1;
+            if (!firstError) firstError = res.error || "Failed to create BOQ item";
+          }
         }
         await fetchItems();
+        setSearchTerm("");
+        setCurrentPage(1);
         setImportPreviewOpen(false);
         setBoqFile(null);
         if (boqInputRef.current) boqInputRef.current.value = "";
-        toast({ title: "BOQ replaced", description: `${created} item(s) loaded from PDF.` });
+        toast({
+          title: "BOQ replaced",
+          description: failed > 0 ? `${created} added, ${failed} failed. ${firstError || ""}`.trim() : `${created} item(s) loaded from PDF.`,
+          variant: failed > 0 ? "destructive" : undefined,
+        });
       } catch (e) {
         toast({ title: "Error", description: "Failed to replace BOQ.", variant: "destructive" });
       } finally {
@@ -224,6 +274,8 @@ export default function BOQ() {
     } else {
       const withIds = extractedItems.map((it, i) => ({ ...it, id: i + 1 }));
       setItems(withIds);
+      setSearchTerm("");
+      setCurrentPage(1);
       setImportPreviewOpen(false);
       setBoqFile(null);
       if (boqInputRef.current) boqInputRef.current.value = "";
@@ -253,6 +305,8 @@ export default function BOQ() {
         setAddDialogOpen(false);
         setItemForm(EMPTY_FORM);
         setFormFile(null);
+        setSearchTerm("");
+        setCurrentPage(1);
         toast({ title: "Item added", description: "BOQ item created." });
       } else {
         toast({ title: "Error", description: res.error || "Failed to add item.", variant: "destructive" });
@@ -330,11 +384,11 @@ export default function BOQ() {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      item.category?.toLowerCase().includes(term) ||
-      item.code?.toLowerCase().includes(term) ||
-      item.description?.toLowerCase().includes(term) ||
-      item.unit?.toLowerCase().includes(term) ||
-      item.floor?.toLowerCase().includes(term) ||
+      String(item.category ?? "").toLowerCase().includes(term) ||
+      String(item.code ?? "").toLowerCase().includes(term) ||
+      String(item.description ?? "").toLowerCase().includes(term) ||
+      String(item.unit ?? "").toLowerCase().includes(term) ||
+      String(item.floor ?? "").toLowerCase().includes(term) ||
       String(item.quantity).includes(term) ||
       String(item.rate).includes(term) ||
       String(item.amount).includes(term)
@@ -506,7 +560,7 @@ export default function BOQ() {
             <div className="relative w-full sm:w-auto sm:min-w-[300px]">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by category, code, description..."
+                placeholder="Search by section, code, description..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
@@ -534,7 +588,7 @@ export default function BOQ() {
                       disabled={paginatedItems.length === 0}
                     />
                   </TableHead>
-                  <TableHead>Category</TableHead>
+                  <TableHead>Section</TableHead>
                   <TableHead>Item Code</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Floor</TableHead>
@@ -837,7 +891,7 @@ export default function BOQ() {
           <form ref={addFormRef} onSubmit={handleAddItem} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Category *</Label>
+                <Label>Section *</Label>
                 <Input
                   value={itemForm.category}
                   onChange={(e) => setItemForm((f) => ({ ...f, category: e.target.value }))}
@@ -936,7 +990,7 @@ export default function BOQ() {
           <form onSubmit={handleEditItem} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Category *</Label>
+                <Label>Section *</Label>
                 <Input
                   value={itemForm.category}
                   onChange={(e) => setItemForm((f) => ({ ...f, category: e.target.value }))}
@@ -1045,7 +1099,7 @@ export default function BOQ() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Category</TableHead>
+                  <TableHead>Section</TableHead>
                   <TableHead>Code</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Unit</TableHead>

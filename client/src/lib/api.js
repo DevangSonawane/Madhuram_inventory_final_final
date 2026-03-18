@@ -626,6 +626,21 @@ export const api = {
   },
 
   // BOQ (Bill of Quantities) – Base URL: https://api.festmate.in, Storage: /uploads/boq
+  parseBoqPdf: async (data) => {
+    const formData = new FormData();
+    if (data.boq_file instanceof File) formData.append('boq_file', data.boq_file);
+    if (data.project_id) formData.append('project_id', data.project_id);
+    if (data.save != null) formData.append('save', String(data.save));
+    if (data.category) formData.append('category', data.category);
+
+    const response = await fetch(`${BASE_URL}/api/boq/parse-pdf`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
   createBOQ: async (data) => {
     const formData = new FormData();
     formData.append('category', data.category || '');
@@ -664,6 +679,7 @@ export const api = {
   getBOQsByProject: async (projectId) => {
     const response = await fetch(`${BASE_URL}/api/boq/project/${projectId}`, {
       headers: getAuthHeaders(),
+      cache: 'no-store',
     });
     return handleResponse(response);
   },

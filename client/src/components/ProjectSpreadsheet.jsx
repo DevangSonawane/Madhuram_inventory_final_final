@@ -127,19 +127,26 @@ const buildWorkbookSheetMatrices = (workbookData) => {
     return name;
   };
 
+  const itemTabs = normalizeToArray(workbookData?.ItemTabs)
+    .filter((t) => isPlainObject(t) && typeof t.name === "string" && Array.isArray(t.matrix))
+    .map((t) => [t.name, t.matrix]);
+
   const moduleOrder = [
-    ["PurchaseOrders", workbookData?.PurchaseOrders],
-    ["DeliveryChallans", workbookData?.DeliveryChallans],
-    ["BOQ", workbookData?.BOQ],
-    ["MIR", workbookData?.MIR],
-    ["ITR", workbookData?.ITR],
-    ["Samples", workbookData?.Samples],
-    ["Inventory", workbookData?.Inventory],
-    ["Vendors", workbookData?.Vendors],
+    ["WO", workbookData?.BOQ],
+    ["Inv", workbookData?.Invoice],
+    ["Abstract", workbookData?.Abstract],
+    ["QTY", workbookData?.QTY],
+    ["CPVC", workbookData?.CPVC],
+    ...itemTabs,
   ];
 
   moduleOrder.forEach(([name, dataset]) => {
     if (dataset == null) return;
+    if (Array.isArray(dataset) && Array.isArray(dataset[0])) {
+      const sheetName = sanitizeSheetName(name, usedNames);
+      matrices.set(sheetName, dataset);
+      return;
+    }
     if (Array.isArray(dataset)) {
       const rows = dataset.map((row) => (isPlainObject(row) ? flattenRecord(row) : { value: row }));
       addSheet(name, rows);
@@ -186,6 +193,815 @@ const matrixToLuckySheet = (name, matrix, sheetIndex) => {
     celldata,
     config: {},
   };
+};
+
+const applyBoqSheetPresentation = (sheet, matrix) => {
+  const safeMatrix = Array.isArray(matrix) ? matrix : [["No data"]];
+  const width = Math.max(6, ...safeMatrix.map((r) => (Array.isArray(r) ? r.length : 1)));
+  sheet.column = width;
+  sheet.row = Math.max(40, safeMatrix.length + 10);
+
+  const merge = {};
+  merge["0_0"] = { r: 0, c: 0, rs: 1, cs: width };
+  merge["1_0"] = { r: 1, c: 0, rs: 1, cs: width };
+
+  for (let r = 2; r < safeMatrix.length; r += 1) {
+    const row = safeMatrix[r];
+    if (!Array.isArray(row)) continue;
+    const sr = String(row[0] ?? "").trim();
+    const desc = String(row[1] ?? "").trim();
+    const restEmpty = [2, 3, 4, 5].every((idx) => String(row[idx] ?? "").trim() === "");
+    if (/^[A-Z]\.?$/.test(sr) && desc && restEmpty) {
+      merge[`${r}_1`] = { r, c: 1, rs: 1, cs: Math.max(1, width - 1) };
+    }
+  }
+
+  const columnlen = { 0: 70, 1: 720, 2: 80, 3: 80, 4: 100, 5: 120 };
+  const rowlen = { 0: 30, 1: 24 };
+  for (let r = 2; r < safeMatrix.length; r += 1) {
+    const row = safeMatrix[r];
+    if (!Array.isArray(row)) continue;
+    const isHeader = String(row[0] ?? "") === "SR NO." && String(row[1] ?? "") === "ITEM DESCRIPTION";
+    if (isHeader) {
+      rowlen[r] = 24;
+      continue;
+    }
+    const sr = String(row[0] ?? "").trim();
+    const desc = String(row[1] ?? "").trim();
+    const restEmpty = [2, 3, 4, 5].every((idx) => String(row[idx] ?? "").trim() === "");
+    if (/^[A-Z]\.?$/.test(sr) && desc && restEmpty) {
+      rowlen[r] = 28;
+      continue;
+    }
+    const lineCount = String(desc).split("\n").filter(Boolean).length || 1;
+    const lines = Math.min(3, Math.max(1, lineCount));
+    rowlen[r] = 18 * lines + 8;
+  }
+  sheet.config = {
+    ...sheet.config,
+    merge,
+    columnlen,
+    rowlen,
+  };
+
+  const cellMap = new Map();
+  sheet.celldata.forEach((entry) => {
+    if (!entry) return;
+    cellMap.set(`${entry.r}_${entry.c}`, entry);
+  });
+
+  const patchCell = (r, c, patch) => {
+    const entry = cellMap.get(`${r}_${c}`);
+    if (!entry || !entry.v || typeof entry.v !== "object") return;
+    Object.assign(entry.v, patch);
+  };
+
+  patchCell(0, 0, { bl: 1, fs: 16, ht: 1, vt: 1 });
+  patchCell(1, 0, { bl: 1, fs: 12, ht: 0, vt: 1 });
+
+  for (let r = 2; r < safeMatrix.length; r += 1) {
+    const row = safeMatrix[r];
+    if (!Array.isArray(row)) continue;
+    const isHeader = String(row[0] ?? "") === "SR NO." && String(row[1] ?? "") === "ITEM DESCRIPTION";
+    if (isHeader) {
+      for (let c = 0; c < width; c += 1) {
+        patchCell(r, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+      }
+      continue;
+    }
+    const sr = String(row[0] ?? "").trim();
+    const desc = String(row[1] ?? "").trim();
+    const restEmpty = [2, 3, 4, 5].every((idx) => String(row[idx] ?? "").trim() === "");
+    if (/^[A-Z]\.?$/.test(sr) && desc && restEmpty) {
+      patchCell(r, 0, { bl: 1, bg: "#dbeafe", fc: "#1d4ed8", ht: 1, vt: 1 });
+      patchCell(r, 1, { bl: 1, bg: "#dbeafe", fc: "#1d4ed8", ht: 0, vt: 1, tb: 2 });
+      continue;
+    }
+    patchCell(r, 0, { ht: 1, vt: 1 });
+    patchCell(r, 1, { ht: 0, vt: 1, tb: 2 });
+    patchCell(r, 2, { ht: 1, vt: 1 });
+    patchCell(r, 3, { ht: 2, vt: 1 });
+    patchCell(r, 4, { ht: 2, vt: 1 });
+    patchCell(r, 5, { ht: 2, vt: 1 });
+  }
+
+  const thin = { style: 1, color: "#111827" };
+  const thick = { style: 2, color: "#111827" };
+
+  const ensureCell = (r, c) => {
+    const key = `${r}_${c}`;
+    const existing = cellMap.get(key);
+    if (existing) return existing;
+    const created = { r, c, v: toLuckyCell("") };
+    sheet.celldata.push(created);
+    cellMap.set(key, created);
+    return created;
+  };
+
+  const lastRow = Math.max(0, safeMatrix.length - 1);
+  const lastCol = Math.max(0, width - 1);
+
+  for (let r = 0; r <= lastRow; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    const isHeaderRow = String(row[0] ?? "") === "SR NO." && String(row[1] ?? "") === "ITEM DESCRIPTION";
+    const sr = String(row[0] ?? "").trim();
+    const desc = String(row[1] ?? "").trim();
+    const restEmpty = [2, 3, 4, 5].every((idx) => String(row[idx] ?? "").trim() === "");
+    const isSectionRow = /^[A-Z]\.?$/.test(sr) && desc && restEmpty;
+
+    for (let c = 0; c <= lastCol; c += 1) {
+      const entry = ensureCell(r, c);
+      if (!entry.v || typeof entry.v !== "object") continue;
+      const bd = {
+        t: r === 0 || isHeaderRow || isSectionRow ? thick : thin,
+        b: r === lastRow || isHeaderRow || isSectionRow ? thick : thin,
+        l: c === 0 ? thick : thin,
+        r: c === lastCol ? thick : thin,
+      };
+      entry.v.bd = bd;
+    }
+  }
+
+  return sheet;
+};
+
+const applySamplesSheetPresentation = (sheet, matrix) => {
+  const safeMatrix = Array.isArray(matrix) ? matrix : [["No data"]];
+  const width = Math.max(12, ...safeMatrix.map((r) => (Array.isArray(r) ? r.length : 1)));
+  sheet.column = width;
+  sheet.row = Math.max(60, safeMatrix.length + 10);
+
+  const merge = {};
+  const columnlen = {
+    0: 60,
+    1: 650,
+    2: 70,
+    3: 70,
+    4: 90,
+    5: 110,
+    6: 90,
+    7: 90,
+    8: 90,
+    9: 110,
+    10: 110,
+    11: 110,
+  };
+  const rowlen = {};
+
+  safeMatrix.forEach((row, r) => {
+    if (!Array.isArray(row)) return;
+    const isSingleLine = String(row[0] ?? "").trim() && row.slice(1).every((c) => String(c ?? "").trim() === "");
+    if (isSingleLine) {
+      merge[`${r}_0`] = { r, c: 0, rs: 1, cs: width };
+      rowlen[r] = 26;
+      return;
+    }
+
+    const isMultiHeaderTop =
+      String(row[0] ?? "") === "Sl No" &&
+      String(row[1] ?? "") === "Description" &&
+      String(row[4] ?? "") === "BOQ" &&
+      String(row[6] ?? "") === "Quantity" &&
+      String(row[9] ?? "") === "Amount";
+
+    if (isMultiHeaderTop) {
+      merge[`${r}_0`] = { r, c: 0, rs: 2, cs: 1 };
+      merge[`${r}_1`] = { r, c: 1, rs: 2, cs: 1 };
+      merge[`${r}_2`] = { r, c: 2, rs: 2, cs: 1 };
+      merge[`${r}_3`] = { r, c: 3, rs: 2, cs: 1 };
+      merge[`${r}_4`] = { r, c: 4, rs: 1, cs: 2 };
+      merge[`${r}_6`] = { r, c: 6, rs: 1, cs: 3 };
+      merge[`${r}_9`] = { r, c: 9, rs: 1, cs: 3 };
+      rowlen[r] = 24;
+      rowlen[r + 1] = 22;
+      return;
+    }
+
+    const desc = String(row[1] ?? "");
+    const lineCount = desc.split("\n").filter(Boolean).length || 1;
+    const lines = Math.min(3, Math.max(1, lineCount));
+    rowlen[r] = 18 * lines + 8;
+  });
+
+  sheet.config = {
+    ...sheet.config,
+    merge,
+    columnlen,
+    rowlen,
+  };
+
+  const cellMap = new Map();
+  sheet.celldata.forEach((entry) => {
+    if (!entry) return;
+    cellMap.set(`${entry.r}_${entry.c}`, entry);
+  });
+
+  const patchCell = (r, c, patch) => {
+    const entry = cellMap.get(`${r}_${c}`);
+    if (!entry || !entry.v || typeof entry.v !== "object") return;
+    Object.assign(entry.v, patch);
+  };
+
+  for (let r = 0; r < safeMatrix.length; r += 1) {
+    const row = safeMatrix[r];
+    if (!Array.isArray(row)) continue;
+
+    const isSingleLine = String(row[0] ?? "").trim() && row.slice(1).every((c) => String(c ?? "").trim() === "");
+    if (isSingleLine) {
+      const value = String(row[0] ?? "");
+      if (value.startsWith("Sample -")) {
+        patchCell(r, 0, { bl: 1, bg: "#dbeafe", fc: "#1d4ed8", ht: 1, vt: 1 });
+      } else if (value === "ABSTRACT SHEET") {
+        patchCell(r, 0, { bl: 1, fs: 12, ht: 1, vt: 1 });
+      } else {
+        patchCell(r, 0, { bl: 1, ht: 0, vt: 1 });
+      }
+      continue;
+    }
+
+    const isMultiHeaderTop =
+      String(row[0] ?? "") === "Sl No" &&
+      String(row[1] ?? "") === "Description" &&
+      String(row[4] ?? "") === "BOQ" &&
+      String(row[6] ?? "") === "Quantity" &&
+      String(row[9] ?? "") === "Amount";
+    if (isMultiHeaderTop) {
+      for (let c = 0; c < width; c += 1) patchCell(r, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+      for (let c = 0; c < width; c += 1) patchCell(r + 1, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+      continue;
+    }
+
+    patchCell(r, 1, { tb: 2, vt: 1 });
+    for (const c of [3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+      patchCell(r, c, { ht: 2, vt: 1 });
+    }
+  }
+
+  const thin = { style: 1, color: "#111827" };
+  const thick = { style: 2, color: "#111827" };
+
+  const ensureCell = (r, c) => {
+    const key = `${r}_${c}`;
+    const existing = cellMap.get(key);
+    if (existing) return existing;
+    const created = { r, c, v: toLuckyCell("") };
+    sheet.celldata.push(created);
+    cellMap.set(key, created);
+    return created;
+  };
+
+  const lastRow = Math.max(0, safeMatrix.length - 1);
+  const lastCol = Math.max(0, width - 1);
+  const groupRight = new Set([3, 5, 8, 11]);
+  const groupLeft = new Set([4, 6, 9]);
+
+  for (let r = 0; r <= lastRow; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    const isSingleLine = String(row[0] ?? "").trim() && row.slice(1).every((c) => String(c ?? "").trim() === "");
+    const isMultiHeaderTop =
+      String(row[0] ?? "") === "Sl No" &&
+      String(row[1] ?? "") === "Description" &&
+      String(row[4] ?? "") === "BOQ" &&
+      String(row[6] ?? "") === "Quantity" &&
+      String(row[9] ?? "") === "Amount";
+    const isMultiHeaderSecond =
+      String(row[4] ?? "") === "Rate" &&
+      String(row[5] ?? "") === "Amount" &&
+      String(row[6] ?? "") === "Previous" &&
+      String(row[7] ?? "") === "Present" &&
+      String(row[8] ?? "") === "Total" &&
+      String(row[9] ?? "") === "Previous" &&
+      String(row[10] ?? "") === "Present" &&
+      String(row[11] ?? "") === "Total";
+
+    for (let c = 0; c <= lastCol; c += 1) {
+      const entry = ensureCell(r, c);
+      if (!entry.v || typeof entry.v !== "object") continue;
+
+      const topThick = r === 0 || isMultiHeaderTop || (isSingleLine && String(row[0] ?? "").startsWith("Sample -"));
+      const bottomThick = r === lastRow || isMultiHeaderSecond;
+
+      const bd = {
+        t: topThick ? thick : thin,
+        b: bottomThick ? thick : thin,
+        l: c === 0 || groupLeft.has(c) ? thick : thin,
+        r: c === lastCol || groupRight.has(c) ? thick : thin,
+      };
+      entry.v.bd = bd;
+    }
+  }
+
+  return sheet;
+};
+
+const applyInvoiceSheetPresentation = (sheet, matrix) => {
+  const safeMatrix = Array.isArray(matrix) ? matrix : [["No data"]];
+  const width = 9;
+  sheet.column = width;
+  sheet.row = Math.max(50, safeMatrix.length + 10);
+
+  const merge = {};
+  merge["0_0"] = { r: 0, c: 0, rs: 1, cs: width };
+  merge["1_0"] = { r: 1, c: 0, rs: 1, cs: width };
+  merge["3_0"] = { r: 3, c: 0, rs: 1, cs: width };
+  merge["4_0"] = { r: 4, c: 0, rs: 1, cs: width };
+  merge["6_0"] = { r: 6, c: 0, rs: 1, cs: 3 };
+  merge["6_3"] = { r: 6, c: 3, rs: 1, cs: 4 };
+  merge["6_7"] = { r: 6, c: 7, rs: 1, cs: 2 };
+  merge["9_0"] = { r: 9, c: 0, rs: 1, cs: width };
+
+  for (let r = 10; r <= 13; r += 1) {
+    merge[`${r}_0`] = { r, c: 0, rs: 1, cs: 1 };
+    merge[`${r}_1`] = { r, c: 1, rs: 1, cs: 3 };
+    merge[`${r}_4`] = { r, c: 4, rs: 1, cs: 2 };
+    merge[`${r}_6`] = { r, c: 6, rs: 1, cs: 3 };
+  }
+
+  merge["15_0"] = { r: 15, c: 0, rs: 1, cs: 4 };
+  merge["15_4"] = { r: 15, c: 4, rs: 1, cs: 5 };
+
+  for (let r = 16; r <= 20; r += 1) {
+    merge[`${r}_0`] = { r, c: 0, rs: 1, cs: 1 };
+    merge[`${r}_1`] = { r, c: 1, rs: 1, cs: 3 };
+    merge[`${r}_4`] = { r, c: 4, rs: 1, cs: 1 };
+    merge[`${r}_5`] = { r, c: 5, rs: 1, cs: 4 };
+  }
+
+  merge["21_0"] = { r: 21, c: 0, rs: 1, cs: 2 };
+  merge["21_2"] = { r: 21, c: 2, rs: 1, cs: 2 };
+  merge["21_4"] = { r: 21, c: 4, rs: 1, cs: 5 };
+
+  merge["23_0"] = { r: 23, c: 0, rs: 1, cs: width };
+
+  merge["31_0"] = { r: 31, c: 0, rs: 1, cs: 3 };
+
+  for (let r = 32; r <= 38; r += 1) {
+    merge[`${r}_0`] = { r, c: 0, rs: 1, cs: 4 };
+    merge[`${r}_4`] = { r, c: 4, rs: 1, cs: 4 };
+    merge[`${r}_8`] = { r, c: 8, rs: 1, cs: 1 };
+  }
+
+  merge["39_0"] = { r: 39, c: 0, rs: 1, cs: 2 };
+  merge["39_4"] = { r: 39, c: 4, rs: 1, cs: 5 };
+  merge["40_0"] = { r: 40, c: 0, rs: 1, cs: 4 };
+  merge["40_4"] = { r: 40, c: 4, rs: 1, cs: 5 };
+  merge["41_0"] = { r: 41, c: 0, rs: 1, cs: 4 };
+  merge["41_4"] = { r: 41, c: 4, rs: 1, cs: 5 };
+
+  const columnlen = {
+    0: 100,
+    1: 200,
+    2: 80,
+    3: 100,
+    4: 90,
+    5: 100,
+    6: 60,
+    7: 80,
+    8: 100,
+  };
+
+  const rowlen = {
+    0: 40,
+    1: 22,
+    3: 18,
+    4: 16,
+    6: 20,
+    9: 30,
+    15: 22,
+    21: 22,
+    22: 20,
+    24: 22,
+    25: 20,
+    26: 40,
+    31: 26,
+    38: 20,
+    40: 20,
+  };
+
+  sheet.config = {
+    ...sheet.config,
+    merge,
+    columnlen,
+    rowlen,
+  };
+
+  const cellMap = new Map();
+  sheet.celldata.forEach((entry) => {
+    if (!entry) return;
+    cellMap.set(`${entry.r}_${entry.c}`, entry);
+  });
+
+  const ensureCell = (r, c) => {
+    const key = `${r}_${c}`;
+    const existing = cellMap.get(key);
+    if (existing) return existing;
+    const created = { r, c, v: toLuckyCell("") };
+    sheet.celldata.push(created);
+    cellMap.set(key, created);
+    return created;
+  };
+
+  const patchCell = (r, c, patch) => {
+    const entry = ensureCell(r, c);
+    if (!entry.v || typeof entry.v !== "object") return;
+    Object.assign(entry.v, patch);
+  };
+
+  patchCell(0, 0, { bl: 1, fs: 20, ht: 1, vt: 1 });
+  patchCell(6, 0, { bl: 1, fs: 10 });
+  patchCell(6, 3, { bl: 1, fs: 10 });
+  patchCell(6, 7, { bl: 1, fs: 10, ht: 2 });
+  patchCell(9, 0, { bl: 1, fs: 14, ht: 1, vt: 1 });
+  patchCell(15, 0, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+  patchCell(15, 4, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+  for (let c = 0; c < width; c += 1) patchCell(21, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+  for (let c = 0; c < width; c += 1) {
+    patchCell(24, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+    patchCell(25, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+  }
+  patchCell(26, 1, { tb: 2, vt: 1 });
+  for (let c = 0; c < width; c += 1) patchCell(31, c, { bl: 1 });
+  patchCell(39, 0, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+
+  const thin = { style: 1, color: "#111827" };
+  const thick = { style: 2, color: "#111827" };
+
+  const lastRow = Math.max(0, safeMatrix.length - 1);
+  const lastCol = width - 1;
+
+  for (let r = 0; r <= lastRow; r += 1) {
+    for (let c = 0; c <= lastCol; c += 1) {
+      const entry = ensureCell(r, c);
+      if (!entry.v || typeof entry.v !== "object") continue;
+      const isTop = r === 0;
+      const isBottom = r === lastRow;
+      const isLeft = c === 0;
+      const isRight = c === lastCol;
+
+      const isHeaderSection = r === 6;
+      const isTaxInvoice = r === 9;
+      const isBillToParty = r === 15;
+      const isTableHeader = r === 24;
+      const isTotal = r === 31;
+      const isSummaryStart = r === 32;
+      const isBankDetails = r === 39;
+
+      const topBorder = (isTop || isTaxInvoice || isBillToParty || isTableHeader || isSummaryStart || isBankDetails) ? thick : thin;
+      const bottomBorder = (isBottom || isHeaderSection || isTaxInvoice || r === 13 || isBillToParty || r === 20 || isTableHeader || r === 25 || isTotal || r === 38 || r === 41) ? thick : thin;
+
+      entry.v.bd = {
+        t: topBorder,
+        b: bottomBorder,
+        l: isLeft ? thick : thin,
+        r: isRight ? thick : thin,
+      };
+    }
+  }
+
+  for (let r = 15; r <= 21; r += 1) {
+    const entry = ensureCell(r, 4);
+    if (entry.v && typeof entry.v === "object") {
+      entry.v.bd = { ...entry.v.bd, l: thick };
+    }
+  }
+
+  for (let r = 32; r <= 38; r += 1) {
+    const entry = ensureCell(r, 4);
+    if (entry.v && typeof entry.v === "object") {
+      entry.v.bd = { ...entry.v.bd, l: thick };
+    }
+    const entry2 = ensureCell(r, 8);
+    if (entry2.v && typeof entry2.v === "object") {
+      entry2.v.bd = { ...entry2.v.bd, l: thick };
+    }
+  }
+
+  return sheet;
+};
+
+const applyCpvcSheetPresentation = (sheet, matrix) => {
+  const safeMatrix = Array.isArray(matrix) ? matrix : [["No data"]];
+  const width = 28;
+  sheet.column = Math.max(width, sheet.column || 0);
+  sheet.row = Math.max(250, safeMatrix.length + 80);
+
+  const merge = {};
+  merge["0_0"] = { r: 0, c: 0, rs: 1, cs: 14 };
+  merge["0_14"] = { r: 0, c: 14, rs: 1, cs: 14 };
+  merge["1_0"] = { r: 1, c: 0, rs: 1, cs: 14 };
+  merge["1_14"] = { r: 1, c: 14, rs: 1, cs: 14 };
+  merge["2_0"] = { r: 2, c: 0, rs: 1, cs: width };
+  merge["3_0"] = { r: 3, c: 0, rs: 1, cs: width };
+
+  merge["5_0"] = { r: 5, c: 0, rs: 2, cs: 1 };
+  merge["5_1"] = { r: 5, c: 1, rs: 2, cs: 1 };
+  for (let i = 0; i < 8; i += 1) {
+    merge[`5_${2 + i * 3}`] = { r: 5, c: 2 + i * 3, rs: 1, cs: 3 };
+  }
+  merge["5_26"] = { r: 5, c: 26, rs: 2, cs: 1 };
+  merge["5_27"] = { r: 5, c: 27, rs: 2, cs: 1 };
+
+  const totalRowIdx = safeMatrix.findIndex((row) => Array.isArray(row) && String(row[0] ?? "").trim() === "TOTAL");
+  if (totalRowIdx >= 0) {
+    merge[`${totalRowIdx}_0`] = { r: totalRowIdx, c: 0, rs: 1, cs: 2 };
+  }
+
+  const columnlen = { 0: 50, 1: 90, 26: 80, 27: 90 };
+  for (let c = 2; c <= 25; c += 1) columnlen[c] = 55;
+
+  const rowlen = { 0: 20, 1: 20, 2: 24, 3: 20, 5: 22, 6: 20 };
+  for (let r = 7; r < safeMatrix.length; r += 1) rowlen[r] = 18;
+  if (totalRowIdx >= 0) rowlen[totalRowIdx] = 22;
+
+  sheet.config = {
+    ...sheet.config,
+    merge,
+    columnlen,
+    rowlen,
+  };
+
+  const cellMap = new Map();
+  sheet.celldata.forEach((entry) => {
+    if (!entry) return;
+    cellMap.set(`${entry.r}_${entry.c}`, entry);
+  });
+
+  const ensureCell = (r, c) => {
+    const key = `${r}_${c}`;
+    const existing = cellMap.get(key);
+    if (existing) return existing;
+    const created = { r, c, v: toLuckyCell("") };
+    sheet.celldata.push(created);
+    cellMap.set(key, created);
+    return created;
+  };
+
+  const patchCell = (r, c, patch) => {
+    const entry = ensureCell(r, c);
+    if (!entry.v || typeof entry.v !== "object") return;
+    Object.assign(entry.v, patch);
+  };
+
+  patchCell(2, 0, { bl: 1, fs: 11, ht: 1, vt: 1 });
+  patchCell(3, 0, { bl: 1, fs: 10, ht: 1, vt: 1, fc: "#1d4ed8" });
+
+  for (let c = 0; c < width; c += 1) {
+    patchCell(5, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+    patchCell(6, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+  }
+
+  const thin = { style: 1, color: "#111827" };
+  const thick = { style: 2, color: "#111827" };
+
+  const tableStartRow = 5;
+  const tableEndRow = totalRowIdx >= 0 ? totalRowIdx : Math.max(tableStartRow + 2, safeMatrix.length - 1);
+  const groupLeft = new Set([0, 1, 2, 5, 8, 11, 14, 17, 20, 23, 26, 27]);
+  const groupRight = new Set([0, 1, 4, 7, 10, 13, 16, 19, 22, 25, 26, 27]);
+
+  for (let r = tableStartRow; r <= tableEndRow; r += 1) {
+    for (let c = 0; c < width; c += 1) {
+      const entry = ensureCell(r, c);
+      if (!entry.v || typeof entry.v !== "object") continue;
+      entry.v.bd = {
+        t: r === tableStartRow ? thick : thin,
+        b: r === tableEndRow ? thick : thin,
+        l: groupLeft.has(c) ? thick : thin,
+        r: groupRight.has(c) ? thick : thin,
+      };
+    }
+  }
+
+  return sheet;
+};
+
+const applyQtySheetPresentation = (sheet, matrix) => {
+  const safeMatrix = Array.isArray(matrix) ? matrix : [["No data"]];
+  const width = 4;
+  sheet.column = Math.max(width, sheet.column || 0);
+  sheet.row = Math.max(80, safeMatrix.length + 40);
+
+  const merge = {};
+  const columnlen = { 0: 420, 1: 80, 2: 110, 3: 110 };
+  const rowlen = {};
+
+  for (let r = 0; r < safeMatrix.length; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    const isChallanRow = String(row[0] ?? "").toUpperCase().startsWith("CHALLAN NO");
+    const isHeaderRow = String(row[1] ?? "") === "QTY" && String(row[2] ?? "") === "PER PC MTR" && String(row[3] ?? "") === "TOT QTY";
+    if (isChallanRow) {
+      merge[`${r}_0`] = { r, c: 0, rs: 1, cs: width };
+      rowlen[r] = 22;
+      continue;
+    }
+    if (isHeaderRow) {
+      rowlen[r] = 22;
+      continue;
+    }
+    rowlen[r] = 18;
+  }
+
+  sheet.config = {
+    ...sheet.config,
+    merge,
+    columnlen,
+    rowlen,
+  };
+
+  const cellMap = new Map();
+  sheet.celldata.forEach((entry) => {
+    if (!entry) return;
+    cellMap.set(`${entry.r}_${entry.c}`, entry);
+  });
+
+  const ensureCell = (r, c) => {
+    const key = `${r}_${c}`;
+    const existing = cellMap.get(key);
+    if (existing) return existing;
+    const created = { r, c, v: toLuckyCell("") };
+    sheet.celldata.push(created);
+    cellMap.set(key, created);
+    return created;
+  };
+
+  const patchCell = (r, c, patch) => {
+    const entry = ensureCell(r, c);
+    if (!entry.v || typeof entry.v !== "object") return;
+    Object.assign(entry.v, patch);
+  };
+
+  for (let r = 0; r < safeMatrix.length; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    const isChallanRow = String(row[0] ?? "").toUpperCase().startsWith("CHALLAN NO");
+    const isHeaderRow = String(row[1] ?? "") === "QTY" && String(row[2] ?? "") === "PER PC MTR" && String(row[3] ?? "") === "TOT QTY";
+    if (isChallanRow) {
+      patchCell(r, 0, { bl: 1, bg: "#fef08a", ht: 0, vt: 1 });
+      continue;
+    }
+    if (isHeaderRow) {
+      for (let c = 0; c < width; c += 1) patchCell(r, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+      continue;
+    }
+    patchCell(r, 0, { ht: 0, vt: 1, tb: 2 });
+    patchCell(r, 1, { ht: 2, vt: 1 });
+    patchCell(r, 2, { ht: 2, vt: 1 });
+    patchCell(r, 3, { ht: 2, vt: 1 });
+  }
+
+  const thin = { style: 1, color: "#111827" };
+  const thick = { style: 2, color: "#111827" };
+
+  const lastRow = Math.max(0, safeMatrix.length - 1);
+  const lastCol = width - 1;
+
+  for (let r = 0; r <= lastRow; r += 1) {
+    for (let c = 0; c <= lastCol; c += 1) {
+      const entry = ensureCell(r, c);
+      if (!entry.v || typeof entry.v !== "object") continue;
+      entry.v.bd = {
+        t: r === 0 ? thick : thin,
+        b: r === lastRow ? thick : thin,
+        l: c === 0 ? thick : thin,
+        r: c === lastCol ? thick : thin,
+      };
+    }
+  }
+
+  return sheet;
+};
+
+const applyAbstractSheetPresentation = (sheet, matrix) => {
+  const safeMatrix = Array.isArray(matrix) ? matrix : [["No data"]];
+  const width = 36;
+  sheet.column = Math.max(width, sheet.column || 0);
+  sheet.row = Math.max(250, safeMatrix.length + 80);
+
+  const merge = {};
+  const rowlen = {};
+  const columnlen = { 0: 55, 1: 90, 34: 70, 35: 90 };
+  for (let c = 2; c <= 33; c += 1) columnlen[c] = 48;
+
+  const isSingleLineRow = (row) => Array.isArray(row) && String(row[0] ?? "").trim() && row.slice(1).every((c) => String(c ?? "").trim() === "");
+
+  const tableHeaderStarts = [];
+  for (let r = 0; r < safeMatrix.length; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    const isTableHeader = String(row[0] ?? "") === "Sl No" && String(row[1] ?? "") === "Floor" && String(row[2] ?? "").startsWith("FLAT NO");
+    if (isTableHeader) tableHeaderStarts.push(r);
+  }
+
+  tableHeaderStarts.forEach((startRow) => {
+    merge[`${startRow}_0`] = { r: startRow, c: 0, rs: 2, cs: 1 };
+    merge[`${startRow}_1`] = { r: startRow, c: 1, rs: 2, cs: 1 };
+    for (let i = 0; i < 8; i += 1) {
+      merge[`${startRow}_${2 + i * 4}`] = { r: startRow, c: 2 + i * 4, rs: 1, cs: 4 };
+    }
+    merge[`${startRow}_34`] = { r: startRow, c: 34, rs: 2, cs: 1 };
+    merge[`${startRow}_35`] = { r: startRow, c: 35, rs: 2, cs: 1 };
+  });
+
+  for (let r = 0; r < safeMatrix.length; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    if (isSingleLineRow(row)) {
+      merge[`${r}_0`] = { r, c: 0, rs: 1, cs: width };
+      rowlen[r] = String(row[0] ?? "").startsWith("WORK ORDER SERIAL NO") ? 22 : 20;
+      continue;
+    }
+    rowlen[r] = rowlen[r] ?? 18;
+  }
+
+  sheet.config = { ...sheet.config, merge, columnlen, rowlen };
+
+  const cellMap = new Map();
+  sheet.celldata.forEach((entry) => {
+    if (!entry) return;
+    cellMap.set(`${entry.r}_${entry.c}`, entry);
+  });
+
+  const ensureCell = (r, c) => {
+    const key = `${r}_${c}`;
+    const existing = cellMap.get(key);
+    if (existing) return existing;
+    const created = { r, c, v: toLuckyCell("") };
+    sheet.celldata.push(created);
+    cellMap.set(key, created);
+    return created;
+  };
+
+  const patchCell = (r, c, patch) => {
+    const entry = ensureCell(r, c);
+    if (!entry.v || typeof entry.v !== "object") return;
+    Object.assign(entry.v, patch);
+  };
+
+  for (let r = 0; r < safeMatrix.length; r += 1) {
+    const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+    if (isSingleLineRow(row)) {
+      const v = String(row[0] ?? "");
+      if (v.startsWith("WORK ORDER SERIAL NO")) {
+        patchCell(r, 0, { bl: 1, bg: "#dbeafe", fc: "#1d4ed8", ht: 1, vt: 1 });
+      } else if (v === "Installation Abstract") {
+        patchCell(r, 0, { bl: 1, fs: 11, ht: 1, vt: 1 });
+      } else {
+        patchCell(r, 0, { bl: 1, ht: 0, vt: 1 });
+      }
+      continue;
+    }
+    const isTableHeader = String(row[0] ?? "") === "Sl No" && String(row[1] ?? "") === "Floor";
+    if (isTableHeader || (String(row[2] ?? "") === "CT" && String(row[3] ?? "") === "MT")) {
+      for (let c = 0; c < width; c += 1) patchCell(r, c, { bl: 1, bg: "#f2f2f2", ht: 1, vt: 1 });
+      continue;
+    }
+    patchCell(r, 1, { vt: 1 });
+    patchCell(r, 34, { ht: 2, vt: 1 });
+  }
+
+  const thin = { style: 1, color: "#111827" };
+  const thick = { style: 2, color: "#111827" };
+  const groupLeft = new Set([0, 1, 2, 6, 10, 14, 18, 22, 26, 30, 34, 35]);
+  const groupRight = new Set([0, 1, 5, 9, 13, 17, 21, 25, 29, 33, 34, 35]);
+
+  tableHeaderStarts.forEach((startRow) => {
+    const tableEnd = (() => {
+      for (let r = startRow + 2; r < safeMatrix.length; r += 1) {
+        const row = Array.isArray(safeMatrix[r]) ? safeMatrix[r] : [];
+        if (String(row[0] ?? "").trim() === "TOTAL") return r;
+      }
+      return Math.min(safeMatrix.length - 1, startRow + 2 + 30);
+    })();
+
+    for (let r = startRow; r <= tableEnd; r += 1) {
+      for (let c = 0; c < width; c += 1) {
+        const entry = ensureCell(r, c);
+        if (!entry.v || typeof entry.v !== "object") continue;
+        entry.v.bd = {
+          t: r === startRow ? thick : thin,
+          b: r === tableEnd ? thick : thin,
+          l: groupLeft.has(c) ? thick : thin,
+          r: groupRight.has(c) ? thick : thin,
+        };
+      }
+    }
+  });
+
+  return sheet;
+};
+
+const buildLuckySheetFromMatrix = (name, matrix, sheetIndex) => {
+  const base = matrixToLuckySheet(name, matrix, sheetIndex);
+  const key = String(name).toLowerCase();
+  if (key === "inv" || key === "invoice") return applyInvoiceSheetPresentation(base, matrix);
+  if (key === "wo" || key === "boq") return applyBoqSheetPresentation(base, matrix);
+  if (key === "abstract" || key === "samples") return applyAbstractSheetPresentation(base, matrix);
+  if (key === "cpvc") return applyCpvcSheetPresentation(base, matrix);
+  if (key === "qty") return applyQtySheetPresentation(base, matrix);
+  if (
+    Array.isArray(matrix) &&
+    matrix.some((row) => Array.isArray(row) && String(row[0] ?? "").startsWith("WORK ORDER SERIAL NO")) &&
+    matrix.some((row) => Array.isArray(row) && String(row[0] ?? "") === "Sl No" && String(row[1] ?? "") === "Floor")
+  ) {
+    return applyAbstractSheetPresentation(base, matrix);
+  }
+  return base;
 };
 
 const normalizeFormulaForSheetJs = (formula) => {
@@ -323,14 +1139,11 @@ const placeholderMatrix = (label) => [[`Click tab to load ${label}`]];
 
 const sectionKeyForRawSheetName = (rawName) => {
   const name = String(rawName || "");
-  if (name === "PurchaseOrders") return "PurchaseOrders";
-  if (name === "DeliveryChallans") return "DeliveryChallans";
-  if (name === "BOQ") return "BOQ";
-  if (name === "MIR") return "MIR";
-  if (name === "ITR") return "ITR";
-  if (name === "Samples") return "Samples";
-  if (name === "Inventory") return "Inventory";
-  if (name === "Vendors") return "Vendors";
+  if (name === "WO") return "BOQ";
+  if (name === "Inv") return "Invoice";
+  if (name === "Abstract") return "Abstract";
+  if (name === "QTY") return "QTY";
+  if (name === "CPVC") return "CPVC";
   return null;
 };
 
@@ -342,6 +1155,646 @@ const datasetToMatrix = (dataset) => {
   }
   if (isPlainObject(dataset)) return rowsToMatrix([flattenRecord(dataset)]);
   return rowsToMatrix([{ value: dataset }]);
+};
+
+const wrapCellText = (value, { maxLineChars = 90, maxLines = 3 } = {}) => {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const words = text.split(" ");
+  const lines = [];
+  let current = "";
+  for (const w of words) {
+    const next = current ? `${current} ${w}` : w;
+    if (next.length <= maxLineChars) {
+      current = next;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = w;
+    if (lines.length >= maxLines) break;
+  }
+  if (lines.length < maxLines && current) lines.push(current);
+  const truncated = words.length > 0 && lines.join(" ").length < text.length;
+  const out = lines.slice(0, maxLines).join("\n");
+  return truncated ? `${out}…` : out;
+};
+
+const buildInvoiceMatrix = (project) => {
+  const projectName = String(project?.project_name || project?.name || "").trim();
+  const clientName = String(project?.client_name || "").trim();
+  const woNumber = String(project?.wo_number || "").trim();
+  const location = String(project?.location || "").trim();
+  const buildingName = String(project?.building_name || project?.site_name || "").trim();
+  const raNumber = String(project?.ra_number || project?.ra_no || "").trim();
+
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(now.getFullYear());
+  const invoiceDate = `${dd}.${mm}.${yyyy}`;
+
+  const invoiceNo = woNumber ? `${woNumber}` : `INV-${yyyy}${mm}${dd}`;
+
+  const r = () => Array(9).fill("");
+  const rows = [];
+
+  rows.push(Object.assign(r(), { 0: "Madhuram Enterprises" }));
+  rows.push(Object.assign(r(), { 0: "401, SUJATA BLDG, RAMNAGAR, OPP PARIVAR BLDG, BORIVALI WEST, MUMBAI - 400092" }));
+  rows.push(r());
+  rows.push(Object.assign(r(), { 0: "Cell no. - 9819910257, Email id: mmsplumbing@gmail.com" }));
+  rows.push(Object.assign(r(), { 0: "Website: www.madhuramrealtors.com" }));
+  rows.push(r());
+  rows.push(
+    Object.assign(r(), {
+      0: "GSTIN: 27AESPN7117D1ZA",
+      3: "PAN NO.: AESPN7117D",
+      7: "ORIGINAL FOR RECIPIENT",
+    }),
+  );
+  rows.push(r());
+  rows.push(r());
+  rows.push(Object.assign(r(), { 0: "Tax Invoice" }));
+  rows.push(
+    Object.assign(r(), {
+      0: "Invoice No :",
+      2: invoiceNo,
+      4: "PF NO -",
+      5: "",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "Invoice date:",
+      2: invoiceDate,
+      4: "ESIC NO -",
+      5: "",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "Reverse Charge (Y/N)",
+      2: "N",
+      4: "PTR NO -",
+      5: "",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "State: MAHARASHTRA",
+      2: "Code",
+      3: "27",
+      4: "MLWF NO -",
+      5: "",
+    }),
+  );
+  rows.push(r());
+  rows.push(
+    Object.assign(r(), {
+      0: "Bill to Party",
+      4: "Ship to Party / Site",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "Co A/C Name:",
+      1: clientName || "-",
+      4: "Co A/C Name:",
+      5: "",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "Address:",
+      1: wrapCellText(location || "-", { maxLineChars: 52, maxLines: 1 }),
+      4: "GSTIN:",
+      5: "",
+    }),
+  );
+  rows.push(Object.assign(r(), { 0: "", 1: "", 4: "", 5: "" }));
+  rows.push(
+    Object.assign(r(), {
+      0: "GSTIN:",
+      1: "",
+      4: "",
+      5: "",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "State: Maharashtra",
+      2: "Code",
+      3: "27",
+      4: "State: Maharashtra",
+      6: "Code",
+      7: "27",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "BUILDING NAME",
+      1: buildingName || projectName || "-",
+      4: buildingName || projectName || "-",
+    }),
+  );
+  rows.push(
+    Object.assign(r(), {
+      0: "Reference :-",
+      1: "RA No.",
+      2: raNumber || "7",
+      3: "Work",
+      4: "PLUMBING WORK",
+      5: "WO NO",
+      6: woNumber || "",
+    }),
+  );
+  rows.push(Object.assign(r(), { 0: "SERVICE DATE FROM - 1.12.2025 TO 31.12.2025" }));
+  rows.push(
+    Object.assign(r(), {
+      0: "S. No.",
+      1: "Goods / Service Description",
+      2: "SAC code",
+      3: "Value of Supply",
+      4: "Discount",
+      5: "Taxable Value",
+      6: "CGST",
+      7: "",
+      8: "SGST",
+    }),
+  );
+  rows.push(Object.assign(r(), { 6: "Rate", 7: "Amount", 8: "Rate" }));
+  rows.push(
+    Object.assign(r(), {
+      0: "",
+      1: "Plumbing / Sanitation Contract works",
+      2: "995462",
+      3: "",
+      4: "0",
+      5: "",
+      6: "9",
+      7: "",
+      8: "9",
+    }),
+  );
+  rows.push(r());
+  rows.push(r());
+  rows.push(r());
+  rows.push(r());
+  rows.push(
+    Object.assign(r(), {
+      0: "Total",
+      3: "",
+      4: "-",
+      5: "",
+      6: "",
+      7: "",
+      8: "",
+    }),
+  );
+  rows.push(Object.assign(r(), { 0: "Total Invoice amount in words", 4: "Total Amount before Tax", 8: "" }));
+  rows.push(Object.assign(r(), { 0: "RUPEES ONE LAKH FIFTY EIGHT THOUSAND FIVE HUNDRED", 4: "Add: CGST", 8: "" }));
+  rows.push(Object.assign(r(), { 0: "AND THIRTY ONLY", 4: "Add: SGST", 8: "" }));
+  rows.push(Object.assign(r(), { 4: "ROUND OFF", 8: "" }));
+  rows.push(Object.assign(r(), { 4: "Total Amount after Tax:", 8: "" }));
+  rows.push(Object.assign(r(), { 4: "GST on Reverse Charge", 8: "0" }));
+  rows.push(Object.assign(r(), { 0: "Bank Details", 4: "E & O.E" }));
+  rows.push(Object.assign(r(), { 0: "Bank:", 1: "", 4: "For," }));
+  rows.push(Object.assign(r(), { 0: "Terms and Conditions:-", 4: "MMS. MADHURAM ENTERPRISES" }));
+  rows.push(Object.assign(r(), { 4: "AUTHORISED SIGNATORY" }));
+
+  return rows;
+};
+
+const buildCpvcMatrix = (project) => {
+  const rawFloors =
+    project?.floors ??
+    project?.no_of_floors ??
+    project?.noOfFloors ??
+    project?.total_floors ??
+    project?.totalFloors ??
+    project?.floor ??
+    "";
+
+  const floorCount = (() => {
+    const n = Number(String(rawFloors).replace(/[^\d]/g, ""));
+    if (Number.isFinite(n) && n > 0 && n <= 250) return Math.floor(n);
+    return 1;
+  })();
+
+  const building = String(project?.project_name || project?.name || "BUILDING").trim();
+  const woNumber = String(project?.wo_number || "").trim();
+
+  const width = 28;
+  const blankRow = () => Array(width).fill("");
+
+  const floorLabel = (idx) => {
+    if (idx === 0) return "G/F";
+    const n = idx;
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    const suffix = mod10 === 1 && mod100 !== 11 ? "st" : mod10 === 2 && mod100 !== 12 ? "nd" : mod10 === 3 && mod100 !== 13 ? "rd" : "th";
+    return `${n}${suffix} Flr`;
+  };
+
+  const matrix = [];
+
+  const row0 = blankRow();
+  row0[0] = `Building - ${building.toUpperCase()}`;
+  row0[20] = woNumber ? `Work Order - ${woNumber}` : "Work Order -";
+  matrix.push(row0);
+
+  const row1 = blankRow();
+  row1[0] = "Contractor : MADHURAM ENTERPRISES";
+  row1[20] = "";
+  matrix.push(row1);
+
+  const titleRow = blankRow();
+  titleRow[0] = "CPVC Pipe 15mm (Concealed) - Installation Abstract";
+  matrix.push(titleRow);
+
+  const woRow = blankRow();
+  woRow[0] = woNumber ? `WORK ORDER SR.NO ${woNumber}` : "WORK ORDER SR.NO";
+  matrix.push(woRow);
+
+  matrix.push(blankRow());
+
+  const groupRow = blankRow();
+  groupRow[0] = "Sr";
+  groupRow[1] = "Floor";
+  for (let i = 1; i <= 8; i += 1) {
+    groupRow[2 + (i - 1) * 3] = `FLAT NO ${i}`;
+  }
+  groupRow[26] = "Total";
+  groupRow[27] = "Remarks";
+  matrix.push(groupRow);
+
+  const subRow = blankRow();
+  for (let i = 0; i < 8; i += 1) {
+    const base = 2 + i * 3;
+    subRow[base] = "CT";
+    subRow[base + 1] = "MT";
+    subRow[base + 2] = "KIT";
+  }
+  subRow[26] = "Total";
+  matrix.push(subRow);
+
+  for (let i = 0; i < floorCount; i += 1) {
+    const row = blankRow();
+    row[0] = i + 1;
+    row[1] = floorLabel(i);
+    matrix.push(row);
+  }
+
+  const totalRow = blankRow();
+  totalRow[0] = "TOTAL";
+  matrix.push(totalRow);
+
+  return matrix;
+};
+
+const buildQtyMatrix = (rawDcs) => {
+  const dcs = normalizeToArray(rawDcs);
+
+  const toNum = (v) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(String(v).replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const displayNum = (v) => {
+    if (v == null) return "";
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const n = toNum(v);
+    return n == null ? "" : n;
+  };
+
+  const matrix = [];
+  let first = true;
+
+  dcs.forEach((dc) => {
+    if (!isPlainObject(dc)) return;
+    const challanNumber = String(dc.challan_number || "").trim();
+    if (!challanNumber) return;
+
+    if (!first) matrix.push(["", "", "", ""]);
+    first = false;
+
+    matrix.push([`CHALLAN NO ${challanNumber}`, "", "", ""]);
+    matrix.push(["", "QTY", "PER PC MTR", "TOT QTY"]);
+
+    const items = normalizeToArray(dc.items);
+    items.forEach((item) => {
+      if (!isPlainObject(item)) return;
+      const name = String(item.name || item.description || "").trim();
+      if (!name) return;
+
+      const qty = displayNum(item.quantity ?? item.qty);
+      const perPc =
+        displayNum(
+          item.per_pc_mtr ??
+            item.perPcMtr ??
+            item.per_pc_meter ??
+            item.perPcMeter ??
+            item.length ??
+            item.mtr ??
+            item.meter,
+        ) || "";
+
+      const qtyNum = typeof qty === "number" ? qty : toNum(qty);
+      const perNum = typeof perPc === "number" ? perPc : toNum(perPc);
+
+      const total =
+        qtyNum != null && perNum != null
+          ? Number((qtyNum * perNum).toFixed(3))
+          : qtyNum != null
+            ? qtyNum
+            : "";
+
+      matrix.push([name, qty, perPc, total]);
+    });
+  });
+
+  return matrix.length > 0 ? matrix : [["No data"]];
+};
+
+const buildItemTabsAfterCpvc = (project, rawDcs) => {
+  const dcs = normalizeToArray(rawDcs);
+  const seen = new Set();
+  const tabs = [];
+
+  const makeTabName = (label) => {
+    const upper = String(label || "").toUpperCase();
+    const sizeMatch = /(\d+)\s*MM/.exec(upper);
+    const typeMatch = /TYPE\s*([A-Z])/.exec(upper);
+    const size = sizeMatch ? sizeMatch[1] : "";
+    const type = typeMatch ? typeMatch[1] : "";
+    const base = size && type ? `${size}${type}` : size ? `${size}MM` : upper.replace(/[^A-Z0-9]+/g, " ").trim().slice(0, 12);
+    const sanitized = base || "ITEM";
+    let name = sanitized;
+    let n = 2;
+    while (seen.has(name)) {
+      name = `${sanitized}-${n}`;
+      n += 1;
+    }
+    seen.add(name);
+    return name.slice(0, 31);
+  };
+
+  const itemLabels = [];
+  const labelSeen = new Set();
+  dcs.forEach((dc) => {
+    if (!isPlainObject(dc)) return;
+    normalizeToArray(dc.items).forEach((item) => {
+      if (!isPlainObject(item)) return;
+      const label = String(item.name || item.description || "").trim();
+      if (!label || labelSeen.has(label)) return;
+      labelSeen.add(label);
+      itemLabels.push(label);
+    });
+  });
+
+  itemLabels.forEach((label) => {
+    tabs.push({ name: makeTabName(label), matrix: buildAbstractMatrix(project, rawDcs, `${label} - Installation Abstract`) });
+  });
+
+  return tabs;
+};
+
+function buildAbstractMatrix(project, rawDcs, title = "Installation Abstract") {
+  const dcs = normalizeToArray(rawDcs);
+
+  const rawFloors =
+    project?.floors ??
+    project?.no_of_floors ??
+    project?.noOfFloors ??
+    project?.total_floors ??
+    project?.totalFloors ??
+    project?.floor ??
+    "";
+
+  const floorCount = (() => {
+    const n = Number(String(rawFloors).replace(/[^\d]/g, ""));
+    if (Number.isFinite(n) && n > 0 && n <= 250) return Math.floor(n);
+    return 1;
+  })();
+
+  const workOrders = (() => {
+    const seen = new Set();
+    const list = [];
+    dcs.forEach((dc) => {
+      if (!isPlainObject(dc)) return;
+      const wo = String(dc.work_order_number || "").trim();
+      if (!wo || seen.has(wo)) return;
+      seen.add(wo);
+      list.push(wo);
+    });
+    const fallback = String(project?.wo_number || "").trim();
+    if (list.length === 0 && fallback) return [fallback];
+    return list.length > 0 ? list : ["-"];
+  })();
+
+  const building = String(project?.project_name || project?.name || "BUILDING").trim();
+  const woNumberTop = String(project?.wo_number || "").trim();
+
+  const width = 36;
+  const blankRow = () => Array(width).fill("");
+
+  const floorLabel = (idx) => {
+    if (idx === 0) return "G/F";
+    const n = idx;
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    const suffix = mod10 === 1 && mod100 !== 11 ? "st" : mod10 === 2 && mod100 !== 12 ? "nd" : mod10 === 3 && mod100 !== 13 ? "rd" : "th";
+    return `${n}${suffix} Flr`;
+  };
+
+  const matrix = [];
+
+  workOrders.forEach((woSerial, tableIndex) => {
+    if (tableIndex > 0) matrix.push(blankRow(), blankRow());
+
+    const row0 = blankRow();
+    row0[0] = `Building - ${building.toUpperCase()}`;
+    row0[26] = woNumberTop ? `Work Order - ${woNumberTop}` : "Work Order -";
+    matrix.push(row0);
+
+    const row1 = blankRow();
+    row1[0] = "Contractor : MADHURAM ENTERPRISES";
+    row1[26] = "";
+    matrix.push(row1);
+
+    const titleRow = blankRow();
+    titleRow[0] = title;
+    matrix.push(titleRow);
+
+    const woRow = blankRow();
+    woRow[0] = `WORK ORDER SERIAL NO ${woSerial}`;
+    matrix.push(woRow);
+
+    matrix.push(blankRow());
+
+    const groupRow = blankRow();
+    groupRow[0] = "Sl No";
+    groupRow[1] = "Floor";
+    for (let i = 1; i <= 8; i += 1) {
+      groupRow[2 + (i - 1) * 4] = `FLAT NO ${i}`;
+    }
+    groupRow[34] = "TOT";
+    groupRow[35] = "REMARKS";
+    matrix.push(groupRow);
+
+    const subRow = blankRow();
+    for (let i = 0; i < 8; i += 1) {
+      const base = 2 + i * 4;
+      subRow[base] = "CT";
+      subRow[base + 1] = "MT";
+      subRow[base + 2] = "BAL";
+      subRow[base + 3] = "KIT";
+    }
+    subRow[34] = "TOT";
+    matrix.push(subRow);
+
+    for (let i = 0; i < floorCount; i += 1) {
+      const row = blankRow();
+      row[0] = i + 1;
+      row[1] = floorLabel(i);
+      matrix.push(row);
+    }
+
+    const totalRow = blankRow();
+    totalRow[0] = "TOTAL";
+    matrix.push(totalRow);
+  });
+
+  return matrix.length > 0 ? matrix : [["No data"]];
+}
+
+const buildBoqMatrix = (raw, project) => {
+  const arr = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.boqs)
+      ? raw.boqs
+      : Array.isArray(raw?.data)
+        ? raw.data
+        : [];
+
+  const toNum = (v) => {
+    if (v === null || v === undefined || v === "") return "";
+    const n = Number(String(v).replace(/,/g, ""));
+    return Number.isFinite(n) ? n : "";
+  };
+
+  const projectName = String(project?.project_name || project?.name || "BOQ").trim();
+  const woNumber = String(project?.wo_number || "").trim();
+
+  const matrix = [];
+  matrix.push([projectName.toUpperCase(), "", "", "", "", ""]);
+  matrix.push([woNumber ? `WO NO - ${woNumber}` : "", "", "", "", "", ""]);
+
+  let lastCategory = null;
+  arr.forEach((row) => {
+    if (!isPlainObject(row)) return;
+    const category = String(row.category ?? "").trim();
+    if (category && category !== lastCategory) {
+      const m = /^([A-Z])\.\s*(.+)$/.exec(category);
+      const sr = m ? `${m[1]}.` : "";
+      const desc = m ? m[2] : category;
+      matrix.push([sr, desc, "", "", "", ""]);
+      matrix.push(["SR NO.", "ITEM DESCRIPTION", "UNIT", "QTY", "RATE", "AMOUNT"]);
+      lastCategory = category;
+    }
+
+    matrix.push([
+      row.item_code ?? row.code ?? "",
+      wrapCellText(row.description ?? ""),
+      row.unit ?? "",
+      toNum(row.quantity),
+      toNum(row.rate),
+      toNum(row.amount),
+    ]);
+  });
+
+  return matrix;
+};
+
+const buildSamplesMatrix = (raw, project) => {
+  const samples = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+
+  const parseArrayField = (value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const matrix = [];
+  let first = true;
+
+  samples.forEach((sample) => {
+    if (!isPlainObject(sample)) return;
+    const id = sample.sample_id ?? sample.id ?? "";
+    const label = String(sample.work_done || sample.site_name || sample.building_name || (id ? `Sample #${id}` : "Sample")).trim();
+    if (!label) return;
+
+    if (!first) matrix.push(Array(12).fill(""));
+    first = false;
+
+    const building = String(sample.building_name || "").trim();
+    const contractor = String(project?.client_name || "").trim();
+    const workOrder = String(project?.wo_number || "").trim();
+
+    matrix.push([`Sample - ${label}`, ...Array(11).fill("")]);
+    matrix.push([`Building - ${building || "-"}`, ...Array(11).fill("")]);
+    matrix.push([`Contractor - ${contractor || "-"}`, ...Array(11).fill("")]);
+    matrix.push(["ABSTRACT SHEET", ...Array(11).fill("")]);
+    matrix.push([`Work Order - ${workOrder || "-"}`, ...Array(11).fill("")]);
+    matrix.push(["", ...Array(11).fill("")]);
+    matrix.push([
+      "Sl No",
+      "Description",
+      "Unit",
+      "Qty",
+      "BOQ",
+      "",
+      "Quantity",
+      "",
+      "",
+      "Amount",
+      "",
+      "",
+    ]);
+    matrix.push(["", "", "", "", "Rate", "Amount", "Previous", "Present", "Total", "Previous", "Present", "Total"]);
+
+    const rows = parseArrayField(sample.item_description);
+    rows.forEach((row, idx) => {
+      if (!isPlainObject(row)) return;
+      const qty = row.quantity ?? row.qty ?? row.req_qty ?? "";
+      const amount = row.value ?? "";
+      matrix.push([
+        row.sr_no ?? row.sr ?? String(idx + 1),
+        wrapCellText(row.description ?? row.material_description ?? row.item ?? ""),
+        row.unit ?? row.uom ?? row.UOM ?? "",
+        qty,
+        "",
+        amount,
+        "",
+        qty,
+        qty,
+        "",
+        amount,
+        amount,
+      ]);
+    });
+  });
+
+  return matrix.length > 0 ? matrix : [["No data"]];
 };
 
 const buildInitialWorkbookSheets = (_project) => {
@@ -356,7 +1809,7 @@ const buildInitialWorkbookSheets = (_project) => {
     return name;
   };
 
-  ["PurchaseOrders", "DeliveryChallans", "BOQ", "MIR", "ITR", "Samples", "Inventory", "Vendors"].forEach((rawName) =>
+  ["WO", "Inv", "Abstract", "QTY", "CPVC"].forEach((rawName) =>
     addMatrix(rawName, placeholderMatrix(rawName)),
   );
 
@@ -386,14 +1839,8 @@ const fetchProjectWorkbookData = async (projectId) => {
   const project = await fetchProjectData(projectId);
 
   const endpoints = [
-    ["PurchaseOrders", `${baseUrl}/api/po/project/${projectId}`],
     ["DeliveryChallans", `${baseUrl}/api/dc/project/${projectId}`],
     ["BOQ", `${baseUrl}/api/boq/project/${projectId}`],
-    ["MIR", `${baseUrl}/api/mir/project/${projectId}`],
-    ["ITR", `${baseUrl}/api/itr/project/${projectId}`],
-    ["Samples", `${baseUrl}/api/sample/project/${projectId}`],
-    ["Inventory", `${baseUrl}/api/inventory/project/${projectId}`],
-    ["Vendors", `${baseUrl}/api/vendors/project/${projectId}`],
   ];
 
   const results = await Promise.allSettled(endpoints.map(([, url]) => fetchJson(url)));
@@ -408,140 +1855,12 @@ const fetchProjectWorkbookData = async (projectId) => {
     }
   });
 
-  workbook.Project_PR_PO_Tracking = normalizeToArray(project?.pr_po_tracking);
-  workbook.Project_Samples = normalizeToArray(project?.samples);
-  workbook.Project_ML_Management = project?.ml_management && isPlainObject(project.ml_management) ? project.ml_management : { ml_task: project?.ml_management ?? "" };
-
-  const pos = normalizeToArray(workbook.PurchaseOrders);
-  workbook.PurchaseOrders = pos.map((po) => {
-    if (!isPlainObject(po)) return po;
-    const { items, ...rest } = po;
-    return flattenRecord(rest, { maxDepth: 2 });
-  });
-  workbook.PurchaseOrder_Items = pos.flatMap((po) => {
-    if (!isPlainObject(po)) return [];
-    const poId = po.po_id ?? null;
-    const projectIdValue = po.project_id ?? null;
-    const items = normalizeToArray(po.items);
-    return items.map((item, idx) => {
-      const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-      return { po_id: poId, project_id: projectIdValue, item_index: idx + 1, ...row };
-    });
-  });
-
-  const dcs = normalizeToArray(workbook.DeliveryChallans);
-  workbook.DeliveryChallans = dcs.map((dc) => {
-    if (!isPlainObject(dc)) return dc;
-    const { items, ...rest } = dc;
-    return flattenRecord(rest, { maxDepth: 2 });
-  });
-  workbook.DeliveryChallan_Items = dcs.flatMap((dc) => {
-    if (!isPlainObject(dc)) return [];
-    const dcId = dc.dc_id ?? null;
-    const projectIdValue = dc.project_id ?? null;
-    const poId = dc.po_id ?? null;
-    const items = normalizeToArray(dc.items);
-    return items.map((item, idx) => {
-      const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-      return { dc_id: dcId, project_id: projectIdValue, po_id: poId, item_index: idx + 1, ...row };
-    });
-  });
-
-  const mirs = normalizeToArray(workbook.MIR);
-  workbook.MIR = mirs.map((mir) => {
-    if (!isPlainObject(mir)) return mir;
-    const { items, dynamic_field, ...rest } = mir;
-    return flattenRecord(rest, { maxDepth: 2 });
-  });
-  workbook.MIR_Items = mirs.flatMap((mir) => {
-    if (!isPlainObject(mir)) return [];
-    const mirId = mir.mir_id ?? null;
-    const projectIdValue = mir.project_id ?? null;
-    const poId = mir.po_id ?? null;
-    const items = normalizeToArray(mir.items);
-    return items.map((item, idx) => {
-      const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-      return { mir_id: mirId, project_id: projectIdValue, po_id: poId, item_index: idx + 1, ...row };
-    });
-  });
-  workbook.MIR_DynamicFields = mirs.flatMap((mir) => {
-    if (!isPlainObject(mir)) return [];
-    const mirId = mir.mir_id ?? null;
-    const projectIdValue = mir.project_id ?? null;
-    const fields = normalizeToArray(mir.dynamic_field);
-    return fields.map((f, idx) => {
-      const row = isPlainObject(f) ? flattenRecord(f, { maxDepth: 2 }) : { value: f };
-      return { mir_id: mirId, project_id: projectIdValue, field_index: idx + 1, ...row };
-    });
-  });
-
-  const samples = normalizeToArray(workbook.Samples);
-  workbook.Samples = samples.map((s) => {
-    if (!isPlainObject(s)) return s;
-    const { item_description, add_fields, ...rest } = s;
-    return flattenRecord(rest, { maxDepth: 2 });
-  });
-  workbook.Sample_ItemDescription = samples.flatMap((s) => {
-    if (!isPlainObject(s)) return [];
-    const sampleId = s.sample_id ?? null;
-    const projectIdValue = s.project_id ?? null;
-    const items = normalizeToArray(s.item_description);
-    return items.map((item, idx) => {
-      const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-      return { sample_id: sampleId, project_id: projectIdValue, item_index: idx + 1, ...row };
-    });
-  });
-  workbook.Sample_AddFields = samples.flatMap((s) => {
-    if (!isPlainObject(s)) return [];
-    const sampleId = s.sample_id ?? null;
-    const projectIdValue = s.project_id ?? null;
-    const items = normalizeToArray(s.add_fields);
-    return items.map((item, idx) => {
-      const row = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-      return { sample_id: sampleId, project_id: projectIdValue, field_index: idx + 1, ...row };
-    });
-  });
-
-  const vendors = normalizeToArray(workbook.Vendors);
-  const priceListIds = vendors.flatMap((v) => (isPlainObject(v) ? normalizeToArray(v.price_list_ids) : [])).filter((id) => id != null);
-  const uniquePriceListIds = Array.from(new Set(priceListIds.map((id) => String(id)))).slice(0, 50);
-
-  const priceListDetails = await Promise.allSettled(
-    uniquePriceListIds.map((id) => fetchJson(`${baseUrl}/api/vendor-price-list/${id}`)),
-  );
-
-  const vendorIdByPriceListId = new Map();
-  vendors.forEach((v) => {
-    if (!isPlainObject(v)) return;
-    normalizeToArray(v.price_list_ids).forEach((id) => {
-      if (id == null) return;
-      vendorIdByPriceListId.set(String(id), v.vendor_id ?? null);
-    });
-  });
-
-  const priceLists = [];
-  const priceListItems = [];
-  priceListDetails.forEach((r, idx) => {
-    const priceListId = uniquePriceListIds[idx];
-    if (r.status !== "fulfilled") {
-      priceLists.push({ price_list_id: priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? null, error: r.reason?.message || "Failed to fetch price list" });
-      return;
-    }
-    const row = r.value;
-    if (!isPlainObject(row)) {
-      priceLists.push({ price_list_id: priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? null, value: row });
-      return;
-    }
-    const { items, ...rest } = row;
-    priceLists.push({ vendor_id: vendorIdByPriceListId.get(priceListId) ?? row.vendor_id ?? null, ...flattenRecord(rest, { maxDepth: 2 }) });
-    normalizeToArray(items).forEach((item, itemIdx) => {
-      const flatItem = isPlainObject(item) ? flattenRecord(item, { maxDepth: 2 }) : { value: item };
-      priceListItems.push({ price_list_id: row.price_list_id ?? priceListId, vendor_id: vendorIdByPriceListId.get(priceListId) ?? row.vendor_id ?? null, item_index: itemIdx + 1, ...flatItem });
-    });
-  });
-
-  workbook.VendorPriceLists = priceLists;
-  workbook.VendorPriceListItems = priceListItems;
+  workbook.Invoice = buildInvoiceMatrix(project);
+  workbook.CPVC = buildCpvcMatrix(project);
+  workbook.QTY = buildQtyMatrix(workbook.DeliveryChallans);
+  workbook.BOQ = buildBoqMatrix(workbook.BOQ, project);
+  workbook.Abstract = buildAbstractMatrix(project, workbook.DeliveryChallans);
+  workbook.ItemTabs = buildItemTabsAfterCpvc(project, workbook.DeliveryChallans);
 
   return workbook;
 };
@@ -563,6 +1882,7 @@ export default function ProjectSpreadsheet({
   const loadedSectionsRef = React.useRef(new Set());
   const loadingSectionRef = React.useRef(new Set());
   const recreatingRef = React.useRef(false);
+  const projectDataRef = React.useRef(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
@@ -661,8 +1981,62 @@ export default function ProjectSpreadsheet({
       }
 
       if (sectionKey === "BOQ") {
-        const boq = await fetchJson(`${baseUrl}/api/boq/project/${projectId}`);
-        return new Map([["BOQ", datasetToMatrix(boq)]]);
+        const raw = await fetchJson(`${baseUrl}/api/boq/project/${projectId}`);
+        let project = projectDataRef.current;
+        if (!project) {
+          try {
+            project = await fetchProjectData(projectId);
+            projectDataRef.current = project;
+          } catch {
+            project = null;
+          }
+        }
+        return new Map([["WO", buildBoqMatrix(raw, project)]]);
+      }
+
+      if (sectionKey === "Invoice") {
+        let project = projectDataRef.current;
+        if (!project) {
+          try {
+            project = await fetchProjectData(projectId);
+            projectDataRef.current = project;
+          } catch {
+            project = null;
+          }
+        }
+        return new Map([["Inv", buildInvoiceMatrix(project)]]);
+      }
+
+      if (sectionKey === "CPVC") {
+        let project = projectDataRef.current;
+        if (!project) {
+          try {
+            project = await fetchProjectData(projectId);
+            projectDataRef.current = project;
+          } catch {
+            project = null;
+          }
+        }
+        return new Map([["CPVC", buildCpvcMatrix(project)]]);
+      }
+
+      if (sectionKey === "QTY") {
+        const dcs = await fetchJson(`${baseUrl}/api/dc/project/${projectId}`);
+        return new Map([["QTY", buildQtyMatrix(dcs)]]);
+      }
+
+      if (sectionKey === "Abstract") {
+        const dcs = await fetchJson(`${baseUrl}/api/dc/project/${projectId}`);
+        let project = projectDataRef.current;
+        if (!project) {
+          try {
+            project = await fetchProjectData(projectId);
+            projectDataRef.current = project;
+          } catch {
+            project = null;
+          }
+        }
+        return new Map([["Abstract", buildAbstractMatrix(project, dcs)]]);
       }
 
       if (sectionKey === "MIR") {
@@ -681,13 +2055,17 @@ export default function ProjectSpreadsheet({
       }
 
       if (sectionKey === "Samples") {
-        const samples = normalizeToArray(await fetchJson(`${baseUrl}/api/sample/project/${projectId}`));
-        const sampleRows = samples.map((s) => {
-          if (!isPlainObject(s)) return s;
-          const { item_description, add_fields, ...rest } = s;
-          return flattenRecord(rest, { maxDepth: 2 });
-        });
-        return new Map([["Samples", datasetToMatrix(sampleRows)]]);
+        const samples = await fetchJson(`${baseUrl}/api/sample/project/${projectId}`);
+        let project = projectDataRef.current;
+        if (!project) {
+          try {
+            project = await fetchProjectData(projectId);
+            projectDataRef.current = project;
+          } catch {
+            project = null;
+          }
+        }
+        return new Map([["Abstract", buildSamplesMatrix(samples, project)]]);
       }
 
       if (sectionKey === "Inventory") {
@@ -732,8 +2110,8 @@ export default function ProjectSpreadsheet({
           const raw = sheetNameToRawRef.current.get(s?.name);
           if (!raw || !matrices.has(raw)) return next;
           const matrix = matrices.get(raw);
-          const rebuilt = matrixToLuckySheet(next.name, matrix, Number(next.order ?? idx));
-          return { ...next, row: rebuilt.row, column: rebuilt.column, celldata: rebuilt.celldata, data: [] };
+          const rebuilt = buildLuckySheetFromMatrix(next.name, matrix, Number(next.order ?? idx));
+          return { ...next, row: rebuilt.row, column: rebuilt.column, celldata: rebuilt.celldata, config: rebuilt.config, data: [] };
         });
 
         recreatingRef.current = true;
@@ -771,6 +2149,7 @@ export default function ProjectSpreadsheet({
         sheetNameToSectionRef.current = new Map();
 
         const project = await fetchProjectData(projectId);
+        projectDataRef.current = project;
         const { sheets, rawToSheetName } = buildInitialWorkbookSheets(project);
 
         sheets.forEach((s) => {
@@ -783,7 +2162,7 @@ export default function ProjectSpreadsheet({
           sheetNameToSectionRef.current.set(sheetName, sectionKeyForRawSheetName(rawName));
         });
 
-        const luckySheets = sheets.map((s, i) => matrixToLuckySheet(s.name, s.matrix, i));
+        const luckySheets = sheets.map((s, i) => buildLuckySheetFromMatrix(s.name, s.matrix, i));
         if (!cancelled) {
           await initLuckysheet(luckySheets, {
             sheetActivate: (i) => {
@@ -797,7 +2176,7 @@ export default function ProjectSpreadsheet({
           try {
             const fullWorkbook = await fetchProjectWorkbookData(projectId);
             const fullSheets = buildWorkbookSheetMatrices(fullWorkbook).map((s, i) =>
-              matrixToLuckySheet(s.name, s.matrix, i),
+              buildLuckySheetFromMatrix(s.name, s.matrix, i),
             );
             await initLuckysheet(fullSheets, {
               sheetActivate: (i) => {
