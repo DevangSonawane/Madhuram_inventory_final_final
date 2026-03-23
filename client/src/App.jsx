@@ -29,6 +29,7 @@ import VendorPriceListView from '@/pages/VendorPriceListView';
 import Challans from '@/pages/Challans';
 import NewChallan from '@/pages/NewChallan';
 import ChallanItemDetail from '@/pages/ChallanItemDetail';
+import ChallanView from '@/pages/ChallanView';
 import MER from '@/pages/MER';
 import MIR from '@/pages/MIR';
 import MIRCreate from '@/pages/MIRCreate';
@@ -108,6 +109,7 @@ function App() {
                   <Route path="vendor-comparison" element={<VendorComparison />} />
                   <Route path="challans" element={<Challans />} />
                   <Route path="challans/new" element={<NewChallan />} />
+                  <Route path="challans/:dcId" element={<ChallanView />} />
                   <Route path="mer" element={<MER />} />
                   <Route path="mir" element={<MIR />} />
                   <Route path="mir/create" element={<MIRCreate />} />

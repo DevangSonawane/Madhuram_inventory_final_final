@@ -56,6 +56,18 @@ export default function Challans() {
     });
   }, [dcs, searchTerm]);
 
+  const getCounts = (dc) => {
+    const totalQtyRaw = dc.total_po_quantity ?? dc.total_po_items;
+    const deliveredQtyRaw = dc.total_challan_quantity ?? dc.total_challan_items;
+    const totalQty = totalQtyRaw == null ? null : Number(totalQtyRaw);
+    const deliveredQty = deliveredQtyRaw == null ? 0 : Number(deliveredQtyRaw);
+    if (totalQty == null || Number.isNaN(totalQty)) {
+      return { totalQty: null, remainingQty: null };
+    }
+    const safeDelivered = Number.isNaN(deliveredQty) ? 0 : deliveredQty;
+    return { totalQty, remainingQty: Math.max(totalQty - safeDelivered, 0) };
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -120,6 +132,7 @@ export default function Challans() {
                   <TableHead>Date</TableHead>
                   <TableHead>PO No</TableHead>
                   <TableHead>Items</TableHead>
+                  <TableHead>View</TableHead>
                   <TableHead className="text-right">Counts</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -131,8 +144,22 @@ export default function Challans() {
                     <TableCell>{dc.challan_date || dc.order_date || dc.created_at}</TableCell>
                     <TableCell className="text-xs font-mono">{dc.po_number || dc.po_id || ''}</TableCell>
                     <TableCell>{Array.isArray(dc.items) ? dc.items.map((it) => it.name).filter(Boolean).join(', ') : ''}</TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/${projectId}/challans/${dc.dc_id}`)}>
+                        View
+                      </Button>
+                    </TableCell>
                     <TableCell className="text-right">
-                      {(dc.total_po_items ?? '—')} / {dc.total_challan_items ?? 0}
+                      {(() => {
+                        const { totalQty, remainingQty } = getCounts(dc);
+                        if (totalQty == null || remainingQty == null) return '—';
+                        const remainingClass = remainingQty <= 0 ? "text-green-600" : "text-red-600";
+                        return (
+                          <span className={remainingClass}>
+                            {totalQty} / {remainingQty}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Badge variant={dc.status === "completed" ? "default" : "secondary"}>
@@ -166,6 +193,24 @@ export default function Challans() {
                     <div>
                       <div className="text-muted-foreground text-xs">Items</div>
                       <div className="truncate">{Array.isArray(dc.items) ? dc.items.map((it) => it.name).filter(Boolean).join(', ') : ''}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground text-xs">Counts</div>
+                      {(() => {
+                        const { totalQty, remainingQty } = getCounts(dc);
+                        if (totalQty == null || remainingQty == null) return <div>—</div>;
+                        const remainingClass = remainingQty <= 0 ? "text-green-600" : "text-red-600";
+                        return (
+                          <div className={remainingClass}>
+                            {totalQty} / {remainingQty}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div className="flex items-end">
+                      <Button size="sm" variant="outline" onClick={() => navigate(`/${projectId}/challans/${dc.dc_id}`)}>
+                        View
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

@@ -24,6 +24,17 @@ const toInt = (value) => {
   return Number.isNaN(n) ? null : n;
 };
 
+const toNumber = (value) => {
+  if (value === undefined || value === null || value === '') return 0;
+  const n = Number(value);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+const sumQuantities = (items) => {
+  if (!Array.isArray(items)) return 0;
+  return items.reduce((sum, item) => sum + toNumber(item?.quantity), 0);
+};
+
 const ensureUploadFolder = async () => {
   try {
     await fs.mkdir(UPLOAD_FOLDER, { recursive: true });
@@ -33,13 +44,16 @@ const ensureUploadFolder = async () => {
 const computeTotalsAndStatus = async (payload) => {
   const items = safeParseItems(payload.items);
   const totalChallanItems = Array.isArray(items) ? items.length : 0;
+  const totalChallanQuantity = sumQuantities(items);
   let totalPoItems = null;
+  let totalPoQuantity = null;
 
   if (payload.po_id != null) {
     const po = await PurchaseOrder.findByPk(payload.po_id);
     if (po) {
       const poItems = po.items || [];
       totalPoItems = Array.isArray(poItems) ? poItems.length : 0;
+      totalPoQuantity = sumQuantities(poItems);
     }
   } else if (payload.po_number && payload.project_id != null) {
     const po = await PurchaseOrder.findOne({
@@ -48,12 +62,20 @@ const computeTotalsAndStatus = async (payload) => {
     if (po) {
       const poItems = po.items || [];
       totalPoItems = Array.isArray(poItems) ? poItems.length : 0;
+      totalPoQuantity = sumQuantities(poItems);
     }
   }
 
-  const status = totalPoItems != null && totalPoItems === totalChallanItems ? 'completed' : 'incomplete';
+  const hasPoQuantity = totalPoQuantity != null;
+  const status = hasPoQuantity
+    ? totalChallanQuantity >= totalPoQuantity
+      ? 'completed'
+      : 'incomplete'
+    : totalPoItems != null && totalPoItems === totalChallanItems
+      ? 'completed'
+      : 'incomplete';
 
-  return { items, totalPoItems, totalChallanItems, status };
+  return { items, totalPoItems, totalChallanItems, totalPoQuantity, totalChallanQuantity, status };
 };
 
 export const uploadDCFile = async (req, res) => {
@@ -90,10 +112,12 @@ export const createDC = async (req, res) => {
       order_date: req.body.order_date || null
     };
 
-    const { totalPoItems, totalChallanItems, status } = await computeTotalsAndStatus(payload);
+    const { totalPoItems, totalChallanItems, totalPoQuantity, totalChallanQuantity, status } = await computeTotalsAndStatus(payload);
 
     payload.total_po_items = totalPoItems;
     payload.total_challan_items = totalChallanItems;
+    payload.total_po_quantity = totalPoQuantity;
+    payload.total_challan_quantity = totalChallanQuantity;
     payload.status = status;
 
     const created = await DeliveryChallan.create(payload);
@@ -179,9 +203,11 @@ export const updateDC = async (req, res) => {
       items: payload.items ?? dc.items
     };
 
-    const { totalPoItems, totalChallanItems, status } = await computeTotalsAndStatus(merged);
+    const { totalPoItems, totalChallanItems, totalPoQuantity, totalChallanQuantity, status } = await computeTotalsAndStatus(merged);
     payload.total_po_items = totalPoItems;
     payload.total_challan_items = totalChallanItems;
+    payload.total_po_quantity = totalPoQuantity;
+    payload.total_challan_quantity = totalChallanQuantity;
     payload.status = status;
 
     await dc.update(payload);

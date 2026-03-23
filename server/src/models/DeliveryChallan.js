@@ -60,8 +60,18 @@ const DeliveryChallan = sequelize.define('DeliveryChallan', {
     allowNull: true,
     defaultValue: null
   },
+  total_po_quantity: {
+    type: DataTypes.DECIMAL(14, 2),
+    allowNull: true,
+    defaultValue: null
+  },
   total_challan_items: {
     type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  total_challan_quantity: {
+    type: DataTypes.DECIMAL(14, 2),
     allowNull: false,
     defaultValue: 0
   },
